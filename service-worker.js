@@ -1,4 +1,4 @@
-const CACHE = 'leefke-v4-20260725';
+const CACHE = 'leefke-v4-1-20260725';
 const ASSETS = [
   './',
   './index.html',

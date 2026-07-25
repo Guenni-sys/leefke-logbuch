@@ -18,7 +18,7 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">⚓</div>
       <div>
-        <small>BORDTAGEBUCH · VERSION 4</small>
+        <small>BORDTAGEBUCH · VERSION 4.1</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -49,31 +49,41 @@
     <main>
       <section id="home" class="view active">
         <article class="hero">
-          <img id="heroBoatImage" src="leefke-hero.jpg" alt="Die LEEFKE">
+          <img id="heroBoatImage" src="leefke-hero.jpg" alt="Die LEEFKE unterwegs">
           <div class="hero-shade"></div>
-          <div class="hero-copy">
-            <span class="brass-badge">BORDTAGEBUCH DER LEEFKE</span>
-            <h2>Willkommen an Bord</h2>
-            <div class="trip-card">
-              <small>AKTUELLER TÖRN</small>
-              <strong id="tripTitle">Dänische Südsee 2026</strong>
-              <span id="tripDates">01.–16. August 2026</span>
-            </div>
-            <div class="actions">
-              <button class="primary" data-open="day">Neuen Tag eintragen</button>
-              <button class="glass" data-open="route">Etappe planen</button>
-            </div>
+          <div class="hero-nameplate">
+            <span>Das Bordtagebuch von</span>
+            <h2>LEEFKE</h2>
+            <p>Groeneveld Kotter · Finse · Baujahr 1996</p>
           </div>
           <div class="compass" aria-hidden="true"><span>N</span><b>✦</b></div>
         </article>
 
-        <div class="vessel-strip">
-          <div><span>Länge</span><strong id="vLength">11,50 m</strong></div>
-          <div><span>Breite</span><strong id="vBeam">3,85 m</strong></div>
-          <div><span>Tiefgang</span><strong id="vDraft">1,15 m</strong></div>
-          <div><span>Verdrängung</span><strong id="vDisplacement">ca. 13 t</strong></div>
-          <div><span>Motor</span><strong id="vEngine">Perkins M135</strong></div>
-          <div><span>Diesel</span><strong id="vTank">400 l</strong></div>
+        <section class="leefke-intro" aria-label="Die LEEFKE">
+          <div class="intro-mark" aria-hidden="true">⚓</div>
+          <div class="intro-copy">
+            <small>UNSER SCHIFF</small>
+            <h2>LEEFKE – klassischer Stahlkotter mit Charakter</h2>
+            <p id="leefkeStory">LEEFKE ist unser 1996 gebauter Groeneveld Kotter der Baureihe Finse: ein 11,50 Meter langer Stahlverdränger mit klassischem Spitzgatt. Ruhig, solide und verlässlich bringt sie uns von der Weser hinaus auf Nord- und Ostsee.</p>
+          </div>
+          <div class="voyage-panel">
+            <small>AKTUELLER TÖRN</small>
+            <strong id="tripTitle">Dänische Südsee 2026</strong>
+            <span id="tripDates">01.–16. August 2026</span>
+            <div class="actions">
+              <button class="primary" data-open="day">Neuen Tag eintragen</button>
+              <button data-open="route">Etappe planen</button>
+            </div>
+          </div>
+        </section>
+
+        <div class="vessel-strip" aria-label="Schiffsdaten der LEEFKE">
+          <div><span>↔ Länge</span><strong id="vLength">11,50 m</strong></div>
+          <div><span>↔ Breite</span><strong id="vBeam">3,85 m</strong></div>
+          <div><span>⌄ Tiefgang</span><strong id="vDraft">1,15 m</strong></div>
+          <div><span>⚓ Verdrängung</span><strong id="vDisplacement">ca. 13 t</strong></div>
+          <div><span>⚙ Motor</span><strong id="vEngine">Perkins M135</strong></div>
+          <div><span>⛽ Diesel</span><strong id="vTank">400 l</strong></div>
         </div>
 
         <div class="stats">
@@ -179,26 +189,36 @@
           <label>Koordinaten<input name="coords" placeholder="54.18, 7.89"></label>
           <label>Noch einmal anlaufen?<select name="returnVisit"><option value="yes">Ja, gerne</option><option value="maybe">Vielleicht</option><option value="no">Eher nicht</option></select></label>
 
-          <fieldset class="rating-field wide"><legend>Gesamtbewertung</legend><div class="star-input">
-            <input id="rating5" name="rating" type="radio" value="5" checked><label for="rating5" title="5 Sterne">★</label>
-            <input id="rating4" name="rating" type="radio" value="4"><label for="rating4" title="4 Sterne">★</label>
-            <input id="rating3" name="rating" type="radio" value="3"><label for="rating3" title="3 Sterne">★</label>
-            <input id="rating2" name="rating" type="radio" value="2"><label for="rating2" title="2 Sterne">★</label>
-            <input id="rating1" name="rating" type="radio" value="1"><label for="rating1" title="1 Stern">★</label>
-          </div></fieldset>
+          <fieldset class="rating-field wide rating-overall">
+            <legend>Gesamtbewertung</legend>
+            <p class="rating-help">Einfach den gewünschten Stern anklicken. Alle Sterne bis dorthin werden gelb.</p>
+            <div class="rating-picker" data-rating-name="rating">
+              <input type="hidden" name="rating" value="">
+              <div class="rating-buttons" role="radiogroup" aria-label="Gesamtbewertung">
+                <button type="button" data-rating="1" aria-label="1 Stern">★</button>
+                <button type="button" data-rating="2" aria-label="2 Sterne">★</button>
+                <button type="button" data-rating="3" aria-label="3 Sterne">★</button>
+                <button type="button" data-rating="4" aria-label="4 Sterne">★</button>
+                <button type="button" data-rating="5" aria-label="5 Sterne">★</button>
+              </div>
+              <span class="rating-value">Noch nicht bewertet</span>
+            </div>
+          </fieldset>
 
-          <fieldset class="rating-field"><legend>Freundlichkeit</legend><div class="star-input small">
-            <input id="friendly5" name="ratingFriendly" type="radio" value="5" checked><label for="friendly5">★</label><input id="friendly4" name="ratingFriendly" type="radio" value="4"><label for="friendly4">★</label><input id="friendly3" name="ratingFriendly" type="radio" value="3"><label for="friendly3">★</label><input id="friendly2" name="ratingFriendly" type="radio" value="2"><label for="friendly2">★</label><input id="friendly1" name="ratingFriendly" type="radio" value="1"><label for="friendly1">★</label>
-          </div></fieldset>
-          <fieldset class="rating-field"><legend>Sanitär</legend><div class="star-input small">
-            <input id="sanitary5" name="ratingSanitary" type="radio" value="5" checked><label for="sanitary5">★</label><input id="sanitary4" name="ratingSanitary" type="radio" value="4"><label for="sanitary4">★</label><input id="sanitary3" name="ratingSanitary" type="radio" value="3"><label for="sanitary3">★</label><input id="sanitary2" name="ratingSanitary" type="radio" value="2"><label for="sanitary2">★</label><input id="sanitary1" name="ratingSanitary" type="radio" value="1"><label for="sanitary1">★</label>
-          </div></fieldset>
-          <fieldset class="rating-field"><legend>Versorgung</legend><div class="star-input small">
-            <input id="supply5" name="ratingSupply" type="radio" value="5" checked><label for="supply5">★</label><input id="supply4" name="ratingSupply" type="radio" value="4"><label for="supply4">★</label><input id="supply3" name="ratingSupply" type="radio" value="3"><label for="supply3">★</label><input id="supply2" name="ratingSupply" type="radio" value="2"><label for="supply2">★</label><input id="supply1" name="ratingSupply" type="radio" value="1"><label for="supply1">★</label>
-          </div></fieldset>
-          <fieldset class="rating-field"><legend>Preis / Leistung</legend><div class="star-input small">
-            <input id="value5" name="ratingValue" type="radio" value="5" checked><label for="value5">★</label><input id="value4" name="ratingValue" type="radio" value="4"><label for="value4">★</label><input id="value3" name="ratingValue" type="radio" value="3"><label for="value3">★</label><input id="value2" name="ratingValue" type="radio" value="2"><label for="value2">★</label><input id="value1" name="ratingValue" type="radio" value="1"><label for="value1">★</label>
-          </div></fieldset>
+          <div class="wide rating-categories">
+            <fieldset class="rating-field"><legend>Freundlichkeit</legend>
+              <div class="rating-picker compact" data-rating-name="ratingFriendly"><input type="hidden" name="ratingFriendly" value=""><div class="rating-buttons" role="radiogroup" aria-label="Freundlichkeit"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+            </fieldset>
+            <fieldset class="rating-field"><legend>Sanitäranlagen</legend>
+              <div class="rating-picker compact" data-rating-name="ratingSanitary"><input type="hidden" name="ratingSanitary" value=""><div class="rating-buttons" role="radiogroup" aria-label="Sanitäranlagen"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+            </fieldset>
+            <fieldset class="rating-field"><legend>Versorgung</legend>
+              <div class="rating-picker compact" data-rating-name="ratingSupply"><input type="hidden" name="ratingSupply" value=""><div class="rating-buttons" role="radiogroup" aria-label="Versorgung"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+            </fieldset>
+            <fieldset class="rating-field"><legend>Preis-Leistung</legend>
+              <div class="rating-picker compact" data-rating-name="ratingValue"><input type="hidden" name="ratingValue" value=""><div class="rating-buttons" role="radiogroup" aria-label="Preis-Leistung"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+            </fieldset>
+          </div>
 
           <label class="wide">Ansteuerung / Besonderheiten<textarea rows="3" name="approach"></textarea></label>
           <label class="wide">Notiz<textarea rows="4" name="note"></textarea></label>

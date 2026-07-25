@@ -1,4 +1,4 @@
-const APP_VERSION = 4;
+const APP_VERSION = '4.1';
 const DB_NAME = 'leefke-v2';
 const DB_VERSION = 2;
 const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx'];
@@ -220,9 +220,62 @@ function card(item, kind, body, className = '') {
   return `<article class="item ${className}">${actionButtons(kind, item.id)}${body}</article>`;
 }
 
+function ratingLabel(value) {
+  const rating = clamp(Math.round(num(value)), 0, 5);
+  return rating ? `${rating} von 5 Sternen` : 'Noch nicht bewertet';
+}
+
 function stars(value, large = false) {
   const rating = clamp(Math.round(num(value)), 0, 5);
-  return `<span class="stars${large ? ' large' : ''}" aria-label="${rating} von 5 Sternen">${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</span>`;
+  const filled = '<span class="filled">★</span>'.repeat(rating);
+  const empty = '<span class="empty">★</span>'.repeat(5 - rating);
+  return `<span class="display-stars${large ? ' large' : ''}" aria-label="${ratingLabel(rating)}">${filled}${empty}</span>`;
+}
+
+function paintRatingPicker(picker, value, preview = false) {
+  const rating = clamp(Math.round(num(value)), 0, 5);
+  picker.querySelectorAll('[data-rating]').forEach(button => {
+    const active = num(button.dataset.rating) <= rating;
+    if (preview) {
+      button.classList.toggle('preview', active);
+      button.classList.remove('selected');
+    } else {
+      button.classList.toggle('selected', active);
+      button.classList.remove('preview');
+      button.setAttribute('aria-checked', String(num(button.dataset.rating) === rating));
+    }
+  });
+  if (!preview) {
+    const input = picker.querySelector('input[type="hidden"]');
+    if (input) input.value = rating || '';
+    const label = picker.querySelector('.rating-value');
+    if (label) label.textContent = rating ? `${rating} von 5 Sternen` : (picker.classList.contains('compact') ? 'Nicht bewertet' : 'Noch nicht bewertet');
+  }
+}
+
+function syncRatingPickers(root = document) {
+  root.querySelectorAll('.rating-picker').forEach(picker => {
+    const input = picker.querySelector('input[type="hidden"]');
+    paintRatingPicker(picker, input?.value || 0);
+  });
+}
+
+function initRatingPickers() {
+  document.querySelectorAll('.rating-picker').forEach(picker => {
+    picker.querySelectorAll('[data-rating]').forEach(button => {
+      button.addEventListener('click', () => paintRatingPicker(picker, button.dataset.rating));
+      button.addEventListener('mouseenter', () => {
+        picker.querySelectorAll('[data-rating]').forEach(item => item.classList.remove('preview'));
+        paintRatingPicker(picker, button.dataset.rating, true);
+      });
+    });
+    picker.querySelector('.rating-buttons')?.addEventListener('mouseleave', () => {
+      picker.querySelectorAll('[data-rating]').forEach(item => item.classList.remove('preview'));
+      const input = picker.querySelector('input[type="hidden"]');
+      paintRatingPicker(picker, input?.value || 0);
+    });
+  });
+  syncRatingPickers();
 }
 
 function lines(value) {
@@ -243,6 +296,7 @@ function render() {
   $('#headerBoatLine').textContent = `${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` · ${settings.model}` : ''} · ${settings.homePort || 'Lemwerder'}`;
   $('#tripTitle').textContent = settings.tripTitle || 'Aktueller Törn';
   $('#tripDates').textContent = [fmtDate(settings.tripStart), fmtDate(settings.tripEnd)].filter(Boolean).join(' – ');
+  $('#leefkeStory').textContent = `${settings.boatName || 'LEEFKE'} ist unser ${settings.buildYear || 1996} gebauter ${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` der Baureihe ${settings.model}` : ''}: ein ${dec2(settings.length)} Meter langer Verdränger aus ${settings.hullMaterial || 'Stahl'} mit klassischem Spitzgatt. Der ${settings.engine || 'Perkins M135'} bringt uns mit ruhigen ${settings.cruiseSpeed || '6–8 kn'} vom ${settings.homePort || 'Heimathafen'} hinaus auf Nord- und Ostsee.`;
 
   $('#vLength').textContent = `${dec2(settings.length)} m`;
   $('#vBeam').textContent = `${dec2(settings.beam)} m`;
@@ -368,14 +422,14 @@ function renderPorts() {
   $('#portList').innerHTML = filtered.map(item => {
     const [returnText, returnClass] = returnLabel(item.returnVisit || 'yes');
     return card(item, 'ports', `
-      <div class="port-head"><div><div class="meta">${fmtDate(item.date)}</div><h3>${esc(item.name)}</h3></div>${stars(item.rating || 0, true)}</div>
+      <div class="port-head"><div><div class="meta">${fmtDate(item.date)}</div><h3>${esc(item.name)}</h3><div class="port-rating-summary">${stars(item.rating || 0, true)}<strong>${ratingLabel(item.rating || 0)}</strong></div></div></div>
       <div class="meta">Liegeplatz: ${esc(item.berth || '—')} · ${item.cost ? eur(item.cost) : 'Kosten —'}</div>
       <span class="return-badge ${returnClass}">${returnText}</span>
-      <div class="rating-grid">
-        <div><span>Freundlichkeit</span>${stars(item.ratingFriendly || item.rating || 0)}</div>
-        <div><span>Sanitär</span>${stars(item.ratingSanitary || item.rating || 0)}</div>
-        <div><span>Versorgung</span>${stars(item.ratingSupply || item.rating || 0)}</div>
-        <div><span>Preis / Leistung</span>${stars(item.ratingValue || item.rating || 0)}</div>
+      <div class="port-ratings">
+        <div class="port-rating-row"><span>Freundlichkeit</span>${stars(item.ratingFriendly || 0)}</div>
+        <div class="port-rating-row"><span>Sanitäranlagen</span>${stars(item.ratingSanitary || 0)}</div>
+        <div class="port-rating-row"><span>Versorgung</span>${stars(item.ratingSupply || 0)}</div>
+        <div class="port-rating-row"><span>Preis-Leistung</span>${stars(item.ratingValue || 0)}</div>
       </div>
       ${item.contact ? `<p><b>UKW / Telefon:</b> ${esc(item.contact)}</p>` : ''}
       ${item.coords ? `<p><b>Position:</b> ${esc(item.coords)}</p>` : ''}
@@ -427,6 +481,7 @@ for (const id of ['day', 'fuel', 'maintenance', 'route', 'port']) {
     const store = id === 'port' ? 'ports' : id === 'day' ? 'days' : id;
     await put(store, item);
     form.reset();
+    syncRatingPickers(form);
     await refresh();
     toast(id === 'port' ? 'Hafen mit Sternen gespeichert' : 'Gespeichert');
   };
@@ -517,6 +572,7 @@ function fillForm(form, item) {
   Object.entries(item).forEach(([key, value]) => {
     if (form.elements[key]) form.elements[key].value = typeof value === 'boolean' ? String(value) : value ?? '';
   });
+  syncRatingPickers(form);
 }
 
 function editItem(kind, id) {
@@ -636,6 +692,9 @@ $('#import').onchange = async event => {
     alert('Die Sicherungsdatei ist ungültig.');
   }
 };
+
+initRatingPickers();
+$('#portForm').addEventListener('reset', () => window.setTimeout(() => syncRatingPickers($('#portForm')), 0));
 
 $('#menu').onclick = () => $('#nav').classList.toggle('open');
 $$('nav button').forEach(button => button.onclick = () => view(button.dataset.view));

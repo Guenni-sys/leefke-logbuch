@@ -1,31 +1,20 @@
-LEEFKE BORDTAGEBUCH – VERSION 4
-================================
+LEEFKE BORDTAGEBUCH – UPDATE AUF VERSION 4.1
 
-NEU IN VERSION 4
-- vollständig maritime Gestaltung in Marineblau, Messing und Seekarten-Optik
-- echtes Foto der LEEFKE als Startbild
-- bekannte Schiffsdaten der LEEFKE bereits hinterlegt
-- eigener Schiffspass mit Maßen, Motor, Tank und Bordtechnik
-- Hafenbewertungen mit anklickbaren Sternen
-- zusätzliche Sterne für Freundlichkeit, Sanitär, Versorgung und Preis/Leistung
-- Tankanzeige für den 400-Liter-Dieseltank
-- persönlicher Reisebericht mit LEEFKE-Titelbild
-- vorhandene Daten aus Version 2 und 3 bleiben erhalten
+NEU:
+- Startbild passt sich vollständig an Bildschirm und iPad an
+- kein horizontales Verschieben mehr
+- persönliche, maritime Beschreibung der LEEFKE unter dem Bild
+- klare Sternauswahl: gewünschten Stern anklicken, alle Sterne davor werden gelb
+- übersichtlichere Darstellung der Hafenbewertungen
 
-UPLOAD ZU GITHUB
-1. Vorher in der bisherigen App unter "Sicherung" eine Sicherung exportieren.
+UPDATE:
+1. Bestehende App öffnen und unter „Sicherung“ eine Sicherung exportieren.
 2. Diese ZIP-Datei unter Windows vollständig entpacken.
-3. Im GitHub-Repository https://github.com/Guenni-sys/leefke-logbuch öffnen.
-4. Add file > Upload files wählen.
-5. ALLE Dateien aus diesem entpackten Ordner markieren und hochladen.
-   Nicht die ZIP-Datei und nicht den Ordner selbst hochladen.
-6. Commit-Nachricht: LEEFKE Bordbuch Version 4
-7. Commit directly to the main branch auswählen und Commit changes drücken.
-8. Etwa 1 bis 3 Minuten warten.
-9. Danach öffnen:
-   https://guenni-sys.github.io/leefke-logbuch/index.html?v=4
-10. Unter Windows einmal Strg+F5 drücken.
+3. Im GitHub-Repository Guenni-sys/leefke-logbuch „Add file“ und „Upload files“ öffnen.
+4. ALLE Dateien aus dem entpackten Ordner hochladen – nicht die ZIP-Datei.
+5. „Commit changes“ bestätigen.
+6. Nach ungefähr zwei Minuten öffnen:
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=4.1
+7. Unter Windows einmal Strg+F5 drücken. Auf dem iPad die App vollständig schließen und erneut öffnen.
 
-WICHTIG
-Die Datei index.html muss direkt auf der ersten Ebene des Repositorys liegen.
-Das neue Startfoto heißt leefke-hero.jpg und muss ebenfalls hochgeladen werden.
+Die vorhandenen Daten bleiben erhalten. Die Datenbank wurde nicht verändert.
