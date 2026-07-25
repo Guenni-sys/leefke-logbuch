@@ -1,20 +1,21 @@
-LEEFKE BORDTAGEBUCH – UPDATE AUF VERSION 4.1
+LEEFKE Bordtagebuch – Update auf Version 4.2
 
-NEU:
-- Startbild passt sich vollständig an Bildschirm und iPad an
-- kein horizontales Verschieben mehr
-- persönliche, maritime Beschreibung der LEEFKE unter dem Bild
-- klare Sternauswahl: gewünschten Stern anklicken, alle Sterne davor werden gelb
-- übersichtlichere Darstellung der Hafenbewertungen
+NEU
+- GPX-Routen werden auf einer interaktiven Seekartenansicht angezeigt.
+- Tonnen, Leuchtfeuer und weitere Seezeichen stammen aus OpenSeaMap.
+- Karte verschieben, zoomen und die Route automatisch zentrieren.
+- Deutliche Start- und Zielmarkierungen sowie Streckeninformationen.
+- Bereits angezeigte Kartenausschnitte können vom Browser zwischengespeichert werden.
 
-UPDATE:
-1. Bestehende App öffnen und unter „Sicherung“ eine Sicherung exportieren.
-2. Diese ZIP-Datei unter Windows vollständig entpacken.
-3. Im GitHub-Repository Guenni-sys/leefke-logbuch „Add file“ und „Upload files“ öffnen.
-4. ALLE Dateien aus dem entpackten Ordner hochladen – nicht die ZIP-Datei.
-5. „Commit changes“ bestätigen.
-6. Nach ungefähr zwei Minuten öffnen:
-   https://guenni-sys.github.io/leefke-logbuch/index.html?v=4.1
+UPDATE
+1. Vorher in der bisherigen App unter „Sicherung“ eine Sicherung exportieren.
+2. Diese ZIP-Datei entpacken.
+3. Im GitHub-Repository Add file > Upload files öffnen.
+4. ALLE Dateien aus diesem Ordner hochladen und vorhandene Dateien ersetzen.
+5. Commit changes anklicken.
+6. Nach zwei bis drei Minuten öffnen:
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=4.2
 7. Unter Windows einmal Strg+F5 drücken. Auf dem iPad die App vollständig schließen und erneut öffnen.
 
-Die vorhandenen Daten bleiben erhalten. Die Datenbank wurde nicht verändert.
+WICHTIG
+Für die erste Kartenanzeige wird Internet benötigt. Die Seekartenansicht dient ausschließlich der Planung und Dokumentation. Sie ersetzt keine amtliche bzw. zugelassene Seekarte oder den Plotter an Bord.

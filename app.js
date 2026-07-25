@@ -1,4 +1,4 @@
-const APP_VERSION = '4.1';
+const APP_VERSION = '4.2';
 const DB_NAME = 'leefke-v2';
 const DB_VERSION = 2;
 const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx'];
@@ -48,6 +48,12 @@ const DEFAULT_SETTINGS = {
 
 let db;
 let state = {};
+let nauticalMap = null;
+let nauticalBaseLayer = null;
+let seamarkLayer = null;
+let activeGpxLayer = null;
+let activeRouteBounds = null;
+let selectedGpxId = '';
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -123,6 +129,13 @@ function view(id) {
   $('#nav').classList.remove('open');
   if (id === 'report') buildReport();
   if (id === 'day') prepareDayForm();
+  if (id === 'route') {
+    window.setTimeout(() => {
+      ensureNauticalMap();
+      nauticalMap?.invalidateSize();
+      drawGpx($('#gpxSelect')?.value || selectedGpxId);
+    }, 80);
+  }
   window.scrollTo(0, 0);
 }
 
@@ -459,11 +472,13 @@ function renderSettings(settings) {
 
 function renderGpxSelect() {
   const select = $('#gpxSelect');
-  const current = select.value;
+  const current = select.value || selectedGpxId;
   select.innerHTML = '<option value="">Keine GPX-Route</option>' + state.gpx.map(item => `<option value="${item.id}">${esc(item.name)} (${dec(item.distanceNm)} sm)</option>`).join('');
   if (state.gpx.some(item => item.id === current)) select.value = current;
   else if (state.gpx[0]) select.value = state.gpx[0].id;
-  drawGpx(select.value);
+  selectedGpxId = select.value;
+  updateMapInfo(state.gpx.find(item => item.id === selectedGpxId));
+  if ($('#route')?.classList.contains('active')) drawGpx(selectedGpxId);
 }
 
 function formObject(form) {
@@ -607,42 +622,167 @@ $('#gpxImport').onchange = async event => {
   if (!file) return;
   try {
     const xml = new DOMParser().parseFromString(await file.text(), 'text/xml');
+    if (xml.querySelector('parsererror')) throw new Error('Ungültige XML-Datei');
     const points = [...xml.querySelectorAll('trkpt,rtept')]
       .map(point => [num(point.getAttribute('lat')), num(point.getAttribute('lon'))])
       .filter(point => point.every(Number.isFinite));
     if (points.length < 2) throw new Error('Keine Route');
     const distance = points.slice(1).reduce((sum, point, index) => sum + haversine(points[index], point), 0);
-    await put('gpx', { id: uid(), name: file.name.replace(/\.gpx$/i, ''), points, distanceNm: distance, created: Date.now() });
+    const embeddedName = xml.querySelector('metadata > name, trk > name, rte > name')?.textContent?.trim();
+    const route = {
+      id: uid(),
+      name: embeddedName || file.name.replace(/\.gpx$/i, ''),
+      points,
+      distanceNm: distance,
+      created: Date.now()
+    };
+    await put('gpx', route);
+    selectedGpxId = route.id;
     await refresh();
+    $('#gpxSelect').value = route.id;
     $('#gpxInfo').textContent = `${points.length} Punkte · ${dec(distance)} sm importiert`;
-    toast('GPX-Route importiert');
+    drawGpx(route.id);
+    toast('GPX-Route auf Seekarte importiert');
   } catch (error) {
-    alert('Die GPX-Datei konnte nicht gelesen werden.');
+    console.error(error);
+    alert('Die GPX-Datei konnte nicht gelesen werden. Sie muss mindestens zwei Track- oder Routenpunkte enthalten.');
+  } finally {
+    event.target.value = '';
   }
 };
 
-$('#gpxSelect').onchange = event => drawGpx(event.target.value);
+$('#gpxSelect').onchange = event => {
+  selectedGpxId = event.target.value;
+  drawGpx(selectedGpxId);
+};
 
-function drawGpx(id) {
-  const svg = $('#routeMap');
-  const route = state.gpx?.find(item => item.id === id);
-  if (!route) {
-    svg.innerHTML = '<text x="450" y="240" text-anchor="middle">Noch keine GPX-Route importiert</text>';
+$('#fitRoute').onclick = () => {
+  if (!activeRouteBounds || !nauticalMap) {
+    toast('Bitte zuerst eine GPX-Route auswählen');
     return;
   }
-  const points = route.points;
-  const minLat = Math.min(...points.map(point => point[0]));
-  const maxLat = Math.max(...points.map(point => point[0]));
-  const minLon = Math.min(...points.map(point => point[1]));
-  const maxLon = Math.max(...points.map(point => point[1]));
-  const pad = 35, width = 900, height = 480;
-  const scaleX = (width - 2 * pad) / (maxLon - minLon || 1);
-  const scaleY = (height - 2 * pad) / (maxLat - minLat || 1);
-  const scale = Math.min(scaleX, scaleY);
-  const plot = points.map(point => [pad + (point[1] - minLon) * scale, height - pad - (point[0] - minLat) * scale]);
-  const path = plot.map(point => point.join(',')).join(' ');
-  const start = plot[0], end = plot.at(-1);
-  svg.innerHTML = `<polyline points="${path}"/><circle cx="${start[0]}" cy="${start[1]}" r="8"/><circle cx="${end[0]}" cy="${end[1]}" r="8"/><text x="${start[0] + 12}" y="${start[1] - 10}">Start</text><text x="${end[0] + 12}" y="${end[1] - 10}">Ziel</text><text x="20" y="28">${esc(route.name)} · ${dec(route.distanceNm)} sm</text>`;
+  nauticalMap.fitBounds(activeRouteBounds, { padding: [36, 36], maxZoom: 14 });
+};
+
+function ensureNauticalMap() {
+  const mapElement = $('#routeMap');
+  if (!mapElement || nauticalMap) return nauticalMap;
+  if (!window.L) {
+    mapElement.innerHTML = '<div class="map-placeholder"><strong>Seekarte konnte nicht geladen werden</strong><span>Für die erste Kartenanzeige wird eine Internetverbindung benötigt. Bitte die Seite neu laden.</span></div>';
+    return null;
+  }
+
+  mapElement.innerHTML = '';
+  nauticalMap = L.map(mapElement, {
+    zoomControl: true,
+    preferCanvas: true,
+    minZoom: 3,
+    maxZoom: 18
+  }).setView([53.72, 8.55], 8);
+
+  nauticalBaseLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    attribution: '&copy; OpenStreetMap-Mitwirkende'
+  }).addTo(nauticalMap);
+
+  seamarkLayer = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    opacity: 1,
+    attribution: 'Seezeichen &copy; OpenSeaMap'
+  }).addTo(nauticalMap);
+
+  L.control.layers(
+    { 'Kartenhintergrund': nauticalBaseLayer },
+    { 'Tonnen & Seezeichen': seamarkLayer },
+    { collapsed: true, position: 'topright' }
+  ).addTo(nauticalMap);
+  L.control.scale({ metric: true, imperial: false, maxWidth: 160 }).addTo(nauticalMap);
+
+  nauticalMap.on('baselayerchange overlayadd overlayremove', () => {
+    window.setTimeout(() => nauticalMap.invalidateSize(), 20);
+  });
+  return nauticalMap;
+}
+
+function routeMarker(type, label) {
+  const symbol = type === 'start' ? '⚓' : '◆';
+  return L.divIcon({
+    className: `leefke-route-marker ${type}`,
+    html: `<span>${symbol}</span><b>${esc(label)}</b>`,
+    iconSize: [76, 42],
+    iconAnchor: [20, 21],
+    popupAnchor: [0, -20]
+  });
+}
+
+function coordinateText(point) {
+  if (!point) return '';
+  return `${point[0].toFixed(5)}° N · ${point[1].toFixed(5)}° E`;
+}
+
+function updateMapInfo(route) {
+  const info = $('#mapInfo');
+  if (!info) return;
+  if (!route) {
+    info.innerHTML = '<strong>Noch keine GPX-Route ausgewählt.</strong><span>Importiere eine Route vom Plotter oder Planungsprogramm.</span>';
+    return;
+  }
+  const start = route.points?.[0];
+  const end = route.points?.at(-1);
+  info.innerHTML = `<strong>${esc(route.name)}</strong><span>${dec(route.distanceNm)} sm · ${route.points?.length || 0} Punkte</span><small>Start ${coordinateText(start)} · Ziel ${coordinateText(end)}</small>`;
+}
+
+function clearActiveRoute() {
+  if (activeGpxLayer && nauticalMap) nauticalMap.removeLayer(activeGpxLayer);
+  activeGpxLayer = null;
+  activeRouteBounds = null;
+}
+
+function drawGpx(id) {
+  selectedGpxId = id || '';
+  const route = state.gpx?.find(item => item.id === selectedGpxId);
+  updateMapInfo(route);
+  if (!$('#route')?.classList.contains('active')) return;
+
+  const map = ensureNauticalMap();
+  if (!map) return;
+  map.invalidateSize();
+  clearActiveRoute();
+
+  if (!route?.points?.length) {
+    map.setView([53.72, 8.55], 8);
+    return;
+  }
+
+  const latLngs = route.points.map(point => L.latLng(point[0], point[1]));
+  const start = latLngs[0];
+  const finish = latLngs.at(-1);
+  const halo = L.polyline(latLngs, {
+    color: '#08283b',
+    weight: 9,
+    opacity: 0.72,
+    lineCap: 'round',
+    lineJoin: 'round',
+    interactive: false,
+    smoothFactor: 1.2
+  });
+  const course = L.polyline(latLngs, {
+    color: '#f2bd2e',
+    weight: 5,
+    opacity: 1,
+    lineCap: 'round',
+    lineJoin: 'round',
+    smoothFactor: 1.2
+  }).bindPopup(`<strong>${esc(route.name)}</strong><br>${dec(route.distanceNm)} sm · ${route.points.length} Punkte`);
+
+  const startMarker = L.marker(start, { icon: routeMarker('start', 'Start') })
+    .bindPopup(`<strong>Start</strong><br>${coordinateText(route.points[0])}`);
+  const finishMarker = L.marker(finish, { icon: routeMarker('finish', 'Ziel') })
+    .bindPopup(`<strong>Ziel</strong><br>${coordinateText(route.points.at(-1))}`);
+
+  activeGpxLayer = L.layerGroup([halo, course, startMarker, finishMarker]).addTo(map);
+  activeRouteBounds = L.latLngBounds(latLngs);
+  map.fitBounds(activeRouteBounds, { padding: [36, 36], maxZoom: 14 });
 }
 
 function buildReport() {

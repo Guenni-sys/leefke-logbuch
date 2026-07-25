@@ -1,4 +1,5 @@
-const CACHE = 'leefke-v4-1-20260725';
+const APP_CACHE = 'leefke-v4-2-20260725';
+const RUNTIME_CACHE = 'leefke-runtime-v4-2';
 const ASSETS = [
   './',
   './index.html',
@@ -12,24 +13,64 @@ const ASSETS = [
 ];
 
 self.addEventListener('install', event => {
-  event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(ASSETS)));
+  event.waitUntil(caches.open(APP_CACHE).then(cache => cache.addAll(ASSETS)));
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
-  event.waitUntil(caches.keys().then(keys => Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)))));
+  event.waitUntil(
+    caches.keys().then(keys => Promise.all(
+      keys.filter(key => ![APP_CACHE, RUNTIME_CACHE].includes(key)).map(key => caches.delete(key))
+    ))
+  );
   self.clients.claim();
 });
 
+async function trimCache(name, maxItems) {
+  const cache = await caches.open(name);
+  const keys = await cache.keys();
+  while (keys.length > maxItems) {
+    await cache.delete(keys.shift());
+  }
+}
+
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
-  event.respondWith(
-    fetch(event.request)
-      .then(response => {
-        const copy = response.clone();
-        caches.open(CACHE).then(cache => cache.put(event.request, copy));
+  const url = new URL(event.request.url);
+  const isMapResource = url.hostname.includes('openstreetmap.org') || url.hostname.includes('openseamap.org') || url.hostname === 'unpkg.com';
+
+  if (isMapResource) {
+    event.respondWith((async () => {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+      try {
+        const response = await fetch(event.request);
+        if (response.ok || response.type === 'opaque') {
+          const cache = await caches.open(RUNTIME_CACHE);
+          await cache.put(event.request, response.clone());
+          trimCache(RUNTIME_CACHE, 650);
+        }
         return response;
-      })
-      .catch(() => caches.match(event.request).then(cached => cached || caches.match('./index.html')))
-  );
+      } catch {
+        return new Response('', { status: 503, statusText: 'Offline' });
+      }
+    })());
+    return;
+  }
+
+  event.respondWith((async () => {
+    try {
+      const response = await fetch(event.request);
+      if (response.ok) {
+        const cache = await caches.open(APP_CACHE);
+        await cache.put(event.request, response.clone());
+      }
+      return response;
+    } catch {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+      if (event.request.mode === 'navigate') return caches.match('./index.html');
+      return new Response('', { status: 503, statusText: 'Offline' });
+    }
+  })());
 });
