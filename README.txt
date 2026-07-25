@@ -1,15 +1,18 @@
-LEEFKE PWA – iPad-Version
-==========================
+LEEFKE Bordbuch – Version 2
 
-Diese Version speichert alle Daten direkt auf dem iPad und funktioniert nach der Installation offline.
+Neue Bereiche:
+- frei bearbeitbarer Reiseplan
+- Hafenbuch mit Kosten, Liegeplatz und Bewertung
+- verbesserte Startseite mit offenen Wartungspunkten
+- vollständige Sicherung aller Daten und Fotos
+- weiterhin offlinefähig auf iPad und Windows
+
+UPDATE AUF GITHUB
+1. ZIP entpacken.
+2. Im GitHub-Repository alle enthaltenen Dateien hochladen.
+3. Vorhandene Dateien ersetzen lassen und Commit changes wählen.
+4. Auf dem iPad die App komplett schließen und erneut öffnen.
+5. Falls die alte Version erscheint: Safari-Webseite neu laden oder die App einmal vom Home-Bildschirm entfernen und erneut hinzufügen.
 
 WICHTIG
-Eine installierbare PWA kann auf dem iPad nicht direkt aus der ZIP-Datei installiert werden. Die Dateien müssen einmal über eine HTTPS-Webadresse geöffnet werden.
-
-Installation:
-1. Dateien auf einen statischen Webspace laden (z. B. GitHub Pages, Netlify oder eigener Webspace).
-2. Die HTTPS-Adresse in Safari öffnen.
-3. Teilen → Zum Home-Bildschirm.
-4. App einmal öffnen. Danach läuft sie offline.
-
-Alle Daten bleiben lokal auf dem iPad. Unter „Sicherung“ regelmäßig eine JSON-Datei exportieren und in der Dateien-App sichern.
+Vor dem Update in der alten App unter Sicherung einen Export erstellen. Danach kann die Sicherung in Version 2 importiert werden.
