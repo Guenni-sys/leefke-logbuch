@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=5.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -19,13 +19,13 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">⚓</div>
       <div>
-        <small>BORDTAGEBUCH · VERSION 4.2</small>
+        <small>BORDTAGEBUCH · VERSION 5.0</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
     </div>
     <div class="head-actions">
-      <span id="onlineState" class="status">offlinefähig</span>
+      <button id="syncStatusButton" class="status sync-status" data-open="sync" type="button">Nicht angemeldet</button>
       <button id="menu" class="menu-button" aria-label="Menü öffnen">☰</button>
     </div>
   </header>
@@ -35,7 +35,7 @@
       <div class="nav-title">LEEFKE</div>
       <button data-view="home" class="active"><span>⌂</span> Übersicht</button>
       <button data-view="day"><span>✎</span> Tageslogbuch</button>
-      <button data-view="route"><span>↝</span> Reiseplan & GPX</button>
+      <button data-view="route"><span>↝</span> Törnzentrale</button>
       <button data-view="ports"><span>⚓</span> Hafenbuch</button>
       <button data-view="fuel"><span>⛽</span> Tank & Verbrauch</button>
       <button data-view="maintenance"><span>⚙</span> Wartung</button>
@@ -43,6 +43,7 @@
       <button data-view="photos"><span>▦</span> Galerie</button>
       <button data-view="report"><span>▤</span> Reisebericht</button>
       <button data-view="settings"><span>♜</span> Schiffspass</button>
+      <button data-view="sync"><span>☁</span> Konto & Sync</button>
       <button data-view="backup"><span>⇩</span> Sicherung</button>
       <div class="nav-footer">Stahl · Spitzgatt · 1996</div>
     </nav>
@@ -153,31 +154,52 @@
       </section>
 
       <section id="route" class="view">
-        <div class="title"><small>REISEPLAN</small><h2>Etappen & GPX-Routen</h2><p>Die geplante und gefahrene Route der LEEFKE.</p></div>
-        <div class="grid2">
-          <form id="routeForm" class="card form">
+        <div class="title"><small>TÖRNZENTRALE</small><h2>Etappen, Häfen, Wetter & Seekarte</h2><p>Der komplette Törn der LEEFKE in einer gemeinsamen Übersicht – vom Ablegen bis zum nächsten Liegeplatz.</p></div>
+
+        <div class="trip-overview" aria-label="Törnübersicht">
+          <article><span>Nächste Etappe</span><strong id="tripNext">Noch nicht geplant</strong><small id="tripNextMeta">—</small></article>
+          <article><span>Reststrecke</span><strong id="tripRemaining">0,0 sm</strong><small>geplante Etappen</small></article>
+          <article><span>Planzeit</span><strong id="tripPlanHours">0,0 Std.</strong><small>noch vorgesehen</small></article>
+          <article><span>Häfen im Törn</span><strong id="tripPorts">0</strong><small>Start- und Zielhäfen</small></article>
+        </div>
+
+        <div class="grid2 route-planner-grid">
+          <form id="routeForm" class="card form route-form">
             <input type="hidden" name="id">
+            <div class="wide section-heading"><span>↝</span><div><small>ETAPPE PLANEN</small><h3>Reisetag der LEEFKE</h3></div></div>
             <label>Datum<input type="date" name="date"></label>
             <label>Status<select name="status"><option value="planned">geplant</option><option value="done">gefahren</option><option value="skip">entfällt</option></select></label>
-            <label>Von<input name="from"></label><label>Nach<input name="to"></label>
+            <label>Von<input name="from" list="portNames" placeholder="Starthafen"></label>
+            <label>Nach<input name="to" list="portNames" placeholder="Zielhafen"></label>
+            <label>Geplante Abfahrt<input type="time" name="departTime"></label>
+            <label>Liegeplatz / Hafenhinweis<input name="berth" placeholder="z. B. Gästehafen, Steg B"></label>
             <label>Entfernung (sm)<input type="number" step="0.1" name="nm"></label>
             <label>Planzeit (Std.)<input type="number" step="0.1" name="hours"></label>
-            <label class="wide">Notiz<input name="note"></label>
+            <label>Wetter<input name="weather" placeholder="z. B. sonnig, 19 °C"></label>
+            <label>Wind<input name="wind" placeholder="z. B. NW 3 Bft"></label>
+            <label>Welle<input name="wave" placeholder="z. B. 0,5–0,8 m"></label>
+            <label>Tide / Strom<input name="tide" placeholder="z. B. ab HW Bremerhaven auslaufend"></label>
+            <label class="wide">Zugeordnete GPX-Route<select name="gpxId" id="routeGpxSelect"><option value="">Noch keine GPX-Route zugeordnet</option></select></label>
+            <label class="wide">Notiz / Besonderheiten<textarea rows="3" name="note" placeholder="Ansteuerung, Schleusen, Ausweichhafen, Reserven …"></textarea></label>
             <div class="wide actions"><button class="primary">Etappe speichern</button><button type="reset">Leeren</button></div>
+            <datalist id="portNames"></datalist>
           </form>
-          <article class="card">
+
+          <article class="card gpx-import-card">
             <div class="card-kicker">PLOTTERROUTE</div><h3>GPX-Datei importieren</h3>
-            <p>Eine Route vom Plotter oder Planungsprogramm auswählen. Die Darstellung funktioniert anschließend offline.</p>
+            <p>Eine Route vom Plotter oder Planungsprogramm auswählen. Danach kannst du sie direkt einer Etappe zuordnen und auf der Seekarte anzeigen.</p>
             <input id="gpxImport" type="file" accept=".gpx,application/gpx+xml,text/xml">
             <div id="gpxInfo" class="meta"></div>
+            <div class="gpx-tip"><span>⚓</span><p><strong>Praktisch:</strong> Nach dem Import erscheint die Route automatisch in der Etappenplanung und in der Kartenauswahl.</p></div>
           </article>
         </div>
+
         <article class="card map-card">
           <div class="map-head">
             <div>
               <div class="card-kicker">INTERAKTIVE SEEKARTE</div>
-              <h3>Routenansicht der LEEFKE</h3>
-              <p class="meta">GPX-Routen mit Tonnen, Leuchtfeuern und weiteren Seezeichen. Die Karte lässt sich verschieben und vergrößern.</p>
+              <h3>Routen und gespeicherte Häfen der LEEFKE</h3>
+              <p class="meta">GPX-Routen mit Tonnen, Leuchtfeuern und Seezeichen. Häfen mit hinterlegten Koordinaten erscheinen als Messing-Anker.</p>
             </div>
             <div class="map-controls">
               <select id="gpxSelect" aria-label="GPX-Route auswählen"><option value="">Keine GPX-Route</option></select>
@@ -189,12 +211,16 @@
           </div>
           <div class="map-footer">
             <div id="mapInfo" class="map-info">Noch keine GPX-Route ausgewählt.</div>
-            <div class="map-legend"><span><i class="legend-start">⚓</i> Start</span><span><i class="legend-finish">◆</i> Ziel</span><span><i class="legend-line"></i> Route</span></div>
+            <div class="map-legend"><span><i class="legend-start">⚓</i> Start</span><span><i class="legend-finish">◆</i> Ziel</span><span><i class="legend-port">⚓</i> Hafen</span><span><i class="legend-line"></i> Route</span></div>
           </div>
           <div class="nautical-warning"><strong>Hinweis:</strong> Diese Ansicht dient der Törnplanung und Dokumentation. Sie ersetzt keine zugelassene elektronische oder amtliche Seekarte an Bord.</div>
         </article>
-        <div class="summarybar" id="routeSummary"></div>
-        <div id="routeList" class="timeline"></div>
+
+        <div class="voyage-board-head">
+          <div><small>DER AKTUELLE TÖRN</small><h3 id="voyageBoardTitle">Etappen der LEEFKE</h3></div>
+          <div class="summarybar" id="routeSummary"></div>
+        </div>
+        <div id="routeList" class="voyage-board"></div>
       </section>
 
       <section id="ports" class="view">
@@ -321,17 +347,79 @@
         </form>
       </section>
 
+
+      <section id="sync" class="view">
+        <div class="title"><small>LEEFKE CLOUD</small><h2>Konto & Synchronisierung</h2><p>Logbuchdaten auf iPad, Handy und Windows gemeinsam nutzen – unterwegs weiterhin offline.</p></div>
+
+        <div class="sync-grid">
+          <article class="card sync-account-card">
+            <div class="card-kicker">LEEFKE-KONTO</div>
+            <div id="authLoggedOut">
+              <h3>Anmelden oder Konto anlegen</h3>
+              <p class="meta">Auf allen Geräten dieselbe E-Mail-Adresse und dasselbe Passwort verwenden.</p>
+              <form id="authForm" class="auth-form">
+                <label>E-Mail-Adresse<input id="authEmail" type="email" autocomplete="email" required placeholder="name@beispiel.de"></label>
+                <label>Passwort<input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="mindestens 8 Zeichen"></label>
+                <div class="actions auth-actions">
+                  <button id="signInButton" class="primary" type="submit">Anmelden</button>
+                  <button id="signUpButton" type="button">Konto anlegen</button>
+                </div>
+                <button id="resetPasswordButton" class="text-button" type="button">Passwort vergessen</button>
+              </form>
+              <div id="authMessage" class="sync-message" aria-live="polite"></div>
+            </div>
+
+            <div id="authLoggedIn" hidden>
+              <div class="account-badge"><span>⚓</span><div><small>ANGEMELDET ALS</small><strong id="accountEmail">—</strong></div></div>
+              <dl class="sync-facts">
+                <div><dt>Status</dt><dd id="syncStatusText">Noch nicht synchronisiert</dd></div>
+                <div><dt>Letzte Synchronisierung</dt><dd id="lastSyncText">—</dd></div>
+                <div><dt>Gerät</dt><dd id="deviceNameText">Dieses Gerät</dd></div>
+              </dl>
+              <div class="actions">
+                <button id="syncNowButton" class="primary" type="button">Jetzt synchronisieren</button>
+                <button id="signOutButton" type="button">Abmelden</button>
+              </div>
+              <div id="syncMessage" class="sync-message" aria-live="polite"></div>
+            </div>
+          </article>
+
+          <article class="card sync-explain-card">
+            <div class="card-kicker">SO FUNKTIONIERT ES</div>
+            <h3>Offline erfassen, später automatisch abgleichen</h3>
+            <div class="sync-flow">
+              <div><span>1</span><p><strong>Eintragen</strong><br>Neue Daten werden sofort auf dem Gerät gespeichert.</p></div>
+              <div><span>2</span><p><strong>Unterwegs offline</strong><br>Die LEEFKE-App bleibt auch ohne Mobilfunk nutzbar.</p></div>
+              <div><span>3</span><p><strong>Automatisch abgleichen</strong><br>Sobald Internet da ist, werden Änderungen übertragen.</p></div>
+            </div>
+            <p class="nautical-warning"><strong>Aktuell synchronisiert:</strong> Tageslogbuch, Törnplanung, Häfen, Tankbuch, Wartung, Checklisten, Schiffsdaten und GPX-Routen. Fotos und ein selbst gewähltes Startbild bleiben vorerst lokal auf dem jeweiligen Gerät.</p>
+          </article>
+        </div>
+
+        <article id="initialSyncPanel" class="card initial-sync-panel" hidden>
+          <div class="card-kicker">ERSTE VERBINDUNG DIESES GERÄTS</div>
+          <h3>Welcher Datenstand soll verwendet werden?</h3>
+          <p>Diese Auswahl ist nur einmal nötig. Auf dem Gerät mit deinen bisherigen LEEFKE-Einträgen nimmst du die erste Option. Auf weiteren Geräten nimmst du die zweite.</p>
+          <div class="initial-sync-options">
+            <button id="uploadLocalButton" class="initial-option primary" type="button"><span>↑</span><strong>Daten dieses Geräts in die Cloud übertragen</strong><small>Für das bisherige Hauptgerät mit deinen vorhandenen Einträgen.</small></button>
+            <button id="downloadCloudButton" class="initial-option" type="button"><span>↓</span><strong>Cloud-Daten auf dieses Gerät laden</strong><small>Für Handy, Tablet oder Laptop, auf denen die Daten noch fehlen.</small></button>
+            <button id="mergeDataButton" class="initial-option" type="button"><span>⇄</span><strong>Beide Datenstände zusammenführen</strong><small>Nur verwenden, wenn auf beiden Seiten wichtige Einträge vorhanden sind.</small></button>
+          </div>
+        </article>
+      </section>
+
       <section id="backup" class="view">
-        <div class="title"><small>DATENSICHERUNG</small><h2>Das Bordbuch sichern</h2><p>Alle Daten bleiben lokal. Eine regelmäßige Sicherung schützt das Törntagebuch.</p></div>
+        <div class="title"><small>DATENSICHERUNG</small><h2>Das Bordbuch zusätzlich sichern</h2><p>Die Cloud-Synchronisierung ersetzt keine eigene Sicherungsdatei. Ein Export ist vor größeren Änderungen weiterhin sinnvoll.</p></div>
         <article class="card"><h3>Vollständige Sicherung</h3><p>Alle Einträge, Schiffsdaten, GPX-Routen, Bewertungen und Fotos werden in einer Datei gesichert.</p><button id="export" class="primary">Sicherung exportieren</button></article>
         <article class="card"><h3>Wiederherstellen</h3><input id="import" type="file" accept="application/json,.json"></article>
-        <article class="card warning"><strong>Wichtig:</strong> Die Daten liegen lokal auf diesem Gerät. Regelmäßig sichern, besonders vor einem Gerätewechsel oder Browser-Reset.</article>
+        <article class="card warning"><strong>Wichtig:</strong> Fotos bleiben in Version 5 noch lokal. Sie sind in der Sicherungsdatei enthalten und sollten deshalb regelmäßig exportiert werden.</article>
       </section>
     </main>
   </div>
 
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="app.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="app.js?v=5.0"></script>
 </body>
 </html>

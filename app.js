@@ -1,7 +1,11 @@
-const APP_VERSION = '4.2';
+const APP_VERSION = '5.0';
 const DB_NAME = 'leefke-v2';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx'];
+const syncableStores = ['days', 'fuel', 'maintenance', 'checklists', 'route', 'ports', 'settings', 'gpx'];
+const systemStores = ['syncMeta', 'syncTombstones'];
+const SUPABASE_URL = 'https://fzaxoivuwpubwhgabahz.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VRFnhXCeSrhJ7BsxMNgl6Q_HolDM-yC';
 
 const DEFAULT_SETTINGS = {
   id: 'main',
@@ -51,9 +55,15 @@ let state = {};
 let nauticalMap = null;
 let nauticalBaseLayer = null;
 let seamarkLayer = null;
+let portLayer = null;
 let activeGpxLayer = null;
 let activeRouteBounds = null;
 let selectedGpxId = '';
+let supabaseClient = null;
+let currentSession = null;
+let syncInProgress = false;
+let syncTimer = null;
+let suppressSyncTracking = false;
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -73,7 +83,7 @@ function openDB() {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
     request.onupgradeneeded = event => {
-      stores.forEach(store => {
+      [...stores, ...systemStores].forEach(store => {
         if (!event.target.result.objectStoreNames.contains(store)) {
           event.target.result.createObjectStore(store, { keyPath: 'id' });
         }
@@ -92,7 +102,15 @@ function all(store) {
   });
 }
 
-function put(store, value) {
+function getOne(store, id) {
+  return new Promise((resolve, reject) => {
+    const request = db.transaction(store).objectStore(store).get(id);
+    request.onsuccess = () => resolve(request.result || null);
+    request.onerror = () => reject(request.error);
+  });
+}
+
+function rawPut(store, value) {
   return new Promise((resolve, reject) => {
     const request = db.transaction(store, 'readwrite').objectStore(store).put(value);
     request.onsuccess = () => resolve(value);
@@ -100,7 +118,7 @@ function put(store, value) {
   });
 }
 
-function del(store, id) {
+function rawDel(store, id) {
   return new Promise((resolve, reject) => {
     const request = db.transaction(store, 'readwrite').objectStore(store).delete(id);
     request.onsuccess = resolve;
@@ -108,12 +126,81 @@ function del(store, id) {
   });
 }
 
-function clear(store) {
+function rawClear(store) {
   return new Promise((resolve, reject) => {
     const request = db.transaction(store, 'readwrite').objectStore(store).clear();
     request.onsuccess = resolve;
     request.onerror = () => reject(request.error);
   });
+}
+
+async function metaGet(id) {
+  return getOne('syncMeta', id);
+}
+
+async function metaSet(id, value) {
+  return rawPut('syncMeta', { id, ...value });
+}
+
+async function setDirty(value = true) {
+  await metaSet('dirty', { value, changedAt: new Date().toISOString() });
+}
+
+async function isLinkedForCurrentUser() {
+  if (!currentSession?.user?.id) return false;
+  return Boolean(await metaGet(`linked:${currentSession.user.id}`));
+}
+
+async function markLinked(strategy) {
+  if (!currentSession?.user?.id) return;
+  await metaSet(`linked:${currentSession.user.id}`, {
+    linked: true,
+    strategy,
+    linkedAt: new Date().toISOString()
+  });
+}
+
+async function put(store, value, options = {}) {
+  let saved = { ...value };
+  if (syncableStores.includes(store) && !suppressSyncTracking && !options.remote) {
+    saved._updatedAt = new Date().toISOString();
+  }
+  if (options.remote && !saved._updatedAt) {
+    saved._updatedAt = options.remoteUpdatedAt || new Date().toISOString();
+  }
+  await rawPut(store, saved);
+  if (syncableStores.includes(store) && !options.remote) {
+    await rawDel('syncTombstones', `${store}:${saved.id}`);
+    await setDirty(true);
+    scheduleSync();
+  }
+  return saved;
+}
+
+async function del(store, id, options = {}) {
+  await rawDel(store, id);
+  if (syncableStores.includes(store) && !options.remote) {
+    const updatedAt = new Date().toISOString();
+    await rawPut('syncTombstones', {
+      id: `${store}:${id}`,
+      recordType: store,
+      recordId: id,
+      updatedAt
+    });
+    await setDirty(true);
+    scheduleSync();
+  }
+}
+
+async function clear(store, options = {}) {
+  if (syncableStores.includes(store) && !options.remote) {
+    const existing = await all(store);
+    for (const item of existing) {
+      await del(store, item.id);
+    }
+    return;
+  }
+  await rawClear(store);
 }
 
 function toast(text) {
@@ -123,11 +210,374 @@ function toast(text) {
   window.setTimeout(() => el.classList.remove('show'), 2100);
 }
 
+
+function safeIso(value, fallback = '2000-01-01T00:00:00.000Z') {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? date.toISOString() : fallback;
+}
+
+function syncTimestamp(item) {
+  return Date.parse(item?._updatedAt || item?.updatedAt || '2000-01-01T00:00:00.000Z') || 0;
+}
+
+function remoteTimestamp(row) {
+  return Date.parse(row?.updated_at || row?.deleted_at || '2000-01-01T00:00:00.000Z') || 0;
+}
+
+function appBaseUrl() {
+  return `${window.location.origin}${window.location.pathname.replace(/index\.html$/, '')}`;
+}
+
+function deviceLabel() {
+  const ua = navigator.userAgent || '';
+  if (/iPad/i.test(ua) || (/Macintosh/i.test(ua) && navigator.maxTouchPoints > 1)) return 'iPad';
+  if (/iPhone/i.test(ua)) return 'iPhone';
+  if (/Android/i.test(ua)) return /Mobile/i.test(ua) ? 'Android-Handy' : 'Android-Tablet';
+  if (/Windows/i.test(ua)) return 'Windows-PC';
+  if (/Macintosh/i.test(ua)) return 'Mac';
+  return 'Dieses Gerät';
+}
+
+function cleanPayload(store, item) {
+  const payload = typeof structuredClone === 'function' ? structuredClone(item) : JSON.parse(JSON.stringify(item));
+  if (store === 'settings') delete payload.boatPhoto;
+  return payload;
+}
+
+async function migrateLocalTimestamps() {
+  for (const store of syncableStores) {
+    const items = await all(store);
+    for (const item of items) {
+      if (!item._updatedAt) {
+        const fallback = item.created ? new Date(Number(item.created)).toISOString() : '2000-01-01T00:00:00.000Z';
+        await rawPut(store, { ...item, _updatedAt: safeIso(fallback) });
+      }
+    }
+  }
+}
+
+function setMessage(target, text, kind = '') {
+  const element = typeof target === 'string' ? $(target) : target;
+  if (!element) return;
+  element.textContent = text || '';
+  element.className = `sync-message${kind ? ` ${kind}` : ''}`;
+}
+
+function readableAuthError(error) {
+  const message = String(error?.message || error || 'Unbekannter Fehler');
+  if (/invalid login credentials/i.test(message)) return 'E-Mail-Adresse oder Passwort stimmen nicht.';
+  if (/email not confirmed/i.test(message)) return 'Bitte zuerst den Bestätigungslink in der E-Mail öffnen.';
+  if (/user already registered/i.test(message)) return 'Für diese E-Mail-Adresse gibt es bereits ein Konto. Bitte anmelden.';
+  if (/password should be at least/i.test(message)) return 'Das Passwort muss mindestens 8 Zeichen lang sein.';
+  if (/rate limit/i.test(message)) return 'Zu viele Versuche. Bitte einige Minuten warten.';
+  return message;
+}
+
+async function updateSyncUI() {
+  const loggedIn = Boolean(currentSession?.user);
+  const linked = loggedIn ? await isLinkedForCurrentUser() : false;
+  const dirty = Boolean((await metaGet('dirty'))?.value);
+  const lastSync = await metaGet('lastSync');
+  const statusButton = $('#syncStatusButton');
+  const statusText = $('#syncStatusText');
+
+  if ($('#authLoggedOut')) $('#authLoggedOut').hidden = loggedIn;
+  if ($('#authLoggedIn')) $('#authLoggedIn').hidden = !loggedIn;
+  if ($('#initialSyncPanel')) $('#initialSyncPanel').hidden = !(loggedIn && !linked);
+  if ($('#accountEmail')) $('#accountEmail').textContent = currentSession?.user?.email || '—';
+  if ($('#lastSyncText')) $('#lastSyncText').textContent = lastSync?.at ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastSync.at)) : '—';
+  if ($('#deviceNameText')) $('#deviceNameText').textContent = deviceLabel();
+
+  let label = 'Nicht angemeldet';
+  let detail = 'Cloud-Synchronisierung ist nicht aktiv';
+  let className = 'sync-status logged-out';
+
+  if (loggedIn && !navigator.onLine) {
+    label = 'Offline · lokal gespeichert';
+    detail = dirty ? 'Änderungen warten auf Internet' : 'Offline – letzter Stand bleibt verfügbar';
+    className = 'sync-status offline';
+  } else if (loggedIn && !linked) {
+    label = 'Ersteinrichtung';
+    detail = 'Bitte den Datenstand dieses Geräts auswählen';
+    className = 'sync-status attention';
+  } else if (syncInProgress) {
+    label = 'Synchronisiere …';
+    detail = 'Daten werden gerade abgeglichen';
+    className = 'sync-status working';
+  } else if (loggedIn && dirty) {
+    label = 'Änderungen ausstehend';
+    detail = 'Lokale Änderungen werden gleich übertragen';
+    className = 'sync-status attention';
+  } else if (loggedIn) {
+    label = 'Synchronisiert';
+    detail = 'Alle Geräte können denselben Datenstand laden';
+    className = 'sync-status synced';
+  }
+
+  if (statusButton) {
+    statusButton.textContent = label;
+    statusButton.className = `status ${className}`;
+  }
+  if (statusText) statusText.textContent = detail;
+}
+
+async function initializeSupabase() {
+  if (!window.supabase?.createClient) {
+    setMessage('#authMessage', 'Die Cloud-Bibliothek konnte nicht geladen werden. Die lokale App funktioniert weiterhin.', 'error');
+    await updateSyncUI();
+    return;
+  }
+  supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true
+    }
+  });
+
+  const { data, error } = await supabaseClient.auth.getSession();
+  if (error) console.warn('Sitzung konnte nicht gelesen werden.', error);
+  currentSession = data?.session || null;
+
+  supabaseClient.auth.onAuthStateChange((event, session) => {
+    currentSession = session || null;
+    window.setTimeout(async () => {
+      await updateSyncUI();
+      if (currentSession && await isLinkedForCurrentUser() && navigator.onLine) scheduleSync(250);
+      if (event === 'SIGNED_IN') setMessage('#authMessage', 'Anmeldung erfolgreich.', 'success');
+    }, 0);
+  });
+  await updateSyncUI();
+}
+
+async function fetchRemoteRecords() {
+  if (!supabaseClient || !currentSession?.user?.id) return [];
+  const { data, error } = await supabaseClient
+    .from('leefke_records')
+    .select('user_id,record_type,record_id,payload,updated_at,deleted_at')
+    .eq('user_id', currentSession.user.id);
+  if (error) throw error;
+  return data || [];
+}
+
+async function localRows() {
+  const rows = [];
+  for (const store of syncableStores) {
+    for (const item of await all(store)) {
+      const updatedAt = safeIso(item._updatedAt || item.created || '2000-01-01T00:00:00.000Z');
+      rows.push({
+        user_id: currentSession.user.id,
+        record_type: store,
+        record_id: String(item.id),
+        payload: cleanPayload(store, { ...item, _updatedAt: updatedAt }),
+        updated_at: updatedAt,
+        deleted_at: null
+      });
+    }
+  }
+  return rows;
+}
+
+async function upsertRows(rows) {
+  if (!rows.length) return;
+  for (let index = 0; index < rows.length; index += 75) {
+    const chunk = rows.slice(index, index + 75);
+    const { error } = await supabaseClient
+      .from('leefke_records')
+      .upsert(chunk, { onConflict: 'user_id,record_type,record_id' });
+    if (error) throw error;
+  }
+}
+
+async function uploadLocalAsSource() {
+  if (!navigator.onLine) return setMessage('#syncMessage', 'Für die erste Übertragung wird eine Internetverbindung benötigt.', 'error');
+  if (!currentSession) return;
+  try {
+    syncInProgress = true;
+    await updateSyncUI();
+    setMessage('#syncMessage', 'Prüfe den Cloud-Datenstand …');
+    const remote = await fetchRemoteRecords();
+    if (remote.length && !confirm('In der Cloud liegen bereits LEEFKE-Daten. Sollen sie durch den Datenstand dieses Geräts ersetzt werden?')) return;
+    if (remote.length) {
+      const { error } = await supabaseClient.from('leefke_records').delete().eq('user_id', currentSession.user.id);
+      if (error) throw error;
+    }
+    const rows = await localRows();
+    await upsertRows(rows);
+    await rawClear('syncTombstones');
+    await markLinked('upload');
+    await setDirty(false);
+    await metaSet('lastSync', { at: new Date().toISOString() });
+    setMessage('#syncMessage', `${rows.length} Datensätze wurden in die LEEFKE-Cloud übertragen.`, 'success');
+    toast('LEEFKE-Daten synchronisiert');
+  } catch (error) {
+    console.error(error);
+    setMessage('#syncMessage', `Übertragung fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+  } finally {
+    syncInProgress = false;
+    await updateSyncUI();
+  }
+}
+
+async function downloadCloudAsSource() {
+  if (!navigator.onLine) return setMessage('#syncMessage', 'Für das Laden der Cloud-Daten wird eine Internetverbindung benötigt.', 'error');
+  if (!currentSession) return;
+  try {
+    syncInProgress = true;
+    await updateSyncUI();
+    const remote = await fetchRemoteRecords();
+    const active = remote.filter(row => !row.deleted_at && syncableStores.includes(row.record_type));
+    if (!active.length) {
+      setMessage('#syncMessage', 'In der Cloud sind noch keine LEEFKE-Daten vorhanden. Verwende auf dem Hauptgerät zuerst „Daten dieses Geräts übertragen“.', 'error');
+      return;
+    }
+    if (!confirm('Die synchronisierbaren Daten auf diesem Gerät werden durch den Cloud-Datenstand ersetzt. Lokale Fotos bleiben erhalten. Fortfahren?')) return;
+    const previousSettings = await getOne('settings', 'main');
+    const localBoatPhoto = previousSettings?.boatPhoto || '';
+    suppressSyncTracking = true;
+    for (const store of syncableStores) await rawClear(store);
+    await rawClear('syncTombstones');
+    for (const row of active) {
+      const payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
+      if (row.record_type === 'settings' && localBoatPhoto) payload.boatPhoto = localBoatPhoto;
+      await rawPut(row.record_type, payload);
+    }
+    suppressSyncTracking = false;
+    await markLinked('download');
+    await setDirty(false);
+    await metaSet('lastSync', { at: new Date().toISOString() });
+    await refresh();
+    setMessage('#syncMessage', `${active.length} Cloud-Datensätze wurden auf dieses Gerät geladen.`, 'success');
+    toast('Cloud-Daten geladen');
+  } catch (error) {
+    suppressSyncTracking = false;
+    console.error(error);
+    setMessage('#syncMessage', `Laden fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+  } finally {
+    syncInProgress = false;
+    await updateSyncUI();
+  }
+}
+
+async function mergeInitialData() {
+  if (!currentSession) return;
+  await markLinked('merge');
+  await setDirty(true);
+  await syncNow({ force: true });
+}
+
+async function syncNow(options = {}) {
+  if (syncInProgress || !supabaseClient || !currentSession?.user?.id || !navigator.onLine) {
+    await updateSyncUI();
+    return;
+  }
+  const linked = await isLinkedForCurrentUser();
+  if (!linked && !options.force) {
+    await updateSyncUI();
+    return;
+  }
+
+  syncInProgress = true;
+  await updateSyncUI();
+  setMessage('#syncMessage', 'LEEFKE-Daten werden abgeglichen …');
+
+  try {
+    const userId = currentSession.user.id;
+    let remote = await fetchRemoteRecords();
+    const remoteMap = new Map(remote.map(row => [`${row.record_type}:${row.record_id}`, row]));
+    const tombstones = await all('syncTombstones');
+    const tombstoneMap = new Map(tombstones.map(item => [item.id, item]));
+
+    suppressSyncTracking = true;
+    for (const row of remote) {
+      if (!syncableStores.includes(row.record_type)) continue;
+      const key = `${row.record_type}:${row.record_id}`;
+      const local = await getOne(row.record_type, row.record_id);
+      const localTs = syncTimestamp(local);
+      const tombTs = Date.parse(tombstoneMap.get(key)?.updatedAt || 0) || 0;
+      const remoteTs = remoteTimestamp(row);
+
+      if (row.deleted_at) {
+        if (remoteTs >= Math.max(localTs, tombTs)) {
+          await rawDel(row.record_type, row.record_id);
+          await rawDel('syncTombstones', key);
+        }
+      } else if (remoteTs > Math.max(localTs, tombTs)) {
+        const payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
+        if (row.record_type === 'settings' && local?.boatPhoto) payload.boatPhoto = local.boatPhoto;
+        await rawPut(row.record_type, payload);
+        await rawDel('syncTombstones', key);
+      }
+    }
+    suppressSyncTracking = false;
+
+    const outgoing = [];
+    for (const store of syncableStores) {
+      for (const item of await all(store)) {
+        const key = `${store}:${item.id}`;
+        const existingRemote = remoteMap.get(key);
+        const localTs = syncTimestamp(item);
+        if (!existingRemote || localTs > remoteTimestamp(existingRemote)) {
+          const updatedAt = safeIso(item._updatedAt);
+          outgoing.push({
+            user_id: userId,
+            record_type: store,
+            record_id: String(item.id),
+            payload: cleanPayload(store, { ...item, _updatedAt: updatedAt }),
+            updated_at: updatedAt,
+            deleted_at: null
+          });
+        }
+      }
+    }
+
+    const pendingTombstones = await all('syncTombstones');
+    for (const tombstone of pendingTombstones) {
+      const existingRemote = remoteMap.get(tombstone.id);
+      const tombTs = Date.parse(tombstone.updatedAt) || 0;
+      if (!existingRemote || tombTs > remoteTimestamp(existingRemote) || !existingRemote.deleted_at) {
+        outgoing.push({
+          user_id: userId,
+          record_type: tombstone.recordType,
+          record_id: String(tombstone.recordId),
+          payload: {},
+          updated_at: safeIso(tombstone.updatedAt),
+          deleted_at: safeIso(tombstone.updatedAt)
+        });
+      }
+    }
+
+    await upsertRows(outgoing);
+    for (const tombstone of pendingTombstones) await rawDel('syncTombstones', tombstone.id);
+    await setDirty(false);
+    await metaSet('lastSync', { at: new Date().toISOString() });
+    await refresh();
+    setMessage('#syncMessage', outgoing.length ? `${outgoing.length} Änderung(en) abgeglichen.` : 'Alle LEEFKE-Daten sind auf dem neuesten Stand.', 'success');
+  } catch (error) {
+    suppressSyncTracking = false;
+    console.error('Synchronisierung fehlgeschlagen', error);
+    await setDirty(true);
+    setMessage('#syncMessage', `Synchronisierung fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+  } finally {
+    syncInProgress = false;
+    await updateSyncUI();
+  }
+}
+
+function scheduleSync(delay = 1400) {
+  window.clearTimeout(syncTimer);
+  syncTimer = window.setTimeout(async () => {
+    if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow();
+    else await updateSyncUI();
+  }, delay);
+}
+
 function view(id) {
   $$('.view').forEach(section => section.classList.toggle('active', section.id === id));
   $$('nav button').forEach(button => button.classList.toggle('active', button.dataset.view === id));
   $('#nav').classList.remove('open');
   if (id === 'report') buildReport();
+  if (id === 'sync') updateSyncUI();
   if (id === 'day') prepareDayForm();
   if (id === 'route') {
     window.setTimeout(() => {
@@ -195,7 +645,7 @@ async function defaults() {
     for (const route of initialRoutes) {
       await put('route', {
         id: uid(), date: route[0], from: route[1], to: route[2], nm: route[3],
-        hours: '', status: 'planned', note: ''
+        hours: '', status: 'planned', departTime: '', weather: '', wind: '', wave: '', tide: '', berth: '', gpxId: '', note: ''
       });
     }
   }
@@ -365,6 +815,8 @@ function render() {
   renderPhotos();
   renderSettings(settings);
   renderGpxSelect();
+  renderPortDatalist();
+  if (nauticalMap) refreshPortLayer();
 }
 
 function renderTank(settings) {
@@ -411,16 +863,79 @@ function renderMaintenance() {
     <p>${esc(item.note || '')}</p>`, item.done ? 'done' : '')).join('') || '<div class="card muted">Noch keine Wartungseinträge.</div>';
 }
 
+function weatherSymbol(text) {
+  const value = String(text || '').toLowerCase();
+  if (/gewitter|donner/.test(value)) return '⛈️';
+  if (/schauer/.test(value)) return '🌦️';
+  if (/regen|nass/.test(value)) return '🌧️';
+  if (/nebel|diesig/.test(value)) return '🌫️';
+  if (/sonn|klar|heiter/.test(value)) return '☀️';
+  if (/wolk|bedeckt/.test(value)) return '☁️';
+  return '⚓';
+}
+
+function routeStatusText(status) {
+  if (status === 'done') return 'gefahren';
+  if (status === 'skip') return 'entfällt';
+  return 'geplant';
+}
+
+function portByName(name) {
+  const needle = String(name || '').trim().toLocaleLowerCase('de');
+  if (!needle) return null;
+  return state.ports.find(port => String(port.name || '').trim().toLocaleLowerCase('de') === needle) || null;
+}
+
 function renderRoute() {
-  const routes = [...state.route].sort((a, b) => String(a.date).localeCompare(String(b.date)));
-  const nauticalMiles = routes.filter(item => item.status !== 'skip').reduce((sum, item) => sum + num(item.nm), 0);
-  const hours = routes.filter(item => item.status !== 'skip').reduce((sum, item) => sum + num(item.hours), 0);
-  $('#routeSummary').innerHTML = `${routes.length} Etappen · ${dec(nauticalMiles)} sm geplant${hours ? ` · ${dec(hours)} Stunden Planzeit` : ''}`;
-  $('#routeList').innerHTML = routes.map(item => `<article class="route ${esc(item.status || 'planned')}">
-    ${actionButtons('route', item.id)}
-    <div class="meta">${fmtDate(item.date)} · ${dec(item.nm)} sm · ${item.status === 'done' ? 'gefahren' : item.status === 'skip' ? 'entfällt' : 'geplant'}</div>
-    <h3>${esc(item.from)} → ${esc(item.to)}</h3><p>${esc(item.note || '')}</p>
-  </article>`).join('') || '<div class="card muted">Noch keine Etappen geplant.</div>';
+  const routes = [...state.route].sort((a, b) => String(a.date).localeCompare(String(b.date)) || num(a.created) - num(b.created));
+  const considered = routes.filter(item => item.status !== 'skip');
+  const remaining = routes.filter(item => item.status !== 'done' && item.status !== 'skip');
+  const nauticalMiles = considered.reduce((sum, item) => sum + num(item.nm), 0);
+  const remainingNm = remaining.reduce((sum, item) => sum + num(item.nm), 0);
+  const hours = considered.reduce((sum, item) => sum + num(item.hours), 0);
+  const remainingHours = remaining.reduce((sum, item) => sum + num(item.hours), 0);
+  const ports = new Set(routes.flatMap(item => [item.from, item.to]).map(value => String(value || '').trim()).filter(Boolean));
+  const next = remaining[0];
+  const settings = getSettings();
+
+  $('#voyageBoardTitle').textContent = settings.tripTitle || 'Etappen der LEEFKE';
+  $('#routeSummary').innerHTML = `${routes.length} Etappen · ${dec(nauticalMiles)} sm${hours ? ` · ${dec(hours)} Std. Planzeit` : ''}`;
+  $('#tripRemaining').textContent = `${dec(remainingNm)} sm`;
+  $('#tripPlanHours').textContent = remainingHours ? `${dec(remainingHours)} Std.` : '—';
+  $('#tripPorts').textContent = ports.size;
+  $('#tripNext').textContent = next ? `${next.from || '—'} → ${next.to || '—'}` : 'Törn vollständig';
+  $('#tripNextMeta').textContent = next ? `${fmtDate(next.date)}${next.departTime ? ` · ${next.departTime} Uhr` : ''}${next.nm ? ` · ${dec(next.nm)} sm` : ''}` : 'Keine offene Etappe';
+
+  $('#routeList').innerHTML = routes.map((item, index) => {
+    const linkedGpx = state.gpx.find(route => route.id === item.gpxId);
+    const destinationPort = portByName(item.to);
+    const conditions = [
+      item.weather ? `<span><b>${weatherSymbol(item.weather)}</b>${esc(item.weather)}</span>` : '',
+      item.wind ? `<span><b>💨</b>${esc(item.wind)}</span>` : '',
+      item.wave ? `<span><b>🌊</b>${esc(item.wave)}</span>` : '',
+      item.tide ? `<span><b>↕</b>${esc(item.tide)}</span>` : ''
+    ].filter(Boolean).join('');
+    return `<article class="voyage-stage ${esc(item.status || 'planned')}">
+      <div class="stage-rail"><span>${index + 1}</span></div>
+      <div class="stage-content">
+        <div class="stage-topline"><span>${fmtDate(item.date) || 'Datum offen'}${item.departTime ? ` · Ablegen ${esc(item.departTime)} Uhr` : ''}</span><span class="status-chip ${esc(item.status || 'planned')}">${routeStatusText(item.status)}</span></div>
+        <div class="stage-heading"><div><small>ETAPPE ${index + 1}</small><h3>${esc(item.from || 'Start offen')} <i>→</i> ${esc(item.to || 'Ziel offen')}</h3></div><div class="stage-distance"><strong>${dec(item.nm)} sm</strong>${item.hours ? `<span>${dec(item.hours)} Std.</span>` : ''}</div></div>
+        ${conditions ? `<div class="stage-conditions">${conditions}</div>` : '<div class="stage-conditions empty">Wetter, Wind, Welle und Tide noch nicht eingetragen.</div>'}
+        ${item.berth ? `<div class="stage-berth"><span>⚓</span><div><small>LIEGEPLATZ / HAFENHINWEIS</small><strong>${esc(item.berth)}</strong></div></div>` : ''}
+        ${destinationPort ? `<div class="stage-port"><div><small>IM HAFENBUCH</small><strong>${esc(destinationPort.name)}</strong></div><div>${stars(destinationPort.rating || 0)}<span>${destinationPort.berth ? esc(destinationPort.berth) : 'Hafeneintrag vorhanden'}</span></div></div>` : ''}
+        ${item.note ? `<p class="stage-note">${esc(item.note).replace(/\n/g, '<br>')}</p>` : ''}
+        <div class="stage-footer">
+          <div class="stage-gpx">${linkedGpx ? `<span>⌁ ${esc(linkedGpx.name)} · ${dec(linkedGpx.distanceNm)} sm</span>` : '<span class="muted">Keine GPX-Route zugeordnet</span>'}</div>
+          <div class="stage-actions">
+            ${linkedGpx ? `<button type="button" onclick="showRouteGpx('${item.id}')">Auf Seekarte</button>` : ''}
+            <button type="button" onclick="routeToDay('${item.id}')">Ins Tageslog</button>
+            <button type="button" onclick="editItem('route','${item.id}')">Bearbeiten</button>
+            <button type="button" class="danger-text" onclick="removeItem('route','${item.id}')">Löschen</button>
+          </div>
+        </div>
+      </div>
+    </article>`;
+  }).join('') || '<div class="card muted">Noch keine Etappen geplant.</div>';
 }
 
 function returnLabel(value) {
@@ -471,14 +986,38 @@ function renderSettings(settings) {
 }
 
 function renderGpxSelect() {
-  const select = $('#gpxSelect');
-  const current = select.value || selectedGpxId;
-  select.innerHTML = '<option value="">Keine GPX-Route</option>' + state.gpx.map(item => `<option value="${item.id}">${esc(item.name)} (${dec(item.distanceNm)} sm)</option>`).join('');
-  if (state.gpx.some(item => item.id === current)) select.value = current;
-  else if (state.gpx[0]) select.value = state.gpx[0].id;
-  selectedGpxId = select.value;
+  const mapSelect = $('#gpxSelect');
+  const formSelect = $('#routeGpxSelect');
+  const options = state.gpx.map(item => `<option value="${item.id}">${esc(item.name)} (${dec(item.distanceNm)} sm)</option>`).join('');
+
+  if (mapSelect) {
+    const current = mapSelect.value || selectedGpxId;
+    mapSelect.innerHTML = '<option value="">Keine GPX-Route</option>' + options;
+    if (state.gpx.some(item => item.id === current)) mapSelect.value = current;
+    else if (state.gpx[0]) mapSelect.value = state.gpx[0].id;
+    selectedGpxId = mapSelect.value;
+  }
+
+  if (formSelect) {
+    const currentFormValue = formSelect.value;
+    formSelect.innerHTML = '<option value="">Noch keine GPX-Route zugeordnet</option>' + options;
+    if (state.gpx.some(item => item.id === currentFormValue)) formSelect.value = currentFormValue;
+  }
+
   updateMapInfo(state.gpx.find(item => item.id === selectedGpxId));
   if ($('#route')?.classList.contains('active')) drawGpx(selectedGpxId);
+}
+
+function renderPortDatalist() {
+  const list = $('#portNames');
+  if (!list) return;
+  const names = new Set();
+  state.ports.forEach(item => item.name && names.add(String(item.name).trim()));
+  state.route.forEach(item => {
+    if (item.from) names.add(String(item.from).trim());
+    if (item.to) names.add(String(item.to).trim());
+  });
+  list.innerHTML = [...names].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de')).map(name => `<option value="${esc(name)}"></option>`).join('');
 }
 
 function formObject(form) {
@@ -495,6 +1034,7 @@ for (const id of ['day', 'fuel', 'maintenance', 'route', 'port']) {
     if (id === 'maintenance') item.done = item.done === 'true';
     const store = id === 'port' ? 'ports' : id === 'day' ? 'days' : id;
     await put(store, item);
+    if (id === 'route' && item.gpxId) selectedGpxId = item.gpxId;
     form.reset();
     syncRatingPickers(form);
     await refresh();
@@ -601,6 +1141,43 @@ function editItem(kind, id) {
   toast('Eintrag zum Bearbeiten geöffnet');
 }
 
+function showRouteGpx(routeId) {
+  const stage = state.route.find(item => item.id === routeId);
+  if (!stage?.gpxId) return toast('Dieser Etappe ist noch keine GPX-Route zugeordnet');
+  selectedGpxId = stage.gpxId;
+  const select = $('#gpxSelect');
+  if (select) select.value = stage.gpxId;
+  view('route');
+  window.setTimeout(() => {
+    drawGpx(stage.gpxId);
+    $('#routeMap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 120);
+}
+
+function routeToDay(routeId) {
+  const stage = state.route.find(item => item.id === routeId);
+  if (!stage) return;
+  const form = $('#dayForm');
+  form.reset();
+  form.elements.date.value = stage.date || new Date().toISOString().slice(0, 10);
+  form.elements.title.value = `${stage.from || ''} → ${stage.to || ''}`;
+  form.elements.fromPort.value = stage.from || '';
+  form.elements.toPort.value = stage.to || '';
+  form.elements.depart.value = stage.departTime || '';
+  form.elements.distance.value = stage.nm || '';
+  form.elements.weather.value = stage.weather || '';
+  form.elements.wind.value = stage.wind || '';
+  form.elements.wave.value = stage.wave || '';
+  form.elements.tide.value = stage.tide || '';
+  form.elements.crew.value = getSettings().defaultCrew || '';
+  form.elements.summary.value = [stage.berth ? `Geplanter Liegeplatz: ${stage.berth}` : '', stage.note || ''].filter(Boolean).join('\n\n');
+  view('day');
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  toast('Etappe ins Tageslog übernommen');
+}
+
+window.showRouteGpx = showRouteGpx;
+window.routeToDay = routeToDay;
 window.removeItem = removeItem;
 window.toggleCheck = toggleCheck;
 window.editItem = editItem;
@@ -691,17 +1268,51 @@ function ensureNauticalMap() {
     attribution: 'Seezeichen &copy; OpenSeaMap'
   }).addTo(nauticalMap);
 
+  portLayer = L.layerGroup().addTo(nauticalMap);
+
   L.control.layers(
     { 'Kartenhintergrund': nauticalBaseLayer },
-    { 'Tonnen & Seezeichen': seamarkLayer },
+    { 'Tonnen & Seezeichen': seamarkLayer, 'Gespeicherte Häfen': portLayer },
     { collapsed: true, position: 'topright' }
   ).addTo(nauticalMap);
   L.control.scale({ metric: true, imperial: false, maxWidth: 160 }).addTo(nauticalMap);
+  refreshPortLayer();
 
   nauticalMap.on('baselayerchange overlayadd overlayremove', () => {
     window.setTimeout(() => nauticalMap.invalidateSize(), 20);
   });
   return nauticalMap;
+}
+
+function parseCoordinates(value) {
+  const matches = String(value || '').match(/-?\d+(?:[.,]\d+)?/g);
+  if (!matches || matches.length < 2) return null;
+  const point = matches.slice(0, 2).map(part => Number(part.replace(',', '.')));
+  if (!point.every(Number.isFinite) || Math.abs(point[0]) > 90 || Math.abs(point[1]) > 180) return null;
+  return point;
+}
+
+function portMarkerIcon() {
+  return L.divIcon({
+    className: 'leefke-port-marker',
+    html: '<span>⚓</span>',
+    iconSize: [34, 34],
+    iconAnchor: [17, 17],
+    popupAnchor: [0, -16]
+  });
+}
+
+function refreshPortLayer() {
+  if (!portLayer || !window.L) return;
+  portLayer.clearLayers();
+  state.ports.forEach(port => {
+    const point = parseCoordinates(port.coords);
+    if (!point) return;
+    const rating = clamp(Math.round(num(port.rating)), 0, 5);
+    const marker = L.marker(point, { icon: portMarkerIcon(), title: port.name || 'Hafen' });
+    marker.bindPopup(`<div class="port-map-popup"><strong>${esc(port.name || 'Hafen')}</strong><div>${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</div>${port.berth ? `<span>Liegeplatz: ${esc(port.berth)}</span>` : ''}${port.services ? `<span>${esc(port.services)}</span>` : ''}</div>`);
+    portLayer.addLayer(marker);
+  });
 }
 
 function routeMarker(type, label) {
@@ -797,6 +1408,7 @@ function buildReport() {
     <div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle || 'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div>
     <p><b>${days.length} Reisetage · ${dec(totalNm)} sm · ${dec(hours)} Motorstunden</b></p>
     <p class="meta">${esc(settings.boatName)} · Baujahr ${esc(settings.buildYear)} · ${dec2(settings.length)} × ${dec2(settings.beam)} m · ${esc(settings.engine)} · Heimathafen ${esc(settings.homePort)}</p>
+    ${state.route.length ? `<section class="report-plan"><h2>Törnplan</h2>${[...state.route].sort((a,b) => String(a.date).localeCompare(String(b.date))).map((stage,index) => `<div><b>${index + 1}. ${fmtDate(stage.date)} · ${esc(stage.from || '—')} → ${esc(stage.to || '—')}</b><span>${dec(stage.nm)} sm${stage.departTime ? ` · Ablegen ${esc(stage.departTime)} Uhr` : ''}${stage.wind ? ` · ${esc(stage.wind)}` : ''}${stage.wave ? ` · Welle ${esc(stage.wave)}` : ''}${stage.tide ? ` · ${esc(stage.tide)}` : ''}</span></div>`).join('')}</section>` : ''}
     ${days.map(day => {
       const dayPhotos = photos.filter(photo => photo.date === day.date);
       return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title || `${day.fromPort || ''} → ${day.toPort || ''}`)}</h2><p class="meta">${esc(day.fromPort || '')} → ${esc(day.toPort || '')} · ${dec(day.distance)} sm · ${esc(day.wind || '')} · ${esc(day.wave || '')}</p><p>${esc(day.summary || '').replace(/\n/g, '<br>')}</p>${day.moment ? `<blockquote>„${esc(day.moment)}“</blockquote>` : ''}${dayPhotos.map(photo => `<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption || '')}"><figcaption>${esc(photo.caption || '')}</figcaption></figure>`).join('')}</section>`;
@@ -840,17 +1452,77 @@ $('#menu').onclick = () => $('#nav').classList.toggle('open');
 $$('nav button').forEach(button => button.onclick = () => view(button.dataset.view));
 $$('[data-open]').forEach(button => button.onclick = () => view(button.dataset.open));
 
-function onlineState() {
-  $('#onlineState').textContent = navigator.onLine ? 'online · offlinefähig' : 'offline';
+$('#authForm').onsubmit = async event => {
+  event.preventDefault();
+  if (!supabaseClient) return setMessage('#authMessage', 'Cloud-Verbindung ist nicht verfügbar.', 'error');
+  const email = $('#authEmail').value.trim();
+  const password = $('#authPassword').value;
+  setMessage('#authMessage', 'Anmeldung läuft …');
+  const { data, error } = await supabaseClient.auth.signInWithPassword({ email, password });
+  if (error) return setMessage('#authMessage', readableAuthError(error), 'error');
+  currentSession = data.session;
+  setMessage('#authMessage', 'Anmeldung erfolgreich.', 'success');
+  await updateSyncUI();
+};
+
+$('#signUpButton').onclick = async () => {
+  if (!supabaseClient) return setMessage('#authMessage', 'Cloud-Verbindung ist nicht verfügbar.', 'error');
+  const email = $('#authEmail').value.trim();
+  const password = $('#authPassword').value;
+  if (!email || password.length < 8) return setMessage('#authMessage', 'Bitte E-Mail-Adresse und ein Passwort mit mindestens 8 Zeichen eingeben.', 'error');
+  setMessage('#authMessage', 'Konto wird angelegt …');
+  const { data, error } = await supabaseClient.auth.signUp({
+    email,
+    password,
+    options: { emailRedirectTo: appBaseUrl() }
+  });
+  if (error) return setMessage('#authMessage', readableAuthError(error), 'error');
+  if (data.session) {
+    currentSession = data.session;
+    setMessage('#authMessage', 'Konto wurde angelegt und ist angemeldet.', 'success');
+    await updateSyncUI();
+  } else {
+    setMessage('#authMessage', 'Konto angelegt. Bitte jetzt die Bestätigungs-E-Mail öffnen und danach zur LEEFKE-App zurückkehren.', 'success');
+  }
+};
+
+$('#resetPasswordButton').onclick = async () => {
+  if (!supabaseClient) return;
+  const email = $('#authEmail').value.trim();
+  if (!email) return setMessage('#authMessage', 'Bitte zuerst die E-Mail-Adresse eingeben.', 'error');
+  const { error } = await supabaseClient.auth.resetPasswordForEmail(email, { redirectTo: appBaseUrl() });
+  if (error) return setMessage('#authMessage', readableAuthError(error), 'error');
+  setMessage('#authMessage', 'E-Mail zum Zurücksetzen des Passworts wurde angefordert.', 'success');
+};
+
+$('#signOutButton').onclick = async () => {
+  if (!supabaseClient) return;
+  await supabaseClient.auth.signOut();
+  currentSession = null;
+  setMessage('#syncMessage', 'Abgemeldet. Die lokalen Daten bleiben auf diesem Gerät erhalten.');
+  await updateSyncUI();
+};
+
+$('#syncNowButton').onclick = () => syncNow();
+$('#uploadLocalButton').onclick = uploadLocalAsSource;
+$('#downloadCloudButton').onclick = downloadCloudAsSource;
+$('#mergeDataButton').onclick = mergeInitialData;
+
+async function onlineState() {
+  await updateSyncUI();
+  if (navigator.onLine && currentSession && await isLinkedForCurrentUser()) scheduleSync(250);
 }
 window.addEventListener('online', onlineState);
 window.addEventListener('offline', onlineState);
 
 (async () => {
   db = await openDB();
+  await migrateLocalTimestamps();
+  await initializeSupabase();
+  if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow();
   await defaults();
   await refresh();
-  onlineState();
+  await onlineState();
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.register('service-worker.js');
