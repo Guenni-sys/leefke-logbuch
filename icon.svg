@@ -1,1 +1,11 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="90" fill="#102f4e"/><circle cx="256" cy="230" r="150" fill="none" stroke="#b89a52" stroke-width="12"/><path d="M256 82v296M108 230h296M170 144l172 172M342 144L170 316" stroke="#b89a52" stroke-width="9"/><circle cx="256" cy="230" r="24" fill="#b89a52"/><text x="256" y="455" text-anchor="middle" font-family="Georgia" font-size="48" letter-spacing="8" fill="white">LEEFKE</text></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0d3046"/><stop offset="1" stop-color="#061722"/></linearGradient></defs>
+  <rect width="512" height="512" rx="104" fill="url(#g)"/>
+  <circle cx="256" cy="220" r="148" fill="none" stroke="#c9a45d" stroke-width="12"/>
+  <circle cx="256" cy="220" r="116" fill="none" stroke="#e7cd91" stroke-opacity=".42" stroke-width="3"/>
+  <path d="M256 74v286M113 220h286M155 119l202 202M357 119L155 321" stroke="#c9a45d" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="256" cy="220" r="25" fill="#c9a45d"/>
+  <path d="M210 208h92l20 34-19 7-13-18h-68l-14 18-18-7 20-34z" fill="#f7f1e5"/>
+  <path d="M256 165v74" stroke="#f7f1e5" stroke-width="9" stroke-linecap="round"/>
+  <text x="256" y="448" text-anchor="middle" font-family="Georgia,serif" font-weight="700" font-size="47" letter-spacing="10" fill="#f7f1e5">LEEFKE</text>
+</svg>

@@ -1,15 +1,295 @@
-<!doctype html><html lang="de"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#102f4e"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-title" content="LEEFKE"><link rel="manifest" href="manifest.webmanifest"><link rel="apple-touch-icon" href="icon.svg"><link rel="stylesheet" href="style.css"><title>LEEFKE Bordbuch</title></head><body>
-<header><div><small>BORDTAGEBUCH</small><h1>LEEFKE</h1></div><button id="menu">☰</button></header>
-<div class="layout"><nav id="nav">
-<button data-view="home" class="active">⌂ Übersicht</button><button data-view="day">✎ Tageslogbuch</button><button data-view="route">↝ Reiseplan</button><button data-view="ports">⚓ Hafenbuch</button><button data-view="fuel">⛽ Tankbuch</button><button data-view="maintenance">⚙ Wartung</button><button data-view="checklists">✓ Checklisten</button><button data-view="photos">▦ Galerie</button><button data-view="backup">⇩ Sicherung</button></nav>
-<main>
-<section id="home" class="view active"><div class="hero"><div><small>UNSER TÖRN</small><h2>Dänische Südsee 2026</h2><p>01.–16. August 2026</p><button class="primary" data-open="day">Neuen Tag eintragen</button></div><div class="rose">✦</div></div><div class="stats"><article><span>Reisetage</span><strong id="sDays">0</strong></article><article><span>Seemeilen</span><strong id="sNm">0,0</strong></article><article><span>Motorstunden</span><strong id="sHours">0,0</strong></article><article><span>Diesel</span><strong id="sFuel">0 l</strong></article></div><div class="grid2"><article class="card"><h3>Letzter Eintrag</h3><div id="latest" class="muted">Noch kein Eintrag.</div></article><article class="card"><h3>Offene Wartung</h3><div id="openMaint" class="muted">Keine offenen Punkte.</div></article></div></section>
-<section id="day" class="view"><div class="title"><small>TAGESLOGBUCH</small><h2>Ein Tag an Bord</h2></div><form id="dayForm" class="card form"><input type="hidden" name="id"><label>Datum<input required type="date" name="date"></label><label>Reisetag<input type="number" name="dayNo"></label><label class="wide">Überschrift<input name="title"></label><label>Von<input name="fromPort"></label><label>Nach<input name="toPort"></label><label>Ablegen<input type="time" name="depart"></label><label>Anlegen<input type="time" name="arrive"></label><label>Strecke (sm)<input type="number" step="0.1" name="distance"></label><label>Motor Start<input type="number" step="0.1" name="engineStart"></label><label>Motor Ende<input type="number" step="0.1" name="engineEnd"></label><label>Wetter<input name="weather"></label><label>Wind<input name="wind"></label><label>Welle<input name="wave"></label><label>Tide / Strom<input name="tide"></label><label>Crew<input name="crew"></label><label class="wide">Tagesbericht<textarea rows="7" name="summary"></textarea></label><label class="wide">Moment des Tages<textarea rows="3" name="moment"></textarea></label><div class="wide actions"><button class="primary">Speichern</button><button type="reset">Leeren</button></div></form><div id="dayList" class="stack"></div></section>
-<section id="route" class="view"><div class="title"><small>REISEPLAN</small><h2>Etappen</h2></div><form id="routeForm" class="card form"><label>Datum<input type="date" name="date"></label><label>Von<input name="from"></label><label>Nach<input name="to"></label><label>Entfernung (sm)<input type="number" step="0.1" name="nm"></label><label class="wide">Notiz<input name="note"></label><div class="wide"><button class="primary">Etappe hinzufügen</button></div></form><div id="routeList" class="timeline"></div></section>
-<section id="ports" class="view"><div class="title"><small>HAFENBUCH</small><h2>Häfen & Liegeplätze</h2></div><form id="portForm" class="card form"><label>Hafen<input required name="name"></label><label>Datum<input type="date" name="date"></label><label>Liegeplatz<input name="berth"></label><label>Kosten (€)<input type="number" step="0.01" name="cost"></label><label>Strom / Wasser<input name="services"></label><label>Bewertung<select name="rating"><option>5</option><option>4</option><option>3</option><option>2</option><option>1</option></select></label><label class="wide">Notiz<textarea rows="4" name="note"></textarea></label><div class="wide"><button class="primary">Hafen speichern</button></div></form><div id="portList" class="stack"></div></section>
-<section id="fuel" class="view"><div class="title"><small>VERBRAUCH</small><h2>Tankbuch</h2></div><form id="fuelForm" class="card form"><label>Datum<input required type="date" name="date"></label><label>Ort<input name="place"></label><label>Liter<input type="number" step="0.1" name="liters"></label><label>Preis/Liter (€)<input type="number" step="0.001" name="price"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Notiz<input name="note"></label><div class="wide"><button class="primary">Speichern</button></div></form><div id="fuelList" class="stack"></div></section>
-<section id="maintenance" class="view"><div class="title"><small>TECHNIK</small><h2>Wartung & Ereignisse</h2></div><form id="maintenanceForm" class="card form"><label>Datum<input required type="date" name="date"></label><label>Kategorie<select name="category"><option>Motor</option><option>Elektrik</option><option>Navigation</option><option>Rumpf</option><option>Sonstiges</option></select></label><label class="wide">Titel<input required name="title"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Erledigt<select name="done"><option value="false">Nein</option><option value="true">Ja</option></select></label><label class="wide">Notiz<textarea rows="4" name="note"></textarea></label><div class="wide"><button class="primary">Speichern</button></div></form><div id="maintenanceList" class="stack"></div></section>
-<section id="checklists" class="view"><div class="title"><small>KLAR SCHIFF</small><h2>Checklisten</h2></div><div id="checks" class="grid2"></div></section>
-<section id="photos" class="view"><div class="title"><small>ERINNERUNGEN</small><h2>Galerie</h2></div><form id="photoForm" class="card form"><label>Datum<input type="date" name="date"></label><label>Bildunterschrift<input name="caption"></label><label class="wide">Foto<input required type="file" accept="image/*" name="photo"></label><div class="wide"><button class="primary">Foto hinzufügen</button></div></form><div id="photoGrid" class="gallery"></div></section>
-<section id="backup" class="view"><div class="title"><small>DATENSICHERUNG</small><h2>Export & Import</h2></div><article class="card"><h3>Vollständige Sicherung</h3><p>Alle Einträge und Fotos werden in einer Datei gesichert.</p><button id="export" class="primary">Sicherung exportieren</button></article><article class="card"><h3>Wiederherstellen</h3><input id="import" type="file" accept="application/json,.json"></article><article class="card warning"><strong>Wichtig:</strong> Die Daten liegen lokal auf diesem Gerät. Regelmäßig sichern.</article></section>
-</main></div><div id="toast"></div><script src="app.js"></script></body></html>
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#081f30">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="LEEFKE">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="style.css">
+  <title>LEEFKE · Bordtagebuch</title>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">⚓</div>
+      <div>
+        <small>BORDTAGEBUCH · VERSION 4</small>
+        <h1 id="headerBoatName">LEEFKE</h1>
+        <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
+      </div>
+    </div>
+    <div class="head-actions">
+      <span id="onlineState" class="status">offlinefähig</span>
+      <button id="menu" class="menu-button" aria-label="Menü öffnen">☰</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <nav id="nav" aria-label="Hauptnavigation">
+      <div class="nav-title">LEEFKE</div>
+      <button data-view="home" class="active"><span>⌂</span> Übersicht</button>
+      <button data-view="day"><span>✎</span> Tageslogbuch</button>
+      <button data-view="route"><span>↝</span> Reiseplan & GPX</button>
+      <button data-view="ports"><span>⚓</span> Hafenbuch</button>
+      <button data-view="fuel"><span>⛽</span> Tank & Verbrauch</button>
+      <button data-view="maintenance"><span>⚙</span> Wartung</button>
+      <button data-view="checklists"><span>✓</span> Checklisten</button>
+      <button data-view="photos"><span>▦</span> Galerie</button>
+      <button data-view="report"><span>▤</span> Reisebericht</button>
+      <button data-view="settings"><span>♜</span> Schiffspass</button>
+      <button data-view="backup"><span>⇩</span> Sicherung</button>
+      <div class="nav-footer">Stahl · Spitzgatt · 1996</div>
+    </nav>
+
+    <main>
+      <section id="home" class="view active">
+        <article class="hero">
+          <img id="heroBoatImage" src="leefke-hero.jpg" alt="Die LEEFKE">
+          <div class="hero-shade"></div>
+          <div class="hero-copy">
+            <span class="brass-badge">BORDTAGEBUCH DER LEEFKE</span>
+            <h2>Willkommen an Bord</h2>
+            <div class="trip-card">
+              <small>AKTUELLER TÖRN</small>
+              <strong id="tripTitle">Dänische Südsee 2026</strong>
+              <span id="tripDates">01.–16. August 2026</span>
+            </div>
+            <div class="actions">
+              <button class="primary" data-open="day">Neuen Tag eintragen</button>
+              <button class="glass" data-open="route">Etappe planen</button>
+            </div>
+          </div>
+          <div class="compass" aria-hidden="true"><span>N</span><b>✦</b></div>
+        </article>
+
+        <div class="vessel-strip">
+          <div><span>Länge</span><strong id="vLength">11,50 m</strong></div>
+          <div><span>Breite</span><strong id="vBeam">3,85 m</strong></div>
+          <div><span>Tiefgang</span><strong id="vDraft">1,15 m</strong></div>
+          <div><span>Verdrängung</span><strong id="vDisplacement">ca. 13 t</strong></div>
+          <div><span>Motor</span><strong id="vEngine">Perkins M135</strong></div>
+          <div><span>Diesel</span><strong id="vTank">400 l</strong></div>
+        </div>
+
+        <div class="stats">
+          <article><span>Reisetage</span><strong id="sDays">0</strong><small>im aktuellen Bordbuch</small></article>
+          <article><span>Seemeilen</span><strong id="sNm">0,0</strong><small>gefahren</small></article>
+          <article><span>Motorstunden</span><strong id="sHours">0,0</strong><small>auf Reisen</small></article>
+          <article><span>Dieselkosten</span><strong id="sCost">0 €</strong><small>erfasst</small></article>
+          <article><span>Ø Verbrauch</span><strong id="sAvg">—</strong><small>Liter je Stunde</small></article>
+        </div>
+
+        <div class="grid2 home-grid">
+          <article class="card tank-card">
+            <div class="card-kicker">TANKANZEIGE</div>
+            <h3>Dieselvorrat der LEEFKE</h3>
+            <div class="tank-gauge" aria-label="Tankfüllstand">
+              <div id="tankFill" class="tank-fill"></div>
+              <div class="tank-marks"><span>400 l</span><span>200 l</span><span>0 l</span></div>
+            </div>
+            <div class="tank-value"><strong id="tankPercent">—</strong><span id="tankLiters">Tankstand nicht eingetragen</span></div>
+          </article>
+
+          <article class="card ship-card">
+            <div class="card-kicker">SCHIFFSPASS</div>
+            <h3 id="shipCardTitle">LEEFKE · Groeneveld Kotter</h3>
+            <dl class="ship-facts">
+              <div><dt>Baujahr</dt><dd id="fBuildYear">1996</dd></div>
+              <div><dt>Rumpf</dt><dd id="fHull">Stahl · Multiknickspant · Spitzgatt</dd></div>
+              <div><dt>Heimathafen</dt><dd id="fHomePort">Weser Yacht Club Lemwerder</dd></div>
+              <div><dt>Marschfahrt</dt><dd id="fCruise">6–8 kn</dd></div>
+            </dl>
+            <button data-open="settings" class="text-button">Schiffsdaten öffnen →</button>
+          </article>
+
+          <article class="card"><div class="card-kicker">LOGBUCH</div><h3>Letzter Eintrag</h3><div id="latest" class="muted">Noch kein Eintrag.</div></article>
+          <article class="card"><div class="card-kicker">KURS</div><h3>Nächste Etappe</h3><div id="nextRoute" class="muted">Noch keine Etappe geplant.</div></article>
+          <article class="card"><div class="card-kicker">MASCHINENRAUM</div><h3>Offene Wartung</h3><div id="openMaint" class="muted">Keine offenen Punkte.</div></article>
+          <article class="card"><div class="card-kicker">AUSRÜSTUNG</div><h3>LEEFKE auf einen Blick</h3><div id="quickInfo" class="muted"></div></article>
+        </div>
+      </section>
+
+      <section id="day" class="view">
+        <div class="title"><small>TAGESLOGBUCH</small><h2>Ein Tag an Bord der LEEFKE</h2><p>Route, Wetter, Seegang und die besonderen Momente des Tages.</p></div>
+        <form id="dayForm" class="card form">
+          <input type="hidden" name="id">
+          <label>Datum<input required type="date" name="date"></label>
+          <label>Reisetag<input type="number" min="1" name="dayNo"></label>
+          <label class="wide">Überschrift<input name="title" placeholder="z. B. Von Bremerhaven hinaus auf die Nordsee"></label>
+          <label>Von<input name="fromPort"></label>
+          <label>Nach<input name="toPort"></label>
+          <label>Ablegen<input type="time" name="depart"></label>
+          <label>Anlegen<input type="time" name="arrive"></label>
+          <label>Strecke (sm)<input type="number" step="0.1" name="distance"></label>
+          <label>Motor Start<input type="number" step="0.1" name="engineStart"></label>
+          <label>Motor Ende<input type="number" step="0.1" name="engineEnd"></label>
+          <label>Wetter<input name="weather" placeholder="z. B. sonnig, 18 °C"></label>
+          <label>Wind<input name="wind" placeholder="z. B. NW 3 Bft"></label>
+          <label>Welle<input name="wave" placeholder="z. B. 0,5 m"></label>
+          <label>Tide / Strom<input name="tide"></label>
+          <label>Crew<input name="crew"></label>
+          <label class="wide">Tagesbericht<textarea rows="7" name="summary"></textarea></label>
+          <label class="wide">Moment des Tages<textarea rows="3" name="moment"></textarea></label>
+          <div class="wide actions"><button class="primary">Ins Bordbuch eintragen</button><button type="reset">Leeren</button></div>
+        </form>
+        <div class="toolbar"><input id="daySearch" placeholder="Logbuch durchsuchen …"></div>
+        <div id="dayList" class="stack"></div>
+      </section>
+
+      <section id="route" class="view">
+        <div class="title"><small>REISEPLAN</small><h2>Etappen & GPX-Routen</h2><p>Die geplante und gefahrene Route der LEEFKE.</p></div>
+        <div class="grid2">
+          <form id="routeForm" class="card form">
+            <input type="hidden" name="id">
+            <label>Datum<input type="date" name="date"></label>
+            <label>Status<select name="status"><option value="planned">geplant</option><option value="done">gefahren</option><option value="skip">entfällt</option></select></label>
+            <label>Von<input name="from"></label><label>Nach<input name="to"></label>
+            <label>Entfernung (sm)<input type="number" step="0.1" name="nm"></label>
+            <label>Planzeit (Std.)<input type="number" step="0.1" name="hours"></label>
+            <label class="wide">Notiz<input name="note"></label>
+            <div class="wide actions"><button class="primary">Etappe speichern</button><button type="reset">Leeren</button></div>
+          </form>
+          <article class="card">
+            <div class="card-kicker">PLOTTERROUTE</div><h3>GPX-Datei importieren</h3>
+            <p>Eine Route vom Plotter oder Planungsprogramm auswählen. Die Darstellung funktioniert anschließend offline.</p>
+            <input id="gpxImport" type="file" accept=".gpx,application/gpx+xml,text/xml">
+            <div id="gpxInfo" class="meta"></div>
+          </article>
+        </div>
+        <article class="card map-card"><div class="map-head"><h3>Routenansicht</h3><select id="gpxSelect"><option value="">Keine GPX-Route</option></select></div><svg id="routeMap" viewBox="0 0 900 480" role="img" aria-label="GPX-Routenansicht"><text x="450" y="240" text-anchor="middle">Noch keine GPX-Route importiert</text></svg></article>
+        <div class="summarybar" id="routeSummary"></div>
+        <div id="routeList" class="timeline"></div>
+      </section>
+
+      <section id="ports" class="view">
+        <div class="title"><small>HAFENBUCH</small><h2>Häfen & Liegeplätze</h2><p>Persönliche Hafenerfahrungen der LEEFKE – jetzt mit echten Sternbewertungen.</p></div>
+        <form id="portForm" class="card form port-form">
+          <input type="hidden" name="id">
+          <label>Hafen<input required name="name"></label>
+          <label>Datum<input type="date" name="date"></label>
+          <label>Liegeplatz<input name="berth"></label>
+          <label>Kosten (€)<input type="number" step="0.01" name="cost"></label>
+          <label>Strom / Wasser<input name="services"></label>
+          <label>UKW / Telefon<input name="contact"></label>
+          <label>Koordinaten<input name="coords" placeholder="54.18, 7.89"></label>
+          <label>Noch einmal anlaufen?<select name="returnVisit"><option value="yes">Ja, gerne</option><option value="maybe">Vielleicht</option><option value="no">Eher nicht</option></select></label>
+
+          <fieldset class="rating-field wide"><legend>Gesamtbewertung</legend><div class="star-input">
+            <input id="rating5" name="rating" type="radio" value="5" checked><label for="rating5" title="5 Sterne">★</label>
+            <input id="rating4" name="rating" type="radio" value="4"><label for="rating4" title="4 Sterne">★</label>
+            <input id="rating3" name="rating" type="radio" value="3"><label for="rating3" title="3 Sterne">★</label>
+            <input id="rating2" name="rating" type="radio" value="2"><label for="rating2" title="2 Sterne">★</label>
+            <input id="rating1" name="rating" type="radio" value="1"><label for="rating1" title="1 Stern">★</label>
+          </div></fieldset>
+
+          <fieldset class="rating-field"><legend>Freundlichkeit</legend><div class="star-input small">
+            <input id="friendly5" name="ratingFriendly" type="radio" value="5" checked><label for="friendly5">★</label><input id="friendly4" name="ratingFriendly" type="radio" value="4"><label for="friendly4">★</label><input id="friendly3" name="ratingFriendly" type="radio" value="3"><label for="friendly3">★</label><input id="friendly2" name="ratingFriendly" type="radio" value="2"><label for="friendly2">★</label><input id="friendly1" name="ratingFriendly" type="radio" value="1"><label for="friendly1">★</label>
+          </div></fieldset>
+          <fieldset class="rating-field"><legend>Sanitär</legend><div class="star-input small">
+            <input id="sanitary5" name="ratingSanitary" type="radio" value="5" checked><label for="sanitary5">★</label><input id="sanitary4" name="ratingSanitary" type="radio" value="4"><label for="sanitary4">★</label><input id="sanitary3" name="ratingSanitary" type="radio" value="3"><label for="sanitary3">★</label><input id="sanitary2" name="ratingSanitary" type="radio" value="2"><label for="sanitary2">★</label><input id="sanitary1" name="ratingSanitary" type="radio" value="1"><label for="sanitary1">★</label>
+          </div></fieldset>
+          <fieldset class="rating-field"><legend>Versorgung</legend><div class="star-input small">
+            <input id="supply5" name="ratingSupply" type="radio" value="5" checked><label for="supply5">★</label><input id="supply4" name="ratingSupply" type="radio" value="4"><label for="supply4">★</label><input id="supply3" name="ratingSupply" type="radio" value="3"><label for="supply3">★</label><input id="supply2" name="ratingSupply" type="radio" value="2"><label for="supply2">★</label><input id="supply1" name="ratingSupply" type="radio" value="1"><label for="supply1">★</label>
+          </div></fieldset>
+          <fieldset class="rating-field"><legend>Preis / Leistung</legend><div class="star-input small">
+            <input id="value5" name="ratingValue" type="radio" value="5" checked><label for="value5">★</label><input id="value4" name="ratingValue" type="radio" value="4"><label for="value4">★</label><input id="value3" name="ratingValue" type="radio" value="3"><label for="value3">★</label><input id="value2" name="ratingValue" type="radio" value="2"><label for="value2">★</label><input id="value1" name="ratingValue" type="radio" value="1"><label for="value1">★</label>
+          </div></fieldset>
+
+          <label class="wide">Ansteuerung / Besonderheiten<textarea rows="3" name="approach"></textarea></label>
+          <label class="wide">Notiz<textarea rows="4" name="note"></textarea></label>
+          <div class="wide actions"><button class="primary">Hafen speichern</button><button type="reset">Leeren</button></div>
+        </form>
+        <div class="toolbar"><input id="portSearch" placeholder="Hafen suchen …"></div>
+        <div id="portList" class="stack"></div>
+      </section>
+
+      <section id="fuel" class="view">
+        <div class="title"><small>TANKBUCH</small><h2>Diesel & Verbrauch</h2><p>Tankvorgänge und Verbrauchswerte der LEEFKE mit 400-Liter-Tank.</p></div>
+        <div class="stats compact"><article><span>Getankt</span><strong id="fuelLiters">0 l</strong></article><article><span>Kosten</span><strong id="fuelCost">0 €</strong></article><article><span>Ø Preis</span><strong id="fuelPrice">—</strong></article><article><span>Liter/Motorstunde</span><strong id="fuelPerHour">—</strong></article></div>
+        <form id="fuelForm" class="card form">
+          <input type="hidden" name="id"><label>Datum<input required type="date" name="date"></label><label>Ort<input name="place"></label><label>Liter<input type="number" step="0.1" name="liters"></label><label>Preis/Liter (€)<input type="number" step="0.001" name="price"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Tankstand danach (%)<input type="number" min="0" max="100" name="tankPercent"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Ins Tankbuch eintragen</button><button type="reset">Leeren</button></div>
+        </form>
+        <div id="fuelList" class="stack"></div>
+      </section>
+
+      <section id="maintenance" class="view">
+        <div class="title"><small>TECHNIK</small><h2>Wartung & Ereignisse</h2><p>Perkins M135, Bordtechnik und sicherheitsrelevante Arbeiten.</p></div>
+        <form id="maintenanceForm" class="card form">
+          <input type="hidden" name="id"><label>Datum<input required type="date" name="date"></label><label>Kategorie<select name="category"><option>Motor · Perkins M135</option><option>Getriebe</option><option>Dieselanlage</option><option>Hydraulik</option><option>Elektrik</option><option>Navigation</option><option>Rumpf</option><option>Sicherheit</option><option>Sonstiges</option></select></label><label class="wide">Titel<input required name="title"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Erledigt<select name="done"><option value="false">Nein</option><option value="true">Ja</option></select></label><label>Fällig am<input type="date" name="dueDate"></label><label>Fällig bei Motorstunden<input type="number" step="0.1" name="dueHours"></label><label>Kosten (€)<input type="number" step="0.01" name="cost"></label><label class="wide">Notiz<textarea rows="4" name="note"></textarea></label><div class="wide actions"><button class="primary">Speichern</button><button type="reset">Leeren</button></div>
+        </form>
+        <div id="maintenanceList" class="stack"></div>
+      </section>
+
+      <section id="checklists" class="view">
+        <div class="title"><small>KLAR SCHIFF</small><h2>Checklisten für die LEEFKE</h2><p>Vor dem Ablegen, nach dem Anlegen und für die Sicherheit an Bord.</p></div>
+        <form id="checkForm" class="card inline-form"><input name="group" placeholder="Gruppe"><input required name="item" placeholder="Neuer Prüfpunkt"><button class="primary">Hinzufügen</button><button type="button" id="resetChecks">Alle Haken löschen</button></form>
+        <div id="checks" class="grid2"></div>
+      </section>
+
+      <section id="photos" class="view">
+        <div class="title"><small>ERINNERUNGEN</small><h2>LEEFKE unterwegs</h2><p>Fotos aus Häfen, von Überfahrten und besonderen Tagen an Bord.</p></div>
+        <form id="photoForm" class="card form"><label>Datum<input type="date" name="date"></label><label>Bildunterschrift<input name="caption"></label><label class="wide">Foto<input required type="file" accept="image/*" name="photo"></label><div class="wide"><button class="primary">Foto hinzufügen</button></div></form>
+        <div id="photoGrid" class="gallery"></div>
+      </section>
+
+      <section id="report" class="view">
+        <div class="title"><small>REISEBERICHT</small><h2>Das Törntagebuch der LEEFKE</h2><p>Aus Tagesberichten und Fotos entsteht ein druckbarer Reisebericht.</p></div>
+        <article class="card no-print"><p>Über „Drucken / als PDF speichern“ lässt sich der Bericht unter Windows und auf dem iPad sichern.</p><div class="actions"><button id="buildReport" class="primary">Bericht aktualisieren</button><button id="printReport">Drucken / als PDF speichern</button></div></article>
+        <div id="reportContent" class="report-paper"></div>
+      </section>
+
+      <section id="settings" class="view">
+        <div class="title"><small>SCHIFFSPASS</small><h2>Die LEEFKE</h2><p>Die bekannten Schiffsdaten sind bereits hinterlegt und bleiben vollständig bearbeitbar.</p></div>
+
+        <article class="card photo-settings">
+          <div><div class="card-kicker">STARTBILD</div><h3>Foto der LEEFKE</h3><p>Das mitgelieferte Foto kann jederzeit durch ein eigenes Startbild ersetzt werden. Es wird nur auf diesem Gerät gespeichert und in der Sicherung mitgeführt.</p><input id="boatPhotoInput" type="file" accept="image/*"><button id="boatPhotoReset" type="button">Mitgeliefertes Foto verwenden</button></div>
+          <img id="boatPhotoPreview" src="leefke-hero.jpg" alt="Vorschau Startbild">
+        </article>
+
+        <form id="settingsForm" class="settings-sections">
+          <article class="card form">
+            <div class="wide section-heading"><span>⚓</span><div><small>SCHIFF</small><h3>Stammdaten</h3></div></div>
+            <label>Schiffsname<input name="boatName"></label><label>Heimathafen<input name="homePort"></label><label>Bootstyp<input name="boatType"></label><label>Baureihe / Modell<input name="model"></label><label>Baujahr<input type="number" name="buildYear"></label><label>Rumpfmaterial<input name="hullMaterial"></label><label class="wide">Rumpfform<input name="hullForm"></label><label>Rufzeichen<input name="callSign"></label><label>MMSI<input name="mmsi"></label>
+          </article>
+
+          <article class="card form">
+            <div class="wide section-heading"><span>↔</span><div><small>ABMESSUNGEN</small><h3>Maße & Gewicht</h3></div></div>
+            <label>Länge (m)<input type="number" step="0.01" name="length"></label><label>Breite (m)<input type="number" step="0.01" name="beam"></label><label>Tiefgang (m)<input type="number" step="0.01" name="draft"></label><label>Planungstiefgang (m)<input type="number" step="0.01" name="navigationDraft"></label><label>Durchfahrtshöhe (m)<input type="number" step="0.01" name="airDraft"></label><label>Verdrängung (t)<input type="number" step="0.1" name="displacement"></label>
+          </article>
+
+          <article class="card form">
+            <div class="wide section-heading"><span>⚙</span><div><small>ANTRIEB</small><h3>Motor & Tank</h3></div></div>
+            <label>Motor<input name="engine"></label><label>Leistung (PS)<input type="number" name="enginePower"></label><label>Einbaujahr<input type="number" name="engineYear"></label><label>Marschfahrt<input name="cruiseSpeed"></label><label>Tankinhalt (l)<input type="number" name="tankCapacity"></label><label>Aktueller Tankstand (%)<input type="number" min="0" max="100" name="currentTankPercent"></label><label>Aktuelle Motorstunden<input type="number" step="0.1" name="currentEngineHours"></label>
+          </article>
+
+          <article class="card form">
+            <div class="wide section-heading"><span>⌁</span><div><small>BORDTECHNIK</small><h3>Ausrüstung</h3></div></div>
+            <label class="wide">Navigation, Funk & Technik<textarea rows="7" name="equipment"></textarea></label>
+          </article>
+
+          <article class="card form">
+            <div class="wide section-heading"><span>✦</span><div><small>AKTUELLER TÖRN</small><h3>Reisedaten</h3></div></div>
+            <label class="wide">Törnname<input name="tripTitle"></label><label>Startdatum<input type="date" name="tripStart"></label><label>Enddatum<input type="date" name="tripEnd"></label><label class="wide">Crew / Stammbesatzung<input name="defaultCrew"></label>
+            <div class="wide"><button class="primary">Schiffsdaten speichern</button></div>
+          </article>
+        </form>
+      </section>
+
+      <section id="backup" class="view">
+        <div class="title"><small>DATENSICHERUNG</small><h2>Das Bordbuch sichern</h2><p>Alle Daten bleiben lokal. Eine regelmäßige Sicherung schützt das Törntagebuch.</p></div>
+        <article class="card"><h3>Vollständige Sicherung</h3><p>Alle Einträge, Schiffsdaten, GPX-Routen, Bewertungen und Fotos werden in einer Datei gesichert.</p><button id="export" class="primary">Sicherung exportieren</button></article>
+        <article class="card"><h3>Wiederherstellen</h3><input id="import" type="file" accept="application/json,.json"></article>
+        <article class="card warning"><strong>Wichtig:</strong> Die Daten liegen lokal auf diesem Gerät. Regelmäßig sichern, besonders vor einem Gerätewechsel oder Browser-Reset.</article>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
