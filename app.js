@@ -1,9 +1,10 @@
-const APP_VERSION = '5.4';
+const APP_VERSION = '5.5';
 const AUTO_SYNC_INTERVAL_MS = 20000;
 const DB_NAME = 'leefke-v2';
 const DB_VERSION = 3;
 const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx'];
 const syncableStores = ['days', 'fuel', 'maintenance', 'checklists', 'route', 'ports', 'settings', 'gpx'];
+const SETTINGS_FIELD_RECORD_TYPE = 'settings_field';
 const systemStores = ['syncMeta', 'syncTombstones'];
 const SUPABASE_URL = 'https://fzaxoivuwpubwhgabahz.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VRFnhXCeSrhJ7BsxMNgl6Q_HolDM-yC';
@@ -301,6 +302,106 @@ function comparablePayload(store, payload) {
   return JSON.stringify(cleaned, Object.keys(cleaned).sort());
 }
 
+
+function valueSignature(value) {
+  return JSON.stringify(value === undefined ? null : value);
+}
+
+function remoteSettingsCandidates(remoteRows, localRecord = null) {
+  const candidates = new Map();
+  const legacyRows = remoteRows.filter(row => row.record_type === 'settings' && row.record_id === 'main' && !row.deleted_at);
+  const legacy = legacyRows.sort((a, b) => remoteTimestamp(b) - remoteTimestamp(a))[0] || null;
+
+  if (legacy) {
+    const payload = legacy.payload || {};
+    for (const field of settingsFields(localRecord || {}, payload)) {
+      if (!Object.prototype.hasOwnProperty.call(payload, field)) continue;
+      const timestamp = safeIso(payload?._fieldUpdatedAt?.[field] || legacy.updated_at);
+      candidates.set(field, { value: payload[field], timestamp, source: 'legacy' });
+    }
+  }
+
+  for (const row of remoteRows) {
+    if (row.record_type !== SETTINGS_FIELD_RECORD_TYPE || row.deleted_at) continue;
+    const field = row.record_id;
+    if (!field || SETTINGS_META_FIELDS.has(field)) continue;
+    const timestamp = safeIso(row.updated_at);
+    const existing = candidates.get(field);
+    if (!existing || Date.parse(timestamp) >= Date.parse(existing.timestamp)) {
+      candidates.set(field, { value: row.payload?.value, timestamp, source: 'field' });
+    }
+  }
+
+  return { candidates, legacy };
+}
+
+async function mergeRemoteSettings(remoteRows) {
+  const localRaw = await getOne('settings', 'main');
+  const local = normalizeSettingsRecord(localRaw, localRaw?._updatedAt);
+  const { candidates, legacy } = remoteSettingsCandidates(remoteRows, local);
+  const merged = { ...local, _fieldUpdatedAt: { ...(local._fieldUpdatedAt || {}) } };
+
+  for (const [field, remoteField] of candidates.entries()) {
+    const localTime = settingsFieldTime(local, field, local._updatedAt);
+    const remoteTime = safeIso(remoteField.timestamp);
+    const valuesDiffer = valueSignature(local[field]) !== valueSignature(remoteField.value);
+    if (Date.parse(remoteTime) > Date.parse(localTime) || (valuesDiffer && Date.parse(remoteTime) === Date.parse(localTime))) {
+      merged[field] = remoteField.value;
+      merged._fieldUpdatedAt[field] = remoteTime;
+    }
+  }
+
+  merged.boatPhoto = localRaw?.boatPhoto || '';
+  const allTimes = [merged._updatedAt, ...Object.values(merged._fieldUpdatedAt || {})]
+    .map(value => Date.parse(value || 0) || 0);
+  merged._updatedAt = new Date(Math.max(...allTimes, 0)).toISOString();
+  await rawPut('settings', merged);
+  return { merged, candidates, legacy };
+}
+
+function settingsCloudRows(settings, userId, candidates = new Map(), legacy = null) {
+  const rows = [];
+  let changed = false;
+  const normalized = normalizeSettingsRecord(settings, settings?._updatedAt);
+
+  for (const field of settingsFields(normalized)) {
+    const timestamp = settingsFieldTime(normalized, field, normalized._updatedAt);
+    const remoteField = candidates.get(field);
+    const localValue = normalized[field];
+    const remoteValue = remoteField?.value;
+    const localTs = Date.parse(timestamp) || 0;
+    const remoteTs = Date.parse(remoteField?.timestamp || 0) || 0;
+    const valuesDiffer = valueSignature(localValue) !== valueSignature(remoteValue);
+
+    if (!remoteField || localTs > remoteTs || (localTs === remoteTs && valuesDiffer)) {
+      rows.push({
+        user_id: userId,
+        record_type: SETTINGS_FIELD_RECORD_TYPE,
+        record_id: field,
+        payload: { value: localValue },
+        updated_at: safeIso(timestamp),
+        deleted_at: null
+      });
+      changed = true;
+    }
+  }
+
+  const legacyPayload = cleanPayload('settings', normalized);
+  const legacyUpdatedAt = safeIso(normalized._updatedAt);
+  const legacyDiffers = !legacy || comparablePayload('settings', legacyPayload) !== comparablePayload('settings', legacy.payload || {});
+  if (changed || legacyDiffers) {
+    rows.push({
+      user_id: userId,
+      record_type: 'settings',
+      record_id: 'main',
+      payload: legacyPayload,
+      updated_at: legacyUpdatedAt,
+      deleted_at: null
+    });
+  }
+  return rows;
+}
+
 async function migrateLocalTimestamps() {
   for (const store of syncableStores) {
     const items = await all(store);
@@ -395,14 +496,19 @@ async function replaceLocalWithRemote(remoteRows) {
   try {
     for (const store of syncableStores) await rawClear(store);
     await rawClear('syncTombstones');
+
     for (const row of remoteRows) {
-      if (!syncableStores.includes(row.record_type) || row.deleted_at) continue;
-      let payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
-      if (row.record_type === 'settings') {
-        payload = normalizeSettingsRecord(payload, row.updated_at);
-        if (localBoatPhoto) payload.boatPhoto = localBoatPhoto;
-      }
+      if (row.deleted_at || row.record_type === 'settings' || row.record_type === SETTINGS_FIELD_RECORD_TYPE) continue;
+      if (!syncableStores.includes(row.record_type)) continue;
+      const payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
       await rawPut(row.record_type, payload);
+    }
+
+    const blankSettings = normalizeSettingsRecord({ ...DEFAULT_SETTINGS, id: 'main', boatPhoto: localBoatPhoto }, '2000-01-01T00:00:00.000Z');
+    await rawPut('settings', blankSettings);
+    const { merged } = await mergeRemoteSettings(remoteRows);
+    if (localBoatPhoto && !merged.boatPhoto) {
+      await rawPut('settings', { ...merged, boatPhoto: localBoatPhoto });
     }
   } finally {
     suppressSyncTracking = false;
@@ -424,7 +530,7 @@ async function connectDeviceAutomatically(options = {}) {
     if (!options.silent) setMessage('#syncMessage', 'Datenstände werden automatisch geprüft …');
 
     const remote = await fetchRemoteRecords();
-    const remoteHasData = remote.some(row => syncableStores.includes(row.record_type));
+    const remoteHasData = remote.some(row => syncableStores.includes(row.record_type) || row.record_type === SETTINGS_FIELD_RECORD_TYPE);
     const localIsFactoryOnly = await localDataIsOnlyFactoryDefaults();
 
     if (remoteHasData && localIsFactoryOnly) {
@@ -577,6 +683,7 @@ async function fetchRemoteRecords() {
 async function localRows() {
   const rows = [];
   for (const store of syncableStores) {
+    if (store === 'settings') continue;
     for (const item of await all(store)) {
       const updatedAt = safeIso(item._updatedAt || item.created || '2000-01-01T00:00:00.000Z');
       rows.push({
@@ -589,6 +696,8 @@ async function localRows() {
       });
     }
   }
+  const settings = await getOne('settings', 'main');
+  rows.push(...settingsCloudRows(settings, currentSession.user.id));
   return rows;
 }
 
@@ -641,26 +750,13 @@ async function downloadCloudAsSource() {
     syncInProgress = true;
     await updateSyncUI();
     const remote = await fetchRemoteRecords();
-    const active = remote.filter(row => !row.deleted_at && syncableStores.includes(row.record_type));
+    const active = remote.filter(row => !row.deleted_at && (syncableStores.includes(row.record_type) || row.record_type === SETTINGS_FIELD_RECORD_TYPE));
     if (!active.length) {
-      setMessage('#syncMessage', 'In der Cloud sind noch keine LEEFKE-Daten vorhanden. Verwende auf dem Hauptgerät zuerst „Daten dieses Geräts übertragen“.', 'error');
+      setMessage('#syncMessage', 'In der Cloud sind noch keine LEEFKE-Daten vorhanden.', 'error');
       return;
     }
     if (!confirm('Die synchronisierbaren Daten auf diesem Gerät werden durch den Cloud-Datenstand ersetzt. Lokale Fotos bleiben erhalten. Fortfahren?')) return;
-    const previousSettings = await getOne('settings', 'main');
-    const localBoatPhoto = previousSettings?.boatPhoto || '';
-    suppressSyncTracking = true;
-    for (const store of syncableStores) await rawClear(store);
-    await rawClear('syncTombstones');
-    for (const row of active) {
-      let payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
-      if (row.record_type === 'settings') {
-        payload = normalizeSettingsRecord(payload, row.updated_at);
-        if (localBoatPhoto) payload.boatPhoto = localBoatPhoto;
-      }
-      await rawPut(row.record_type, payload);
-    }
-    suppressSyncTracking = false;
+    await replaceLocalWithRemote(remote);
     await markLinked('download');
     await setDirty(false);
     await metaSet('lastSync', { at: new Date().toISOString() });
@@ -715,6 +811,7 @@ async function syncNow(options = {}) {
 
     suppressSyncTracking = true;
     for (const row of remote) {
+      if (row.record_type === 'settings' || row.record_type === SETTINGS_FIELD_RECORD_TYPE) continue;
       if (!syncableStores.includes(row.record_type)) continue;
       const key = `${row.record_type}:${row.record_id}`;
       const local = await getOne(row.record_type, row.record_id);
@@ -727,42 +824,38 @@ async function syncNow(options = {}) {
           await rawDel(row.record_type, row.record_id);
           await rawDel('syncTombstones', key);
         }
-      } else if (row.record_type === 'settings') {
-        const remotePayload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
-        const merged = mergeSettingsRecords(local, remotePayload, row.updated_at);
-        await rawPut('settings', merged);
-        await rawDel('syncTombstones', key);
       } else if (remoteTs > Math.max(localTs, tombTs)) {
         const payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
         await rawPut(row.record_type, payload);
         await rawDel('syncTombstones', key);
       }
     }
+
+    const settingsMerge = await mergeRemoteSettings(remote);
     suppressSyncTracking = false;
 
     const outgoing = [];
     for (const store of syncableStores) {
+      if (store === 'settings') continue;
       for (const item of await all(store)) {
         const key = `${store}:${item.id}`;
         const existingRemote = remoteMap.get(key);
         const localTs = syncTimestamp(item);
-        const payload = cleanPayload(store, item);
-        const settingsDiffer = store === 'settings' && existingRemote && comparablePayload(store, payload) !== comparablePayload(store, existingRemote.payload || {});
-        if (!existingRemote || localTs > remoteTimestamp(existingRemote) || settingsDiffer) {
-          const updatedAt = settingsDiffer && localTs <= remoteTimestamp(existingRemote)
-            ? new Date().toISOString()
-            : safeIso(item._updatedAt);
+        if (!existingRemote || localTs > remoteTimestamp(existingRemote)) {
           outgoing.push({
             user_id: userId,
             record_type: store,
             record_id: String(item.id),
-            payload: cleanPayload(store, { ...item, _updatedAt: updatedAt }),
-            updated_at: updatedAt,
+            payload: cleanPayload(store, item),
+            updated_at: safeIso(item._updatedAt),
             deleted_at: null
           });
         }
       }
     }
+
+    const currentSettings = await getOne('settings', 'main');
+    outgoing.push(...settingsCloudRows(currentSettings, userId, settingsMerge.candidates, settingsMerge.legacy));
 
     const pendingTombstones = await all('syncTombstones');
     for (const tombstone of pendingTombstones) {

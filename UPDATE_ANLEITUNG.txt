@@ -1,28 +1,22 @@
-LEEFKE Bordtagebuch – Version 5.4
+LEEFKE Bordtagebuch – Version 5.5
 
-AUTOMATISCHE GERÄTEVERBINDUNG
+KORREKTUR DER SCHIFFSDATEN-SYNCHRONISIERUNG
 
-Neu:
-- Die drei verwirrenden Optionen Hochladen, Herunterladen und Zusammenführen sind entfernt.
-- Es gibt nur noch „Gerät verbinden und vollständig abgleichen“.
-- Die App entscheidet automatisch:
-  * leeres/neues Gerät + Cloud-Daten: Cloud-Daten werden geladen;
-  * erstes Gerät + leere Cloud: lokale Daten werden hochgeladen;
-  * Daten auf beiden Seiten: beide Datenstände werden zusammengeführt.
-- Danach sind iPhone, iPad, Tablet und Windows-Laptop vollständig gleichberechtigt.
-- Bereits früher unterschiedlich eingerichtete Geräte werden beim nächsten vollständigen Abgleich wieder zusammengeführt.
-- Schiffsdaten bleiben feldweise synchronisiert; der jeweils zuletzt geänderte Wert gewinnt.
+Schiffsdaten wie Länge, Breite, Tiefgang, Tankkapazität, Tankfüllung und Motorstunden werden jetzt nicht mehr nur als ein gemeinsamer Datenblock behandelt. Jedes einzelne Feld erhält in der Cloud einen eigenen Datensatz und einen eigenen Änderungszeitpunkt.
 
-WICHTIG ZUR BISHERIGEN EINRICHTUNG
-Unterschiedlich gedrückte Knöpfe sind normalerweise kein dauerhaftes Problem. Solange ein fehlender Eintrag noch auf mindestens einem Gerät vorhanden ist, wird er mit Version 5.4 beim vollständigen Abgleich wieder in die Cloud übertragen. Nur Daten, die auf allen Geräten gelöscht oder überschrieben wurden, lassen sich ohne Sicherungsdatei nicht automatisch zurückholen.
+Dadurch gilt:
+- Eine Änderung der Länge kann nicht mehr durch eine ältere Tankangabe überschrieben werden.
+- Änderungen dürfen auf iPhone, iPad oder Laptop erfolgen.
+- Ändern zwei Geräte dasselbe Feld, gewinnt der zuletzt gespeicherte Wert.
+- Es gibt weiterhin kein Hauptgerät.
 
 UPDATE
-1. Auf jedem Gerät möglichst zuerst unter Sicherung eine Sicherung exportieren.
-2. ZIP entpacken.
-3. Alle Dateien direkt in das GitHub-Repository hochladen und vorhandene Dateien ersetzen.
-4. Commit changes anklicken.
-5. Danach öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.4
-6. Unter Windows Strg+F5 drücken. Auf iPhone/iPad die App vollständig schließen und erneut öffnen.
-7. Auf jedem Gerät einmal Konto & Sync → Jetzt vollständig abgleichen drücken.
+1. Auf jedem Gerät vorsichtshalber unter „Sicherung“ eine Sicherung exportieren.
+2. Diese ZIP-Datei entpacken.
+3. Alle Dateien aus dem entpackten Ordner in das GitHub-Repository hochladen.
+4. Commit changes drücken und etwa zwei Minuten warten.
+5. Danach öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.5
+6. Auf allen Geräten prüfen, dass oben „VERSION 5.5“ steht.
 
-Danach genügt die automatische Synchronisierung.
+EINMALIGE BEREINIGUNG
+Nach dem Update auf einem beliebigen Gerät die korrekte Länge 11,50 m eintragen, „Schiffsdaten speichern“ und anschließend unter „Konto & Sync“ auf „Jetzt synchronisieren“ drücken. Danach auf den anderen Geräten ebenfalls einmal „Jetzt synchronisieren“ drücken. Künftige Änderungen laufen automatisch.
