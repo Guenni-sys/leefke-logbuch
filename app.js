@@ -1,9 +1,9 @@
-const APP_VERSION = '5.6';
+const APP_VERSION = '6.0';
 const AUTO_SYNC_INTERVAL_MS = 20000;
 const DB_NAME = 'leefke-v2';
-const DB_VERSION = 4;
-const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx', 'weather'];
-const syncableStores = ['days', 'fuel', 'maintenance', 'checklists', 'route', 'ports', 'settings', 'gpx', 'weather'];
+const DB_VERSION = 6;
+const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather', 'autoBackups'];
+const syncableStores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather'];
 const SETTINGS_FIELD_RECORD_TYPE = 'settings_field';
 const systemStores = ['syncMeta', 'syncTombstones'];
 const SUPABASE_URL = 'https://fzaxoivuwpubwhgabahz.supabase.co';
@@ -49,7 +49,10 @@ const DEFAULT_SETTINGS = {
   tripStart: '2026-08-01',
   tripEnd: '2026-08-16',
   defaultCrew: '',
-  boatPhoto: ''
+  boatPhoto: '',
+  boatPhotoStoragePath: '',
+  photoAutoSync: true,
+  preferredCruiseSpeed: 7.5
 };
 
 
@@ -313,10 +316,23 @@ function mergeSettingsRecords(localRecord, remoteRecord, remoteUpdatedAt) {
   return merged;
 }
 
+function stableComparableValue(value) {
+  if (Array.isArray(value)) return value.map(stableComparableValue);
+  if (value && typeof value === 'object') {
+    return Object.keys(value).sort().reduce((result, key) => {
+      if (value[key] !== undefined) result[key] = stableComparableValue(value[key]);
+      return result;
+    }, {});
+  }
+  return value;
+}
+
 function comparablePayload(store, payload) {
   const cleaned = cleanPayload(store, payload || {});
   delete cleaned._updatedAt;
-  return JSON.stringify(cleaned, Object.keys(cleaned).sort());
+  delete cleaned._updatedByLabel;
+  delete cleaned._cloudState;
+  return JSON.stringify(stableComparableValue(cleaned));
 }
 
 
@@ -672,13 +688,17 @@ async function initializeSupabase() {
     window.setTimeout(async () => {
       await updateSyncUI();
       if (currentSession) {
+        startRealtimeSubscription();
         if (await isLinkedForCurrentUser()) {
+          registerDeviceHeartbeat().catch(error => console.warn('Gerätestatus konnte nicht übertragen werden.', error));
           if (navigator.onLine) scheduleSync(250);
           startAutoSync(1200);
         } else if (navigator.onLine) {
           await connectDeviceAutomatically({ silent: true });
+          registerDeviceHeartbeat().catch(error => console.warn('Gerätestatus konnte nicht übertragen werden.', error));
         }
       } else {
+        stopRealtimeSubscription();
         stopAutoSync();
       }
       if (event === 'SIGNED_IN') setMessage('#authMessage', 'Anmeldung erfolgreich. Dieses Gerät wird automatisch abgeglichen.', 'success');
@@ -1214,6 +1234,7 @@ function render() {
   }
   if (activeWeatherSnapshot) renderWeatherSnapshot(activeWeatherSnapshot, activeWeatherHourIndex);
   if (nauticalMap) refreshPortLayer();
+  renderV6Extras();
 }
 
 function renderTank(settings) {
@@ -2461,6 +2482,7 @@ $('#signOutButton').onclick = async () => {
   if (!supabaseClient) return;
   await supabaseClient.auth.signOut();
   currentSession = null;
+  stopRealtimeSubscription();
   stopAutoSync();
   setMessage('#syncMessage', 'Abgemeldet. Die lokalen Daten bleiben auf diesem Gerät erhalten.');
   await updateSyncUI();
@@ -2491,6 +2513,999 @@ document.addEventListener('visibilitychange', () => {
   else stopAutoSync();
 });
 
+/* =========================
+   LEEFKE VERSION 6.0
+   Feldweise Synchronisierung, Realtime, Medien-Cloud, Sicherungen,
+   Konfliktauflösung, Bordbetrieb und Routenwetter
+   ========================= */
+
+const MEDIA_BUCKET = 'leefke-media';
+const CONFLICT_WINDOW_MS = 5 * 60 * 1000;
+const AUTO_BACKUP_LIMIT = 5;
+const AUTO_BACKUP_SYNC_GAP_MS = 4 * 60 * 60 * 1000;
+const RECORD_META_FIELDS = new Set(['id', '_updatedAt', '_updatedBy', '_updatedByLabel', '_fieldUpdatedAt', '_fieldUpdatedBy', '_mediaUpdatedAt', '_mediaCloudAt', '_cloudState', '_localOnly']);
+const LOCAL_MEDIA_FIELDS = new Set(['data', 'signedUrl', 'objectUrl', 'localUrl']);
+const NO_CHANGE_LOG_STORES = new Set(['changeLog', 'conflicts', 'devices', 'autoBackups', 'weather', 'routeWeather']);
+const NO_CONFLICT_STORES = new Set(['changeLog', 'conflicts', 'devices', 'weather', 'routeWeather', 'gpx']);
+const STORE_LABELS = {
+  settings: 'Schiffsdaten', days: 'Tageslogbuch', route: 'Törnplanung', ports: 'Hafenbuch',
+  fuel: 'Tankbuch', maintenance: 'Wartung', checklists: 'Checklisten', photos: 'Fotos',
+  gpx: 'GPX-Routen', weather: 'Wetter', inventory: 'Vorräte', safety: 'Sicherheit',
+  documents: 'Dokumente', routeWeather: 'Routenwetter'
+};
+const FIELD_LABELS = {
+  boatName: 'Schiffsname', homePort: 'Heimathafen', boatType: 'Bootstyp', model: 'Baureihe', buildYear: 'Baujahr',
+  length: 'Länge', beam: 'Breite', draft: 'Tiefgang', navigationDraft: 'Planungstiefgang', airDraft: 'Durchfahrtshöhe', displacement: 'Verdrängung',
+  engine: 'Motor', enginePower: 'Motorleistung', engineYear: 'Motoreinbaujahr', cruiseSpeed: 'Marschfahrt', tankCapacity: 'Tankinhalt', currentTankPercent: 'Tankstand', currentEngineHours: 'Motorstunden',
+  tripTitle: 'Törnname', tripStart: 'Törnstart', tripEnd: 'Törnende', defaultCrew: 'Crew',
+  title: 'Titel', date: 'Datum', from: 'Start', to: 'Ziel', fromPort: 'Start', toPort: 'Ziel', nm: 'Seemeilen', distance: 'Strecke',
+  wind: 'Wind', wave: 'Welle', tide: 'Tide', weather: 'Wetter', note: 'Notiz', summary: 'Tagesbericht', moment: 'Moment des Tages',
+  liters: 'Liter', price: 'Preis', tankPercent: 'Tankstand danach', engineHours: 'Motorstunden', dueDate: 'Fälligkeitsdatum', dueHours: 'Fällig bei Motorstunden',
+  rating: 'Gesamtbewertung', ratingFriendly: 'Freundlichkeit', ratingSanitary: 'Sanitär', ratingSupply: 'Versorgung', ratingValue: 'Preis-Leistung',
+  quantity: 'Menge', minimum: 'Mindestbestand', status: 'Status', caption: 'Bildunterschrift', featured: 'Titelbild'
+};
+const BSH_STATIONS = {
+  lemwerder: { name: 'Bremen, Oslebshausen (nächstgelegene BSH-Station)', slug: 'bremen_oslebshausen', pdfName: 'Bremen, Oslebshausen' },
+  bremerhaven: { name: 'Bremerhaven, Alter Leuchtturm', slug: 'bremerhaven_alter_leuchtturm', pdfName: 'Bremerhaven, Alter Leuchtturm' },
+  cuxhaven: { name: 'Cuxhaven, Steubenhöft', slug: 'cuxhaven_steubenhoeft', pdfName: 'Cuxhaven, Steubenhöft' },
+  helgoland: { name: 'Helgoland, Binnenhafen', slug: 'helgoland_binnenhafen', pdfName: 'Helgoland, Binnenhafen' }
+};
+
+let cachedDeviceIdentity = null;
+let realtimeChannel = null;
+let realtimeState = 'nicht aktiv';
+let pendingServiceWorker = null;
+let mediaSyncInProgress = false;
+let lastRemoteSummary = null;
+
+function fastHash(input) {
+  let hash = 2166136261;
+  const text = String(input || '');
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
+async function getDeviceIdentity() {
+  if (cachedDeviceIdentity) return cachedDeviceIdentity;
+  let row = await metaGet('deviceIdentity');
+  if (!row?.deviceId) {
+    row = { deviceId: uid(), label: deviceLabel(), createdAt: new Date().toISOString() };
+    await metaSet('deviceIdentity', row);
+  }
+  cachedDeviceIdentity = { id: row.deviceId, label: row.label || deviceLabel() };
+  return cachedDeviceIdentity;
+}
+
+function localFieldsForStore(store) {
+  if (store === 'settings') return new Set(['boatPhoto']);
+  if (store === 'photos' || store === 'documents') return LOCAL_MEDIA_FIELDS;
+  return new Set();
+}
+
+function recordFieldNames(store, ...records) {
+  const localOnly = localFieldsForStore(store);
+  const fields = new Set();
+  for (const record of records) {
+    Object.keys(record || {}).forEach(field => {
+      if (!RECORD_META_FIELDS.has(field) && !localOnly.has(field)) fields.add(field);
+    });
+  }
+  return [...fields];
+}
+
+function fieldTime(record, field, fallback) {
+  return safeIso(record?._fieldUpdatedAt?.[field] || record?._updatedAt || fallback);
+}
+
+function fieldDevice(record, field, fallback = '') {
+  return record?._fieldUpdatedBy?.[field] || record?._updatedBy || fallback;
+}
+
+function normalizeRecord(store, record, fallbackTimestamp = '2000-01-01T00:00:00.000Z', fallbackDevice = 'legacy') {
+  const source = { ...(record || {}) };
+  const timestamp = safeIso(source._updatedAt || fallbackTimestamp);
+  const device = source._updatedBy || fallbackDevice;
+  const fieldTimes = { ...(source._fieldUpdatedAt || {}) };
+  const fieldDevices = { ...(source._fieldUpdatedBy || {}) };
+  for (const field of recordFieldNames(store, source)) {
+    fieldTimes[field] = fieldTime(source, field, timestamp);
+    fieldDevices[field] = fieldDevice(source, field, device);
+  }
+  return { ...source, _updatedAt: timestamp, _updatedBy: device, _updatedByLabel: source._updatedByLabel || '', _fieldUpdatedAt: fieldTimes, _fieldUpdatedBy: fieldDevices };
+}
+
+function logSnapshot(store, record) {
+  if (!record) return null;
+  const copy = typeof structuredClone === 'function' ? structuredClone(record) : JSON.parse(JSON.stringify(record));
+  for (const field of LOCAL_MEDIA_FIELDS) delete copy[field];
+  if (store === 'settings') delete copy.boatPhoto;
+  if (store === 'weather' || store === 'routeWeather') {
+    delete copy.weather; delete copy.marine; delete copy.hours; delete copy.samples;
+  }
+  return copy;
+}
+
+function cleanPayload(store, item) {
+  const payload = typeof structuredClone === 'function' ? structuredClone(item || {}) : JSON.parse(JSON.stringify(item || {}));
+  for (const field of LOCAL_MEDIA_FIELDS) delete payload[field];
+  if (store === 'settings') delete payload.boatPhoto;
+  return payload;
+}
+
+function changedFieldList(store, before, after) {
+  return recordFieldNames(store, before || {}, after || {}).filter(field => valueSignature(before?.[field]) !== valueSignature(after?.[field]));
+}
+
+async function appendChangeLog(store, recordId, action, before, after, fields, options = {}) {
+  if (NO_CHANGE_LOG_STORES.has(store) || options.skipLog || suppressSyncTracking) return;
+  const device = await getDeviceIdentity();
+  const now = new Date().toISOString();
+  const entry = normalizeRecord('changeLog', {
+    id: uid(), store, recordId: String(recordId), action,
+    fields: fields || [], before: logSnapshot(store, before), after: logSnapshot(store, after),
+    changedAt: now, deviceId: device.id, deviceLabel: device.label, undone: false,
+    title: changeEntryTitle(store, before, after)
+  }, now, device.id);
+  await rawPut('changeLog', entry);
+}
+
+function changeEntryTitle(store, before, after) {
+  const item = after || before || {};
+  if (store === 'settings') return 'Schiffspass der LEEFKE';
+  if (store === 'days') return item.title || `${item.fromPort || ''} → ${item.toPort || ''}` || 'Tageslogbuch';
+  if (store === 'route') return `${item.from || 'Start'} → ${item.to || 'Ziel'}`;
+  if (store === 'ports') return item.name || 'Hafen';
+  if (store === 'fuel') return `${item.place || 'Tankvorgang'} · ${item.liters || 0} l`;
+  return item.title || item.name || item.item || item.caption || STORE_LABELS[store] || store;
+}
+
+async function put(store, value, options = {}) {
+  const previous = await getOne(store, value.id);
+  let saved = { ...value };
+  if (options.remote || suppressSyncTracking || !syncableStores.includes(store)) {
+    saved = normalizeRecord(store, saved, options.remoteUpdatedAt || saved._updatedAt || new Date().toISOString(), options.remoteDevice || 'cloud');
+    await rawPut(store, saved);
+    return saved;
+  }
+
+  const device = await getDeviceIdentity();
+  const now = new Date().toISOString();
+  const previousNormalized = previous ? normalizeRecord(store, previous, previous._updatedAt, previous._updatedBy || 'legacy') : null;
+  const base = normalizeRecord(store, { ...(previousNormalized || {}), ...saved }, previousNormalized?._updatedAt || now, device.id);
+  const fields = changedFieldList(store, previousNormalized, saved);
+  base._fieldUpdatedAt = { ...(previousNormalized?._fieldUpdatedAt || {}), ...(saved._fieldUpdatedAt || {}) };
+  base._fieldUpdatedBy = { ...(previousNormalized?._fieldUpdatedBy || {}), ...(saved._fieldUpdatedBy || {}) };
+  for (const field of fields) {
+    base._fieldUpdatedAt[field] = now;
+    base._fieldUpdatedBy[field] = device.id;
+  }
+  if (!previous || fields.length) {
+    base._updatedAt = now;
+    base._updatedBy = device.id;
+    base._updatedByLabel = device.label;
+  }
+  await rawPut(store, base);
+  await rawDel('syncTombstones', `${store}:${base.id}`);
+  if (fields.length || !previous) {
+    await appendChangeLog(store, base.id, previous ? 'update' : 'create', previousNormalized, base, fields, options);
+    await setDirty(true);
+    scheduleSync();
+  }
+  return base;
+}
+
+async function del(store, id, options = {}) {
+  const previous = await getOne(store, id);
+  await rawDel(store, id);
+  if (syncableStores.includes(store) && !options.remote && !suppressSyncTracking) {
+    const device = await getDeviceIdentity();
+    const updatedAt = new Date().toISOString();
+    await rawPut('syncTombstones', {
+      id: `${store}:${id}`, recordType: store, recordId: id, updatedAt,
+      deviceId: device.id, deviceLabel: device.label, storagePath: previous?.storagePath || ''
+    });
+    await appendChangeLog(store, id, 'delete', previous, null, recordFieldNames(store, previous || {}), options);
+    await setDirty(true);
+    scheduleSync();
+  }
+}
+
+async function migrateLocalTimestamps() {
+  const device = await getDeviceIdentity();
+  for (const store of syncableStores) {
+    const items = await all(store);
+    for (const item of items) {
+      const fallback = item._updatedAt || (item.created ? new Date(Number(item.created)).toISOString() : '2000-01-01T00:00:00.000Z');
+      await rawPut(store, normalizeRecord(store, item, fallback, item._updatedBy || device.id));
+    }
+  }
+}
+
+function maxRecordTimestamp(record) {
+  const times = [record?._updatedAt, ...Object.values(record?._fieldUpdatedAt || {})].map(value => Date.parse(value || 0) || 0);
+  return Math.max(...times, 0);
+}
+
+function cloudRowFromRecord(store, item, userId) {
+  const normalized = normalizeRecord(store, item, item?._updatedAt, item?._updatedBy || 'legacy');
+  return {
+    user_id: userId,
+    record_type: store,
+    record_id: String(normalized.id),
+    payload: cleanPayload(store, normalized),
+    updated_at: new Date(maxRecordTimestamp(normalized) || Date.now()).toISOString(),
+    deleted_at: null
+  };
+}
+
+function unifiedRemoteRows(remoteRows) {
+  const rows = remoteRows.filter(row => row.record_type !== SETTINGS_FIELD_RECORD_TYPE);
+  const map = new Map(rows.map(row => [`${row.record_type}:${row.record_id}`, { ...row }]));
+  const legacySettings = rows.filter(row => row.record_type === 'settings' && row.record_id === 'main' && !row.deleted_at).sort((a,b) => remoteTimestamp(b)-remoteTimestamp(a))[0] || null;
+  let settingsPayload = legacySettings?.payload ? { ...legacySettings.payload } : null;
+  let settingsUpdated = legacySettings?.updated_at || '2000-01-01T00:00:00.000Z';
+  for (const row of remoteRows) {
+    if (row.record_type !== SETTINGS_FIELD_RECORD_TYPE || row.deleted_at) continue;
+    settingsPayload ||= { id: 'main', _fieldUpdatedAt: {}, _fieldUpdatedBy: {} };
+    settingsPayload._fieldUpdatedAt ||= {};
+    settingsPayload._fieldUpdatedBy ||= {};
+    const currentTime = Date.parse(settingsPayload._fieldUpdatedAt[row.record_id] || 0) || 0;
+    if (remoteTimestamp(row) >= currentTime) {
+      settingsPayload[row.record_id] = row.payload?.value;
+      settingsPayload._fieldUpdatedAt[row.record_id] = row.updated_at;
+      settingsPayload._fieldUpdatedBy[row.record_id] = row.payload?.deviceId || 'legacy-cloud';
+      settingsUpdated = new Date(Math.max(Date.parse(settingsUpdated) || 0, remoteTimestamp(row))).toISOString();
+    }
+  }
+  if (settingsPayload) {
+    map.set('settings:main', {
+      user_id: currentSession?.user?.id,
+      record_type: 'settings', record_id: 'main', payload: settingsPayload,
+      updated_at: settingsUpdated, deleted_at: null
+    });
+  }
+  return [...map.values()];
+}
+
+async function createConflict(store, recordId, field, local, remote, localTime, remoteTime, localDevice, remoteDevice, winner) {
+  if (NO_CONFLICT_STORES.has(store)) return;
+  const lastSync = await metaGet('lastSync');
+  const lastSyncTs = Date.parse(lastSync?.at || 0) || 0;
+  if (Date.parse(localTime) <= lastSyncTs || Date.parse(remoteTime) <= lastSyncTs) return;
+  if (!localDevice || !remoteDevice || localDevice === remoteDevice) return;
+  if (Math.abs(Date.parse(localTime) - Date.parse(remoteTime)) > CONFLICT_WINDOW_MS) return;
+  const id = `conflict:${fastHash(`${store}|${recordId}|${field}|${localTime}|${remoteTime}`)}`;
+  if (await getOne('conflicts', id)) return;
+  const device = await getDeviceIdentity();
+  const now = new Date().toISOString();
+  await rawPut('conflicts', normalizeRecord('conflicts', {
+    id, store, recordId: String(recordId), field, localValue: local, remoteValue: remote,
+    localTime, remoteTime, localDevice, remoteDevice, autoWinner: winner,
+    status: 'open', createdAt: now
+  }, now, device.id));
+}
+
+async function mergeRecordFieldwise(store, localRaw, remoteRaw, remoteUpdatedAt) {
+  const local = normalizeRecord(store, localRaw, localRaw?._updatedAt, localRaw?._updatedBy || 'local');
+  const remote = normalizeRecord(store, remoteRaw, remoteUpdatedAt, remoteRaw?._updatedBy || 'cloud');
+  const merged = { ...local, id: local.id || remote.id, _fieldUpdatedAt: { ...local._fieldUpdatedAt }, _fieldUpdatedBy: { ...local._fieldUpdatedBy } };
+  const localOnly = localFieldsForStore(store);
+  for (const field of recordFieldNames(store, local, remote)) {
+    const localHas = Object.prototype.hasOwnProperty.call(local, field);
+    const remoteHas = Object.prototype.hasOwnProperty.call(remoteRaw || {}, field);
+    if (!remoteHas) continue;
+    const lt = fieldTime(local, field, local._updatedAt);
+    const rt = fieldTime(remote, field, remoteUpdatedAt);
+    const lv = local[field];
+    const rv = remote[field];
+    const differs = valueSignature(lv) !== valueSignature(rv);
+    if (differs) {
+      const remoteWins = !localHas || Date.parse(rt) > Date.parse(lt) || (Date.parse(rt) === Date.parse(lt) && String(fieldDevice(remote, field, 'cloud')) > String(fieldDevice(local, field, 'local')));
+      await createConflict(store, merged.id, field, lv, rv, lt, rt, fieldDevice(local, field, 'local'), fieldDevice(remote, field, 'cloud'), remoteWins ? 'remote' : 'local');
+      if (remoteWins) {
+        merged[field] = rv;
+        merged._fieldUpdatedAt[field] = rt;
+        merged._fieldUpdatedBy[field] = fieldDevice(remote, field, 'cloud');
+      }
+    } else if (Date.parse(rt) > Date.parse(lt)) {
+      merged._fieldUpdatedAt[field] = rt;
+      merged._fieldUpdatedBy[field] = fieldDevice(remote, field, 'cloud');
+    }
+  }
+  for (const field of localOnly) if (localRaw?.[field] !== undefined) merged[field] = localRaw[field];
+  const latest = Math.max(maxRecordTimestamp(local), maxRecordTimestamp(remote));
+  merged._updatedAt = new Date(latest || Date.now()).toISOString();
+  const newestField = Object.entries(merged._fieldUpdatedAt || {}).sort((a,b) => Date.parse(b[1])-Date.parse(a[1]))[0]?.[0];
+  merged._updatedBy = newestField ? merged._fieldUpdatedBy[newestField] : (local._updatedBy || remote._updatedBy);
+  merged._updatedByLabel = local._updatedByLabel || remote._updatedByLabel || '';
+  return merged;
+}
+
+async function createAutoBackup(reason = 'Automatische Sicherung', force = false) {
+  const existing = await all('autoBackups');
+  if (!force) {
+    const recent = existing.sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt))[0];
+    if (recent && reason === 'Vor Synchronisierung' && Date.now() - Date.parse(recent.createdAt) < AUTO_BACKUP_SYNC_GAP_MS) return recent;
+  }
+  const backup = { app: 'LEEFKE Bordbuch', version: APP_VERSION, createdAt: new Date().toISOString(), reason, stores: {} };
+  for (const store of stores.filter(name => name !== 'autoBackups')) backup.stores[store] = await all(store);
+  let json = JSON.stringify(backup);
+  let mediaOmitted = false;
+  if (json.length > 20_000_000) {
+    backup.stores.photos = (backup.stores.photos || []).map(item => ({ ...item, data: undefined }));
+    backup.stores.documents = (backup.stores.documents || []).map(item => ({ ...item, data: undefined }));
+    backup.note = 'Medieninhalte wegen Größe ausgelassen; Metadaten und Cloud-Pfade sind enthalten.';
+    json = JSON.stringify(backup);
+    mediaOmitted = true;
+  }
+  const row = { id: uid(), createdAt: backup.createdAt, reason, version: APP_VERSION, size: json.length, mediaOmitted, data: json };
+  await rawPut('autoBackups', row);
+  const updated = [...existing, row].sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  for (const old of updated.slice(AUTO_BACKUP_LIMIT)) await rawDel('autoBackups', old.id);
+  return row;
+}
+
+async function restoreAutoBackup(id) {
+  const row = await getOne('autoBackups', id);
+  if (!row || !confirm(`Sicherungspunkt „${row.reason}“ vom ${new Date(row.createdAt).toLocaleString('de-DE')} wiederherstellen?`)) return;
+  const backup = JSON.parse(row.data);
+  suppressSyncTracking = true;
+  try {
+    for (const store of stores.filter(name => name !== 'autoBackups')) {
+      await rawClear(store);
+      for (const item of backup.stores?.[store] || []) await rawPut(store, item);
+    }
+  } finally { suppressSyncTracking = false; }
+  await setDirty(true);
+  await refresh();
+  scheduleSync(300);
+  toast('Sicherungspunkt wiederhergestellt');
+}
+
+function downloadAutoBackup(id) {
+  getOne('autoBackups', id).then(row => {
+    if (!row) return;
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(new Blob([row.data], { type: 'application/json' }));
+    link.download = `LEEFKE_Autosicherung_${row.createdAt.slice(0,10)}_${fastHash(row.id)}.json`;
+    link.click(); URL.revokeObjectURL(link.href);
+  });
+}
+
+async function removeAutoBackup(id) {
+  await rawDel('autoBackups', id); await refresh();
+}
+window.restoreAutoBackup = restoreAutoBackup;
+window.downloadAutoBackup = downloadAutoBackup;
+window.removeAutoBackup = removeAutoBackup;
+
+function dataUrlToBlob(dataUrl) {
+  const [header, data] = String(dataUrl).split(',');
+  const mime = /data:([^;]+)/.exec(header)?.[1] || 'application/octet-stream';
+  const bytes = atob(data || '');
+  const array = new Uint8Array(bytes.length);
+  for (let i = 0; i < bytes.length; i += 1) array[i] = bytes.charCodeAt(i);
+  return new Blob([array], { type: mime });
+}
+
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(blob);
+  });
+}
+
+function compressImage(file, maxDimension = 1800, quality = .82) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = reject;
+    reader.onload = () => {
+      const image = new Image();
+      image.onerror = reject;
+      image.onload = () => {
+        const scale = Math.min(1, maxDimension / Math.max(image.naturalWidth, image.naturalHeight));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+        canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+        canvas.getContext('2d').drawImage(image, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', quality));
+      };
+      image.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function safeFilename(name) {
+  return String(name || 'datei').normalize('NFKD').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').slice(-80);
+}
+
+async function mediaUploadRecord(store, item) {
+  if (!supabaseClient || !currentSession?.user?.id || !item.data) return item;
+  const folder = store === 'photos' ? 'photos' : 'documents';
+  const extension = item.mimeType?.includes('pdf') ? 'pdf' : item.mimeType?.includes('png') ? 'png' : 'jpg';
+  const path = item.storagePath || `${currentSession.user.id}/${folder}/${item.id}-${safeFilename(item.fileName || item.caption || item.title || 'leefke')}.${extension}`;
+  const blob = dataUrlToBlob(item.data);
+  const { error } = await supabaseClient.storage.from(MEDIA_BUCKET).upload(path, blob, { upsert: true, contentType: item.mimeType || blob.type, cacheControl: '3600' });
+  if (error) throw error;
+  const updated = { ...item, storagePath: path, _mediaCloudAt: new Date().toISOString(), _cloudState: 'synced' };
+  await rawPut(store, updated);
+  return updated;
+}
+
+async function mediaDownloadRecord(store, item) {
+  if (!supabaseClient || !item.storagePath || item.data) return item;
+  const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET).download(item.storagePath);
+  if (error) throw error;
+  const updated = { ...item, data: await blobToDataUrl(data), _cloudState: 'synced' };
+  await rawPut(store, updated);
+  return updated;
+}
+
+async function syncBoatPhoto() {
+  const settings = await getOne('settings', 'main');
+  if (!settings || !supabaseClient || !currentSession?.user?.id) return;
+  let updated = { ...settings };
+  if (settings.boatPhoto && (!settings.boatPhotoStoragePath || Date.parse(settings._mediaUpdatedAt || 0) > Date.parse(settings._mediaCloudAt || 0))) {
+    const path = settings.boatPhotoStoragePath || `${currentSession.user.id}/boat/leefke-startbild.jpg`;
+    const { error } = await supabaseClient.storage.from(MEDIA_BUCKET).upload(path, dataUrlToBlob(settings.boatPhoto), { upsert: true, contentType: 'image/jpeg', cacheControl: '3600' });
+    if (error) throw error;
+    updated = { ...updated, boatPhotoStoragePath: path, _mediaCloudAt: new Date().toISOString() };
+    await rawPut('settings', updated);
+  } else if (!settings.boatPhoto && settings.boatPhotoStoragePath) {
+    const { data, error } = await supabaseClient.storage.from(MEDIA_BUCKET).download(settings.boatPhotoStoragePath);
+    if (!error && data) {
+      updated.boatPhoto = await blobToDataUrl(data);
+      await rawPut('settings', updated);
+    }
+  }
+}
+
+async function processMediaDeletes() {
+  const tombstones = await all('syncTombstones');
+  const paths = tombstones.filter(item => item.storagePath).map(item => item.storagePath);
+  if (paths.length && supabaseClient) {
+    const { error } = await supabaseClient.storage.from(MEDIA_BUCKET).remove(paths);
+    if (error) console.warn('Medien konnten nicht vollständig gelöscht werden.', error);
+  }
+}
+
+async function syncMedia(options = {}) {
+  if (mediaSyncInProgress || !navigator.onLine || !currentSession || !supabaseClient) return;
+  const settings = getSettings();
+  if (options.manual !== true && settings.photoAutoSync === false) return;
+  mediaSyncInProgress = true;
+  try {
+    await processMediaDeletes();
+    for (const store of ['photos', 'documents']) {
+      for (const item of await all(store)) {
+        try {
+          if (item.data && (!item.storagePath || Date.parse(item._mediaUpdatedAt || item._updatedAt || 0) > Date.parse(item._mediaCloudAt || 0))) await mediaUploadRecord(store, item);
+          else if (!item.data && item.storagePath) await mediaDownloadRecord(store, item);
+        } catch (error) {
+          console.warn(`Medienabgleich ${store}/${item.id} fehlgeschlagen`, error);
+          await rawPut(store, { ...item, _cloudState: 'error' });
+        }
+      }
+    }
+    await syncBoatPhoto();
+  } finally { mediaSyncInProgress = false; }
+}
+
+async function localRows() {
+  const rows = [];
+  for (const store of syncableStores) {
+    for (const item of await all(store)) rows.push(cloudRowFromRecord(store, item, currentSession.user.id));
+  }
+  return rows;
+}
+
+async function syncNow(options = {}) {
+  if (syncInProgress) { syncRequested = true; return; }
+  if (!supabaseClient || !currentSession?.user?.id || !navigator.onLine) { await updateSyncUI(); return; }
+  const linked = await isLinkedForCurrentUser();
+  if (!linked && !options.force) { await connectDeviceAutomatically({ silent: options.silent }); return; }
+  syncInProgress = true;
+  const dirtyAtStart = await metaGet('dirty');
+  await updateSyncUI();
+  if (!options.silent) setMessage('#syncMessage', 'LEEFKE-Daten werden feldweise abgeglichen …');
+  try {
+    await createAutoBackup('Vor Synchronisierung');
+    const userId = currentSession.user.id;
+    const fetched = await fetchRemoteRecords();
+    const remote = unifiedRemoteRows(fetched);
+    const remoteMap = new Map(remote.map(row => [`${row.record_type}:${row.record_id}`, row]));
+    const tombstones = await all('syncTombstones');
+    const tombMap = new Map(tombstones.map(item => [item.id, item]));
+    suppressSyncTracking = true;
+    try {
+      for (const row of remote) {
+        if (!syncableStores.includes(row.record_type)) continue;
+        const key = `${row.record_type}:${row.record_id}`;
+        const local = await getOne(row.record_type, row.record_id);
+        const localTs = maxRecordTimestamp(local);
+        const tombTs = Date.parse(tombMap.get(key)?.updatedAt || 0) || 0;
+        const remoteTs = remoteTimestamp(row);
+        if (row.deleted_at) {
+          if (remoteTs >= Math.max(localTs, tombTs)) { await rawDel(row.record_type, row.record_id); await rawDel('syncTombstones', key); }
+          continue;
+        }
+        const remotePayload = normalizeRecord(row.record_type, { ...(row.payload || {}), id: row.record_id }, row.updated_at, row.payload?._updatedBy || 'cloud');
+        if (!local) await rawPut(row.record_type, remotePayload);
+        else await rawPut(row.record_type, await mergeRecordFieldwise(row.record_type, local, remotePayload, row.updated_at));
+        if (remoteTs > tombTs) await rawDel('syncTombstones', key);
+      }
+    } finally { suppressSyncTracking = false; }
+
+    const outgoing = [];
+    for (const store of syncableStores) {
+      for (const item of await all(store)) {
+        const key = `${store}:${item.id}`;
+        const remoteRow = remoteMap.get(key);
+        const row = cloudRowFromRecord(store, item, userId);
+        const differs = !remoteRow || comparablePayload(store, row.payload) !== comparablePayload(store, remoteRow.payload || {});
+        if (differs || Date.parse(row.updated_at) > remoteTimestamp(remoteRow)) outgoing.push(row);
+      }
+    }
+    const pendingTombstones = await all('syncTombstones');
+    for (const tombstone of pendingTombstones) {
+      const remoteRow = remoteMap.get(tombstone.id);
+      const tombTs = Date.parse(tombstone.updatedAt) || 0;
+      if (!remoteRow || tombTs >= remoteTimestamp(remoteRow) || !remoteRow.deleted_at) {
+        outgoing.push({ user_id: userId, record_type: tombstone.recordType, record_id: String(tombstone.recordId), payload: { deviceId: tombstone.deviceId, deviceLabel: tombstone.deviceLabel }, updated_at: safeIso(tombstone.updatedAt), deleted_at: safeIso(tombstone.updatedAt) });
+      }
+    }
+    await upsertRows(outgoing);
+    await syncMedia({ manual: false });
+    // Medienpfade nach dem Upload noch einmal übertragen.
+    const mediaRows = [];
+    for (const store of ['photos', 'documents', 'settings']) for (const item of await all(store)) mediaRows.push(cloudRowFromRecord(store, item, userId));
+    await upsertRows(mediaRows);
+    for (const tombstone of pendingTombstones) await rawDel('syncTombstones', tombstone.id);
+    const dirtyNow = await metaGet('dirty');
+    if (!dirtyNow?.value || dirtyNow.changedAt === dirtyAtStart?.changedAt) await setDirty(false); else syncRequested = true;
+    const now = new Date().toISOString();
+    await metaSet('lastSync', { at: now });
+    lastRemoteSummary = { records: remote.length, outgoing: outgoing.length, checkedAt: now };
+    await registerDeviceHeartbeat();
+    await refresh();
+    if (!options.silent) setMessage('#syncMessage', outgoing.length ? `${outgoing.length} Änderung(en) abgeglichen. Alle Felder wurden einzeln geprüft.` : 'Alle LEEFKE-Daten sind auf demselben Stand.', 'success');
+  } catch (error) {
+    suppressSyncTracking = false;
+    console.error('Synchronisierung fehlgeschlagen', error);
+    await setDirty(true);
+    const storageHint = /bucket|storage|row-level|policy|not found/i.test(String(error?.message || '')) ? ' Bitte die SQL-Datei „SUPABASE_SETUP_V6.sql“ einmal in Supabase ausführen.' : '';
+    setMessage('#syncMessage', `Synchronisierung fehlgeschlagen: ${readableAuthError(error)}${storageHint}`, 'error');
+  } finally {
+    syncInProgress = false; await updateSyncUI();
+    if (syncRequested) { syncRequested = false; scheduleSync(250); }
+  }
+}
+
+async function registerDeviceHeartbeat() {
+  if (!currentSession?.user?.id || !supabaseClient || !navigator.onLine) return;
+  if (!await isLinkedForCurrentUser()) return;
+  const device = await getDeviceIdentity();
+  const existing = await getOne('devices', device.id);
+  const lastSeen = Date.parse(existing?.lastSeenAt || 0) || 0;
+  if (Date.now() - lastSeen < 5 * 60 * 1000 && existing?.appVersion === APP_VERSION) return;
+  const now = new Date().toISOString();
+  const record = normalizeRecord('devices', {
+    ...(existing || {}), id: device.id, label: device.label,
+    lastSeenAt: now, appVersion: APP_VERSION
+  }, now, device.id);
+  await rawPut('devices', record);
+  const { error } = await supabaseClient.from('leefke_records').upsert(
+    [cloudRowFromRecord('devices', record, currentSession.user.id)],
+    { onConflict: 'user_id,record_type,record_id' }
+  );
+  if (error) throw error;
+}
+
+function stopRealtimeSubscription() {
+  if (realtimeChannel && supabaseClient) supabaseClient.removeChannel(realtimeChannel);
+  realtimeChannel = null; realtimeState = 'nicht aktiv';
+}
+
+function startRealtimeSubscription() {
+  stopRealtimeSubscription();
+  if (!supabaseClient || !currentSession?.user?.id || !navigator.onLine) return;
+  realtimeState = 'verbindet …'; updateSyncUI();
+  realtimeChannel = supabaseClient.channel(`leefke-records-${currentSession.user.id}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'leefke_records', filter: `user_id=eq.${currentSession.user.id}` }, payload => {
+      const sourceDevice = payload?.new?.payload?._updatedBy || payload?.old?.payload?._updatedBy;
+      getDeviceIdentity().then(device => { if (sourceDevice !== device.id) scheduleSync(120); });
+    })
+    .subscribe(status => {
+      realtimeState = status === 'SUBSCRIBED' ? 'verbunden' : status === 'CHANNEL_ERROR' ? 'Fehler' : status === 'TIMED_OUT' ? 'Zeitüberschreitung' : String(status || '').toLowerCase();
+      updateSyncUI();
+    });
+}
+
+async function verifySyncState() {
+  if (!currentSession || !navigator.onLine) return setMessage('#syncMessage', 'Für die Prüfung wird eine Internetverbindung benötigt.', 'error');
+  setMessage('#syncMessage', 'Lokalen und gemeinsamen Datenstand prüfen …');
+  try {
+    const remoteRows = unifiedRemoteRows(await fetchRemoteRecords());
+    const remoteMap = new Map(remoteRows.filter(row => !row.deleted_at).map(row => [`${row.record_type}:${row.record_id}`, row]));
+    let differences = 0; let localCount = 0;
+    for (const store of syncableStores) for (const item of await all(store)) {
+      localCount += 1;
+      const remote = remoteMap.get(`${store}:${item.id}`);
+      if (!remote || comparablePayload(store, cleanPayload(store, item)) !== comparablePayload(store, remote.payload || {})) differences += 1;
+    }
+    const openConflicts = (await all('conflicts')).filter(item => item.status === 'open').length;
+    setMessage('#syncMessage', differences === 0 && openConflicts === 0 ? `Prüfung erfolgreich: ${localCount} Datensätze stimmen mit der Cloud überein.` : `${differences} Datenabweichung(en), ${openConflicts} offener Konflikt(e). Bitte jetzt vollständig abgleichen.`, differences ? 'error' : 'success');
+  } catch (error) { setMessage('#syncMessage', `Prüfung fehlgeschlagen: ${readableAuthError(error)}`, 'error'); }
+}
+
+async function updateSyncUI() {
+  const loggedIn = Boolean(currentSession?.user);
+  const linked = loggedIn ? await isLinkedForCurrentUser() : false;
+  const dirty = Boolean((await metaGet('dirty'))?.value);
+  const lastSync = await metaGet('lastSync');
+  const tombstones = await all('syncTombstones');
+  const conflicts = (await all('conflicts')).filter(item => item.status === 'open');
+  const statusButton = $('#syncStatusButton'); const statusText = $('#syncStatusText');
+  if ($('#authLoggedOut')) $('#authLoggedOut').hidden = loggedIn;
+  if ($('#authLoggedIn')) $('#authLoggedIn').hidden = !loggedIn;
+  if ($('#initialSyncPanel')) $('#initialSyncPanel').hidden = !(loggedIn && !linked);
+  if ($('#accountEmail')) $('#accountEmail').textContent = currentSession?.user?.email || '—';
+  if ($('#lastSyncText')) $('#lastSyncText').textContent = lastSync?.at ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastSync.at)) : '—';
+  if ($('#deviceNameText')) $('#deviceNameText').textContent = (await getDeviceIdentity()).label;
+  if ($('#realtimeStatusText')) $('#realtimeStatusText').textContent = loggedIn ? realtimeState : 'Nicht angemeldet';
+  if ($('#pendingChangesText')) $('#pendingChangesText').textContent = dirty || tombstones.length ? `${tombstones.length} Löschung(en) / Änderungen warten` : 'Keine';
+  if ($('#syncConflictText')) $('#syncConflictText').textContent = String(conflicts.length);
+  if ($('#autoSyncText')) $('#autoSyncText').textContent = loggedIn && linked ? (navigator.onLine ? 'Echtzeit + Sicherheitsprüfung alle 20 Sekunden' : 'Wartet auf Internet') : 'Noch nicht aktiv';
+  let label = 'Nicht angemeldet', detail = 'Cloud-Synchronisierung ist nicht aktiv', className = 'sync-status logged-out';
+  if (loggedIn && !navigator.onLine) { label = 'Offline · lokal gespeichert'; detail = dirty ? 'Änderungen warten auf Internet' : 'Offline – letzter Stand bleibt verfügbar'; className = 'sync-status offline'; }
+  else if (loggedIn && !linked) { label = deviceConnectInProgress ? 'Gerät wird verbunden …' : 'Gerät verbinden'; detail = 'Lokale und gemeinsame Daten werden automatisch zusammengeführt'; className = 'sync-status attention'; }
+  else if (syncInProgress) { label = 'Synchronisiere …'; detail = 'Felder, Löschungen und Medien werden abgeglichen'; className = 'sync-status working'; }
+  else if (conflicts.length) { label = `${conflicts.length} Konflikt${conflicts.length === 1 ? '' : 'e'}`; detail = 'Bitte im Änderungsverlauf entscheiden'; className = 'sync-status attention'; }
+  else if (loggedIn && dirty) { label = 'Änderungen ausstehend'; detail = 'Lokale Änderungen werden gleich übertragen'; className = 'sync-status attention'; }
+  else if (loggedIn) { label = realtimeState === 'verbunden' ? 'Live synchronisiert' : 'Synchronisiert'; detail = 'Alle Geräte arbeiten gleichberechtigt'; className = 'sync-status synced'; }
+  if (statusButton) { statusButton.textContent = label; statusButton.className = `status ${className}`; }
+  if (statusText) statusText.textContent = detail;
+  const badge = $('#conflictNavBadge'); if (badge) { badge.hidden = conflicts.length === 0; badge.textContent = String(conflicts.length); }
+}
+
+function formatChangeValue(value) {
+  if (value === null || value === undefined || value === '') return 'leer';
+  if (typeof value === 'object') return JSON.stringify(value).slice(0, 140);
+  return String(value).slice(0, 180);
+}
+
+function renderHistory() {
+  const conflicts = [...(state.conflicts || [])].filter(item => item.status === 'open').sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  const logs = [...(state.changeLog || [])].sort((a,b) => Date.parse(b.changedAt)-Date.parse(a.changedAt));
+  const today = dateInputValue();
+  $('#openConflictCount').textContent = conflicts.length;
+  $('#changesTodayCount').textContent = logs.filter(item => String(item.changedAt).startsWith(today)).length;
+  $('#lastChangeDevice').textContent = logs[0]?.deviceLabel || '—';
+  $('#lastChangeTime').textContent = logs[0]?.changedAt ? new Date(logs[0].changedAt).toLocaleString('de-DE') : '—';
+  $('#conflictList').innerHTML = conflicts.map(item => `<div class="conflict-entry"><div class="conflict-icon">!</div><div><h4>${esc(STORE_LABELS[item.store] || item.store)} · ${esc(FIELD_LABELS[item.field] || item.field)}</h4><p>${esc(item.recordId)} · automatisch wurde zunächst „${item.autoWinner === 'remote' ? 'Cloud' : 'dieses Gerät'}“ verwendet.</p><div class="conflict-values"><div><small>${esc(item.localDevice || 'Gerät')} · ${new Date(item.localTime).toLocaleString('de-DE')}</small><strong>${esc(formatChangeValue(item.localValue))}</strong></div><div><small>${esc(item.remoteDevice || 'Cloud')} · ${new Date(item.remoteTime).toLocaleString('de-DE')}</small><strong>${esc(formatChangeValue(item.remoteValue))}</strong></div></div></div><div class="actions"><button onclick="resolveConflict('${item.id}','local')">Linken Wert nehmen</button><button class="primary" onclick="resolveConflict('${item.id}','remote')">Rechten Wert nehmen</button></div></div>`).join('') || '<div class="empty-state">Keine offenen Konflikte. Alle Eingaben konnten eindeutig zusammengeführt werden.</div>';
+  const filter = $('#historyStoreFilter')?.value || '';
+  const filtered = filter ? logs.filter(item => item.store === filter) : logs;
+  $('#changeLogList').innerHTML = filtered.slice(0, 150).map(item => {
+    const fields = (item.fields || []).slice(0, 5).map(field => FIELD_LABELS[field] || field).join(', ');
+    const icon = item.action === 'delete' ? '×' : item.action === 'create' ? '+' : '✎';
+    return `<div class="change-entry"><div class="change-icon">${icon}</div><div><h4>${esc(item.title || STORE_LABELS[item.store] || item.store)}</h4><p>${esc(STORE_LABELS[item.store] || item.store)} · ${item.action === 'create' ? 'angelegt' : item.action === 'delete' ? 'gelöscht' : 'geändert'}${fields ? `: ${esc(fields)}` : ''}</p><p>${esc(item.deviceLabel || item.deviceId || 'Gerät')} · ${new Date(item.changedAt).toLocaleString('de-DE')}${item.undone ? ' · rückgängig gemacht' : ''}</p></div><div class="actions">${!item.undone ? `<button onclick="undoChange('${item.id}')">Rückgängig</button>` : ''}</div></div>`;
+  }).join('') || '<div class="empty-state">Noch keine Änderungen protokolliert.</div>';
+}
+
+async function resolveConflict(id, choice) {
+  const conflict = await getOne('conflicts', id); if (!conflict) return;
+  const record = await getOne(conflict.store, conflict.recordId); if (!record) return;
+  const value = choice === 'local' ? conflict.localValue : conflict.remoteValue;
+  await put(conflict.store, { ...record, [conflict.field]: value });
+  await put('conflicts', { ...conflict, status: 'resolved', resolution: choice, resolvedAt: new Date().toISOString() }, { skipLog: true });
+  await refresh(); toast('Konflikt entschieden');
+}
+window.resolveConflict = resolveConflict;
+
+async function undoChange(id) {
+  const entry = await getOne('changeLog', id); if (!entry || entry.undone) return;
+  if (!confirm('Diese Änderung rückgängig machen? Die Rücknahme wird selbst wieder synchronisiert.')) return;
+  if (entry.action === 'create') await del(entry.store, entry.recordId, { skipLog: true });
+  else if (entry.action === 'delete' && entry.before) await put(entry.store, entry.before, { skipLog: true });
+  else if (entry.before) await put(entry.store, entry.before, { skipLog: true });
+  await rawPut('changeLog', { ...entry, undone: true, undoneAt: new Date().toISOString() });
+  await setDirty(true); scheduleSync(300); await refresh(); toast('Änderung rückgängig gemacht');
+}
+window.undoChange = undoChange;
+
+async function undoLastOwnChange() {
+  const device = await getDeviceIdentity();
+  const entry = [...(state.changeLog || [])].filter(item => item.deviceId === device.id && !item.undone).sort((a,b) => Date.parse(b.changedAt)-Date.parse(a.changedAt))[0];
+  if (!entry) return toast('Keine eigene Änderung zum Rückgängigmachen');
+  undoChange(entry.id);
+}
+
+function daysUntil(date) { return date ? Math.ceil((new Date(`${date}T12:00:00`) - new Date()) / 86400000) : null; }
+
+function renderOperations() {
+  const inventory = [...(state.inventory || [])].sort((a,b) => String(a.category).localeCompare(String(b.category)) || String(a.name).localeCompare(String(b.name)));
+  const safety = [...(state.safety || [])].sort((a,b) => String(a.dueDate || '9999').localeCompare(String(b.dueDate || '9999')));
+  const documents = [...(state.documents || [])].sort((a,b) => String(b.date || '').localeCompare(String(a.date || '')));
+  const low = inventory.filter(item => num(item.minimum) > 0 && num(item.quantity) < num(item.minimum));
+  const due = safety.filter(item => item.status !== 'ok' || (daysUntil(item.dueDate) !== null && daysUntil(item.dueDate) <= 30));
+  $('#inventoryLowCount').textContent = low.length; $('#safetyDueCount').textContent = due.length; $('#documentCount').textContent = documents.length; $('#operationMaintCount').textContent = state.maintenance.filter(item => !item.done).length;
+  $('#inventoryList').innerHTML = inventory.map(item => { const isLow = num(item.minimum) > 0 && num(item.quantity) < num(item.minimum); return `<div class="inventory-row ${isLow ? 'low' : ''}"><div><strong>${esc(item.name)}</strong><small>${esc(item.category || '')}${item.location ? ` · ${esc(item.location)}` : ''}${item.note ? ` · ${esc(item.note)}` : ''}</small></div><div><span class="stock-chip ${isLow ? 'low' : 'ok'}">${dec2(item.quantity)} ${esc(item.unit || '')}</span><div class="actions"><button onclick="editOperation('inventory','${item.id}')">Bearbeiten</button><button onclick="removeItem('inventory','${item.id}')">×</button></div></div></div>`; }).join('') || '<div class="empty-state">Noch keine Vorräte eingetragen.</div>';
+  $('#safetyList').innerHTML = safety.map(item => { const remaining = daysUntil(item.dueDate); const isDue = item.status !== 'ok' || (remaining !== null && remaining <= 30); const status = item.status === 'replace' ? 'replace' : isDue ? 'due' : 'ok'; return `<div class="safety-row ${isDue ? 'due' : ''}"><div><strong>${esc(item.name)}</strong><small>${item.dueDate ? `Prüfung/Ablauf ${fmtDate(item.dueDate)}${remaining !== null ? ` · ${remaining} Tage` : ''}` : 'Kein Ablaufdatum'}${item.note ? ` · ${esc(item.note)}` : ''}</small></div><div><span class="due-chip ${status}">${status === 'ok' ? 'in Ordnung' : status === 'replace' ? 'ersetzen' : 'fällig'}</span><div class="actions"><button onclick="editOperation('safety','${item.id}')">Bearbeiten</button><button onclick="removeItem('safety','${item.id}')">×</button></div></div></div>`; }).join('') || '<div class="empty-state">Noch keine Sicherheitsprüfungen eingetragen.</div>';
+  $('#documentList').innerHTML = documents.map(item => `<div class="document-row"><div class="document-icon">${item.mimeType?.includes('pdf') ? 'PDF' : '▧'}</div><div><strong>${esc(item.title)}</strong><div class="meta">${esc(item.category || '')}${item.date ? ` · ${fmtDate(item.date)}` : ''}${item.fileName ? ` · ${esc(item.fileName)}` : ''}</div>${item.note ? `<div class="meta">${esc(item.note)}</div>` : ''}</div><div class="actions"><span class="cloud-chip ${item.storagePath ? 'synced' : item._cloudState === 'error' ? 'error' : 'pending'}">${item.storagePath ? 'Cloud' : item._cloudState === 'error' ? 'Fehler' : 'lokal'}</span><button onclick="openDocument('${item.id}')">Öffnen</button><button onclick="editOperation('documents','${item.id}')">Bearbeiten</button><button onclick="removeItem('documents','${item.id}')">×</button></div></div>`).join('') || '<div class="empty-state">Noch keine Dokumente abgelegt.</div>';
+}
+
+function editOperation(store, id) {
+  const item = state[store]?.find(row => row.id === id); if (!item) return;
+  const form = $(`#${store === 'documents' ? 'document' : store}Form`); if (!form) return;
+  fillForm(form, item); form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+window.editOperation = editOperation;
+
+async function openDocument(id) {
+  let item = await getOne('documents', id); if (!item) return;
+  if (!item.data && item.storagePath) { try { item = await mediaDownloadRecord('documents', item); } catch (error) { return alert(`Dokument konnte nicht geladen werden: ${error.message}`); } }
+  if (!item.data) return alert('Die Datei ist auf diesem Gerät noch nicht verfügbar. Bitte online synchronisieren.');
+  const win = window.open(); if (win) win.location = item.data; else location.href = item.data;
+}
+window.openDocument = openDocument;
+
+function photoRelationOptions() {
+  const select = $('#photoRelatedId'); if (!select) return;
+  const type = $('#photoForm')?.elements.relatedType?.value || 'day';
+  let items = [];
+  if (type === 'day') items = state.days.map(item => ({ id: item.id, label: `${fmtDate(item.date)} · ${item.title || `${item.fromPort || ''} → ${item.toPort || ''}`}` }));
+  if (type === 'port') items = state.ports.map(item => ({ id: item.id, label: item.name }));
+  select.innerHTML = '<option value="">Automatisch über Datum / ohne festen Bezug</option>' + items.map(item => `<option value="${item.id}">${esc(item.label)}</option>`).join('');
+}
+
+function renderPhotos() {
+  const photos = [...(state.photos || [])].sort((a,b) => (b.created || 0)-(a.created || 0));
+  $('#photoGrid').innerHTML = photos.map(item => `<figure class="photo ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}"><figcaption><strong>${esc(item.caption || 'LEEFKE')}</strong><div class="meta">${fmtDate(item.date)}</div></figcaption><div class="photo-actions"><button onclick="setFeaturedPhoto('${item.id}')">${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild'}</button><button onclick="syncPhotosNow()">Cloud abgleichen</button></div></figure>`).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
+  const pending = photos.filter(item => !item.storagePath || item._cloudState === 'error').length;
+  if ($('#photoCloudStatus')) $('#photoCloudStatus').textContent = currentSession ? (pending ? `${pending} Foto(s) warten auf den Cloud-Abgleich.` : 'Alle Fotos sind im privaten LEEFKE-Speicher verfügbar.') : 'Anmelden, um Fotos auf allen Geräten verfügbar zu machen.';
+  if ($('#photoAutoSync')) $('#photoAutoSync').checked = getSettings().photoAutoSync !== false;
+  photoRelationOptions();
+}
+
+async function setFeaturedPhoto(id) {
+  const target = await getOne('photos', id); if (!target) return;
+  const currently = target.featured === true || target.featured === 'true';
+  for (const photo of state.photos.filter(item => item.date === target.date && item.id !== id && (item.featured === true || item.featured === 'true'))) await put('photos', { ...photo, featured: false });
+  await put('photos', { ...target, featured: !currently }); await refresh();
+}
+window.setFeaturedPhoto = setFeaturedPhoto;
+async function syncPhotosNow() { await syncMedia({ manual: true }); await syncNow(); await refresh(); toast('Fotos abgeglichen'); }
+window.syncPhotosNow = syncPhotosNow;
+
+function renderAutoBackups() {
+  const backups = [...(state.autoBackups || [])].sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  $('#autoBackupList').innerHTML = backups.map(item => `<div class="backup-row"><div><strong>${esc(item.reason)}</strong><small>${new Date(item.createdAt).toLocaleString('de-DE')} · Version ${esc(item.version)} · ${(num(item.size)/1024/1024).toLocaleString('de-DE',{maximumFractionDigits:1})} MB${item.mediaOmitted ? ' · Medien ausgelassen' : ''}</small></div><div class="actions"><button onclick="downloadAutoBackup('${item.id}')">Herunterladen</button><button onclick="restoreAutoBackup('${item.id}')">Wiederherstellen</button><button onclick="removeAutoBackup('${item.id}')">×</button></div></div>`).join('') || '<div class="empty-state">Noch kein automatischer Sicherungspunkt.</div>';
+}
+
+function maintenanceDueInfo(item) {
+  const settings = getSettings();
+  const dateDays = daysUntil(item.dueDate);
+  const hoursLeft = item.dueHours ? num(item.dueHours) - num(settings.currentEngineHours) : null;
+  const due = !item.done && ((dateDays !== null && dateDays <= 30) || (hoursLeft !== null && hoursLeft <= 20));
+  return { dateDays, hoursLeft, due };
+}
+
+function renderMaintenance() {
+  $('#maintenanceList').innerHTML = state.maintenance.map(item => {
+    const info = maintenanceDueInfo(item);
+    const details = [item.engineHours ? `${dec(item.engineHours)} h` : '', item.cost ? eur(item.cost) : '', item.dueDate ? `fällig ${fmtDate(item.dueDate)}${info.dateDays !== null ? ` (${info.dateDays} Tage)` : ''}` : '', item.dueHours ? `bei ${dec(item.dueHours)} h${info.hoursLeft !== null ? ` (${dec(info.hoursLeft)} h verbleibend)` : ''}` : ''].filter(Boolean).join(' · ');
+    return card(item, 'maintenance', `<div class="meta">${fmtDate(item.date)} · ${esc(item.category || '')}</div><h3>${esc(item.title)}</h3><span class="due-chip ${item.done ? 'ok' : info.due ? 'due' : 'ok'}">${item.done ? 'erledigt' : info.due ? 'bald fällig' : 'offen'}</span><p>${esc(item.note || '')}</p><div class="meta">${details}</div>`);
+  }).join('') || '<div class="card muted">Noch keine Wartungseinträge.</div>';
+}
+
+async function createMaintenanceTemplates() {
+  const settings = getSettings(); const now = dateInputValue(); const currentHours = num(settings.currentEngineHours);
+  const templates = [
+    ['Motor · Perkins M135','Motoröl und Ölfilter',150,12],['Dieselanlage','Drei Dieselfilter kontrollieren / wechseln',150,12],['Motor · Perkins M135','Impeller kontrollieren / wechseln',200,12],['Motor · Perkins M135','Keilriemen kontrollieren',100,6],['Sicherheit','Rettungsinsel Wartung',0,36],['Sicherheit','Feuerlöscher Prüfung',0,24]
+  ];
+  for (const [category,title,hours,months] of templates) {
+    if (state.maintenance.some(item => item.title === title && !item.done)) continue;
+    const dueDate = new Date(); dueDate.setMonth(dueDate.getMonth()+months);
+    await put('maintenance',{id:uid(),date:now,category,title,engineHours:currentHours||'',done:false,dueDate:dateInputValue(dueDate),dueHours:hours&&currentHours?currentHours+hours:'',cost:'',note:'Automatisch angelegter, frei bearbeitbarer LEEFKE-Wartungspunkt.'});
+  }
+  await refresh(); toast('LEEFKE-Wartungsplan angelegt');
+}
+
+function bearingBetween(a,b) {
+  const rad=Math.PI/180, lat1=a[0]*rad, lat2=b[0]*rad, dLon=(b[1]-a[1])*rad;
+  const y=Math.sin(dLon)*Math.cos(lat2), x=Math.cos(lat1)*Math.sin(lat2)-Math.sin(lat1)*Math.cos(lat2)*Math.cos(dLon);
+  return (Math.atan2(y,x)/rad+360)%360;
+}
+function angleDifference(a,b){return Math.abs(((a-b+540)%360)-180)}
+function relativeSeaLabel(course, sourceDirection) {
+  if (sourceDirection === null || sourceDirection === undefined) return 'unbekannt';
+  const diff=angleDifference(course,sourceDirection);
+  if (diff<35) return 'von vorn'; if(diff<70) return 'schräg von vorn'; if(diff<110) return 'quer'; if(diff<150) return 'schräg von achtern'; return 'von achtern';
+}
+function routeComfort(hour, course) {
+  const wave=num(hour.waveHeight), period=num(hour.wavePeriod), wind=num(hour.windSpeed), rel=angleDifference(course,finiteOrNull(hour.waveDirection)??course);
+  let score=0; const reasons=[];
+  if(wave>=1.5){score+=4;reasons.push('Welle ab 1,5 m')}else if(wave>=1.0){score+=3;reasons.push('Welle um 1 m')}else if(wave>=.65){score+=2;reasons.push('spürbare Welle')}else if(wave>=.35)score+=1;
+  if(period&&period<3.5&&wave>.5){score+=2;reasons.push('kurze Wellenperiode')}else if(period>=6)score-=1;
+  if(wind>=25){score+=3;reasons.push('starker Wind')}else if(wind>=18){score+=2;reasons.push('frischer Wind')}else if(wind>=13)score+=1;
+  if(rel>70&&rel<110&&wave>.6){score+=1;reasons.push('Welle etwa quer')}
+  if(score<=1)return{className:'calm',label:'ruhig bis moderat',reason:reasons.join(', ')||'niedrige Werte'};
+  if(score<=3)return{className:'attention',label:'aufmerksam fahren',reason:reasons.join(', ')||'spürbare Bedingungen'};
+  if(score<=5)return{className:'uncomfortable',label:'unangenehm möglich',reason:reasons.join(', ')};
+  return{className:'critical',label:'kritisch prüfen',reason:reasons.join(', ')};
+}
+function sampleRoutePoints(gpx,count=7){
+  const points=gpx.points||[]; if(points.length<=count)return points.map((point,index)=>({point,index,distance:index?null:0}));
+  const cumulative=[0]; for(let i=1;i<points.length;i++)cumulative.push(cumulative[i-1]+haversine(points[i-1],points[i]));
+  const total=cumulative.at(-1); const samples=[];
+  for(let s=0;s<count;s++){const target=total*s/(count-1);let index=cumulative.findIndex(v=>v>=target);if(index<0)index=points.length-1;samples.push({point:points[index],index,distance:cumulative[index]});}
+  return samples;
+}
+async function fetchRoutePointForecast(point,date,time){
+  const weatherVariables='wind_speed_10m,wind_direction_10m,wind_gusts_10m,weather_code,temperature_2m';
+  const marineVariables='wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,ocean_current_velocity,ocean_current_direction';
+  const w=`https://api.open-meteo.com/v1/forecast?latitude=${point[0]}&longitude=${point[1]}&hourly=${weatherVariables}&timezone=${encodeURIComponent(WEATHER_TIMEZONE)}&wind_speed_unit=kn&start_date=${date}&end_date=${date}`;
+  const m=`https://marine-api.open-meteo.com/v1/marine?latitude=${point[0]}&longitude=${point[1]}&hourly=${marineVariables}&timezone=${encodeURIComponent(WEATHER_TIMEZONE)}&start_date=${date}&end_date=${date}&cell_selection=sea`;
+  const [wr,mr]=await Promise.allSettled([fetch(w).then(r=>r.ok?r.json():Promise.reject()),fetch(m).then(r=>r.ok?r.json():Promise.reject())]);
+  const hours=mergeForecastHours(wr.status==='fulfilled'?wr.value:null,mr.status==='fulfilled'?mr.value:null,date); if(!hours.length)return null;
+  const target=new Date(`${date}T${time}:00`).getTime(); return hours.reduce((best,h)=>Math.abs(new Date(h.time).getTime()-target)<Math.abs(new Date(best.time).getTime()-target)?h:best,hours[0]);
+}
+async function analyzeRouteWeather(event){
+  event?.preventDefault(); const gpx=state.gpx.find(item=>item.id===$('#routeWeatherGpx').value); if(!gpx)return setMessage('#routeWeatherState','Bitte eine GPX-Route auswählen.','error');
+  const date=$('#routeWeatherDate').value,time=$('#routeWeatherTime').value,speed=num($('#routeWeatherSpeed').value)||7.5;if(!date||!time)return;
+  if(!navigator.onLine)return setMessage('#routeWeatherState','Für eine neue Routenauswertung wird Internet benötigt.','error');
+  setMessage('#routeWeatherState','Wetter an mehreren Punkten der Route wird geladen …');
+  const samples=sampleRoutePoints(gpx,7); const start=new Date(`${date}T${time}:00`); const results=[];
+  for(let i=0;i<samples.length;i++){
+    const sample=samples[i]; const eta=new Date(start.getTime()+(sample.distance/speed)*3600000); const etaDate=dateInputValue(eta),etaTime=eta.toTimeString().slice(0,5);
+    const hour=await fetchRoutePointForecast(sample.point,etaDate,etaTime); const next=samples[Math.min(i+1,samples.length-1)].point; const prev=samples[Math.max(0,i-1)].point; const course=bearingBetween(i===samples.length-1?prev:sample.point,i===samples.length-1?sample.point:next); const comfort=hour?routeComfort(hour,course):{className:'attention',label:'keine Daten',reason:''};
+    results.push({index:i,point:sample.point,distance:sample.distance,eta:eta.toISOString(),etaLabel:eta.toLocaleString('de-DE',{weekday:'short',hour:'2-digit',minute:'2-digit'}),course,hour,comfort});
+  }
+  const record={id:`route-weather:${gpx.id}:${date}:${time}`,gpxId:gpx.id,gpxName:gpx.name,date,departTime:time,speed,createdAt:new Date().toISOString(),samples:results}; await put('routeWeather',record); renderRouteWeather(record); await refresh(); setMessage('#routeWeatherState','Routenwetter geladen und offline gespeichert.','success');
+}
+function renderRouteWeather(record){
+  if(!record)return; const results=record.samples||[]; const worst=results.reduce((best,r)=>['calm','attention','uncomfortable','critical'].indexOf(r.comfort.className)>['calm','attention','uncomfortable','critical'].indexOf(best.comfort.className)?r:best,results[0]||{comfort:{className:'calm'}}); const maxWave=Math.max(...results.map(r=>num(r.hour?.waveHeight)),0); const maxWind=Math.max(...results.map(r=>num(r.hour?.windSpeed)),0); const end=results.at(-1)?.eta;
+  $('#routeWeatherSummary').innerHTML=`<div><span>Route</span><strong>${esc(record.gpxName)}</strong></div><div><span>Ankunft etwa</span><strong>${end?new Date(end).toLocaleString('de-DE',{weekday:'short',hour:'2-digit',minute:'2-digit'}):'—'}</strong></div><div><span>Max. Welle</span><strong>${dec2(maxWave)} m</strong></div><div><span>Gesamteindruck</span><strong>${esc(worst?.comfort?.label||'—')}</strong></div>`;
+  $('#routeWeatherRows').innerHTML=results.map((r,i)=>{const h=r.hour;return `<tr><td><strong>${i===0?'Start':i===results.length-1?'Ziel':`Punkt ${i+1}`}</strong><small>${esc(r.etaLabel)} · ${dec(r.distance)} sm</small></td><td>${Math.round(r.course)}°<small>${windDirectionText(r.course)}</small></td><td>${h?`${windDirectionText(h.windDirection)} ${dec2(h.windSpeed)} kn`:'—'}<small>${h?`${beaufortFromKnots(h.windSpeed)} Bft · Böen ${dec2(h.windGust)} kn`:''}</small></td><td>${h&&h.waveHeight!==null?`${dec2(h.waveHeight)} m aus ${windDirectionText(h.waveDirection)}`:'—'}<small>${h&&h.swellHeight!==null?`Dünung ${dec2(h.swellHeight)} m`:''}</small></td><td>${h&&h.wavePeriod?`${dec2(h.wavePeriod)} s`:'—'}<small>${h&&h.wavePeriod?`${dec2(60/h.wavePeriod)} Wellen/min`:''}</small></td><td>${h?relativeSeaLabel(r.course,h.waveDirection):'—'}</td><td><span class="route-rating ${r.comfort.className}">${esc(r.comfort.label)}</span><small>${esc(r.comfort.reason||'')}</small></td></tr>`;}).join('');
+}
+
+function renderRouteWeatherOptions(){
+  const select=$('#routeWeatherGpx'); if(!select)return; const current=select.value; select.innerHTML='<option value="">Route auswählen</option>'+state.gpx.map(item=>`<option value="${item.id}">${esc(item.name)} (${dec(item.distanceNm)} sm)</option>`).join(''); if(state.gpx.some(item=>item.id===current))select.value=current; if(!$('#routeWeatherDate').value)$('#routeWeatherDate').value=dateInputValue(); const latest=[...(state.routeWeather||[])].sort((a,b)=>Date.parse(b.createdAt)-Date.parse(a.createdAt))[0]; if(latest)renderRouteWeather(latest);
+}
+
+function selectedBshStation(snapshot){
+  const name=normalizePlaceName(snapshot?.locationName||'').toLowerCase();
+  if(name.includes('bremerhaven'))return BSH_STATIONS.bremerhaven;if(name.includes('cuxhaven'))return BSH_STATIONS.cuxhaven;if(name.includes('helgoland'))return BSH_STATIONS.helgoland;if(name.includes('lemwerder'))return BSH_STATIONS.lemwerder;return null;
+}
+async function loadOfficialBsh(snapshot){
+  const station=selectedBshStation(snapshot); const status=$('#bshOfficialStatus'),eventsBox=$('#bshOfficialEvents'),link=$('#bshOfficialLink'); if(!status||!link)return;
+  if(!station){status.innerHTML='<strong>Kein fester BSH-Ort zugeordnet</strong><span>Für Kartenpunkte oder freie Etappenorte bitte die nächstgelegene Station auf der BSH-Seite wählen.</span>';eventsBox.innerHTML='';link.href='https://wasserstand.bsh.de/';return;}
+  link.href=`https://wasserstand.bsh.de/${station.slug}`; status.innerHTML=`<strong>${esc(station.name)}</strong><span>Amtliche BSH-Seite für Wasserstandsvorhersage und Gezeiten. Gewähltes Datum: ${fmtDate(snapshot.date)}.</span>`;
+  const modelEvents=tideExtrema(snapshot.hours||[]); eventsBox.innerHTML=modelEvents.slice(0,4).map(event=>`<div><small>MODELLIERTE TIDE</small><strong>${event.type} ca. ${formatTime(event.time)}</strong><span>${valueText(event.value,'m',2)}</span></div>`).join('');
+  // Best effort: aktuelle amtliche PDF auslesen. Bei CORS oder Formatänderung bleibt der offizielle Link nutzbar.
+  try{
+    if(!navigator.onLine)return;
+    const pdfjs=await import('https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.min.mjs');
+    pdfjs.GlobalWorkerOptions.workerSrc='https://cdn.jsdelivr.net/npm/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs';
+    const pdf=await pdfjs.getDocument({url:'https://wasserstand.bsh.de/data/nordsee/Wasserstandsvorhersage.pdf'}).promise; let text='';
+    for(let pageNo=1;pageNo<=pdf.numPages;pageNo++){const page=await pdf.getPage(pageNo);const content=await page.getTextContent();text+=' '+content.items.map(item=>item.str).join(' ');}
+    const normalized=text.replace(/\s+/g,' ');
+    const documentDates=[...new Set([...normalized.matchAll(/\b(\d{2}\.\d{2}\.\d{4})\b/g)].map(match=>match[1]))].slice(0,2);
+    const targetDate=String(snapshot.date||'').split('-').reverse().join('.');
+    if(!documentDates.includes(targetDate)) {
+      status.innerHTML=`<strong>${esc(station.name)}</strong><span>Für ${fmtDate(snapshot.date)} liegt in der aktuellen BSH-Kurzvorhersage kein Datensatz. Die verlinkte Stationsseite zeigt die amtlichen Werte für den gewählten Zeitraum.</span>`;
+      return;
+    }
+    const startIndex=normalized.indexOf(station.pdfName); if(startIndex<0)return;
+    const chunk=normalized.slice(startIndex,startIndex+250);
+    const times=[...chunk.matchAll(/\b([0-2]\d:[0-5]\d)\b/g)].map(match=>match[1]).slice(0,4); if(!times.length)return;
+    const types=['HW','NW','HW','NW'];
+    const secondDate=documentDates[1]||documentDates[0];
+    const firstHour=Number(times[0].slice(0,2));
+    const eventDates=[firstHour<6?secondDate:documentDates[0],secondDate,secondDate,secondDate];
+    const assigned=times.map((time,index)=>({time,type:types[index]||'Tide',date:eventDates[index]})).filter(event=>event.date===targetDate);
+    if(!assigned.length)return;
+    eventsBox.innerHTML=assigned.map(event=>`<div><small>AMTLICHES BSH</small><strong>${event.type} ${event.time}</strong><span>${event.date} · aktuelle BSH-Vorhersage</span></div>`).join('');
+    status.innerHTML=`<strong>${esc(station.name)}</strong><span>Amtliche BSH-Zeiten für ${fmtDate(snapshot.date)} wurden aus der aktuellen, manuell geprüften Kurzvorhersage geladen.</span>`;
+  }catch(error){console.info('BSH-PDF konnte nicht automatisch ausgewertet werden.',error);}
+}
+
+function renderWeatherSnapshot(snapshot, requestedIndex = null) {
+  // Originalfunktion wurde weiter oben definiert. Diese v6-Fassung bildet denselben Inhalt ab und ergänzt die BSH-Quelle.
+  if (!snapshot) return;
+  activeWeatherSnapshot = snapshot;
+  const hours = snapshot.hours || mergeForecastHours(snapshot.weather, snapshot.marine, snapshot.date);
+  if (!hours.length) return;
+  const index = requestedIndex === null || requestedIndex === undefined ? chooseWeatherHour(hours, snapshot.date) : clamp(Number(requestedIndex), 0, hours.length - 1);
+  activeWeatherHourIndex = index; const hour = hours[index]; const condition = weatherCodeInfo(hour.weatherCode); const bft = beaufortFromKnots(hour.windSpeed); const current = currentKnots(hour); const tide = tideStateAt(hours,index); const events=tideExtrema(hours); const offline=snapshot.offline?'<span class="weather-offline-badge">offline gespeichert</span>':'';
+  $('#weatherResults').hidden=false; $('#weatherHeadline').innerHTML=`${esc(snapshot.locationName)} · ${fmtDate(snapshot.date)}${offline}`; $('#weatherSubline').textContent=`Bezugszeit ${formatTime(hour.time)} Uhr · geladen ${snapshot.loadedAt?new Date(snapshot.loadedAt).toLocaleString('de-DE'):'—'} · ${coordinateLabel(snapshot.latitude,snapshot.longitude)}`;
+  $('#wxWind').textContent=valueText(hour.windSpeed,'kn',1); $('#wxWindDir').textContent=`aus ${windDirectionText(hour.windDirection)} · ${Math.round(num(hour.windDirection))}°`; $('#wxGust').textContent=valueText(hour.windGust,'kn',1); $('#wxBeaufort').textContent=`Wind ${bft} Bft`; $('#wxWave').textContent=valueText(hour.waveHeight,'m',1); $('#wxWaveDir').textContent=hour.waveDirection===null?'—':`aus ${windDirectionText(hour.waveDirection)}`; $('#wxPeriod').textContent=valueText(hour.wavePeriod,'s',1); $('#wxFrequency').textContent=hour.wavePeriod?`${dec2(60/hour.wavePeriod)} Wellen/min`:'—'; $('#wxSwell').textContent=valueText(hour.swellHeight,'m',1); $('#wxSwellDir').textContent=hour.swellDirection===null?'—':`aus ${windDirectionText(hour.swellDirection)}`; $('#wxCurrent').textContent=current===null?'—':`${dec2(current)} kn`; $('#wxCurrentDir').textContent=current===null?'—':`nach ${windDirectionText(hour.currentDirection)}`; $('#wxTemperature').textContent=valueText(hour.temperature,'°C',1); $('#wxCondition').textContent=`${condition[0]} ${condition[1]} · Regen ${hour.precipitationProbability??'—'} %`; $('#wxTideState').textContent=tide.state; $('#wxNextTide').textContent=tide.next?`${tide.next.type} ca. ${formatTime(tide.next.time)}`:'kein Scheitelpunkt erkannt';
+  renderTideChart(hours,events); $('#tideEvents').innerHTML=events.map(event=>`<div><strong>${event.type}</strong><span>${formatTime(event.time)} Uhr</span><small>${valueText(event.value,'m',2)}</small></div>`).join('')||'<span class="meta">Keine modellierten Scheitelpunkte erkannt.</span>'; renderPegel(snapshot.pegel);
+  $('#weatherHourly').innerHTML=hours.map((item,itemIndex)=>{const c=weatherCodeInfo(item.weatherCode);const itemCurrent=currentKnots(item);return `<tr data-weather-index="${itemIndex}" class="${itemIndex===index?'selected':''}"><td><strong>${formatTime(item.time)}</strong><small>${c[0]} ${c[1]}</small></td><td><strong>${windDirectionText(item.windDirection)} ${valueText(item.windSpeed,'kn',1)}</strong><small>${beaufortFromKnots(item.windSpeed)} Bft</small></td><td>${valueText(item.windGust,'kn',1)}</td><td><strong>${valueText(item.waveHeight,'m',1)}</strong><small>${windDirectionText(item.waveDirection)}</small></td><td><strong>${valueText(item.wavePeriod,'s',1)}</strong><small>${item.wavePeriod?`${(60/item.wavePeriod).toFixed(1).replace('.',',')}/min`:'—'}</small></td><td><strong>${valueText(item.swellHeight,'m',1)}</strong><small>${windDirectionText(item.swellDirection)}</small></td><td><strong>${itemCurrent===null?'—':`${itemCurrent.toFixed(1).replace('.',',')} kn`}</strong><small>${itemCurrent===null?'—':`nach ${windDirectionText(item.currentDirection)}`}</small></td><td><strong>${valueText(item.seaLevel,'m',2)}</strong><small>${tideStateAt(hours,itemIndex).state}</small></td></tr>`;}).join('');
+  setWeatherLocation({name:snapshot.locationName,latitude:snapshot.latitude,longitude:snapshot.longitude,source:snapshot.source,routeId:snapshot.routeId,routeSide:snapshot.routeSide,zoom:11},{pan:false});
+  loadOfficialBsh(snapshot);
+}
+
+function reportRouteSvg() {
+  const routes=state.gpx.filter(item=>item.points?.length); if(!routes.length)return '<div class="empty-state">Keine GPX-Route für die Kartenübersicht vorhanden.</div>';
+  const points=routes.flatMap(route=>route.points); const lats=points.map(p=>p[0]),lons=points.map(p=>p[1]);const minLat=Math.min(...lats),maxLat=Math.max(...lats),minLon=Math.min(...lons),maxLon=Math.max(...lons);const w=900,h=420,pad=35;const x=lon=>pad+(lon-minLon)/Math.max(.001,maxLon-minLon)*(w-2*pad);const y=lat=>h-pad-(lat-minLat)/Math.max(.001,maxLat-minLat)*(h-2*pad);
+  return `<div class="report-map"><svg class="report-route-svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="Routenübersicht"><rect width="100%" height="100%" fill="#e8f0ef"/>${Array.from({length:10},(_,i)=>`<line x1="${i*w/9}" x2="${i*w/9}" y1="0" y2="${h}" stroke="#c9d8d7" stroke-width="1"/><line y1="${i*h/9}" y2="${i*h/9}" x1="0" x2="${w}" stroke="#c9d8d7" stroke-width="1"/>`).join('')}${routes.map((route,index)=>`<polyline points="${route.points.map(p=>`${x(p[1]).toFixed(1)},${y(p[0]).toFixed(1)}`).join(' ')}" fill="none" stroke="${index%2?'#1f6d83':'#c79a42'}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${x(route.points[0][1])}" cy="${y(route.points[0][0])}" r="7" fill="#2d7650"/><circle cx="${x(route.points.at(-1)[1])}" cy="${y(route.points.at(-1)[0])}" r="7" fill="#a74438"/>`).join('')}</svg></div>`;
+}
+
+function buildReport() {
+  const settings=getSettings();const days=[...state.days].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const photos=[...state.photos];const ports=[...state.ports].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const totalNm=days.reduce((s,i)=>s+num(i.distance),0);const hours=days.reduce((s,i)=>s+Math.max(0,num(i.engineEnd)-num(i.engineStart)),0);const fuelLiters=state.fuel.reduce((s,i)=>s+num(i.liters),0);const fuelCost=state.fuel.reduce((s,i)=>s+num(i.liters)*num(i.price),0);const portCost=ports.reduce((s,i)=>s+num(i.cost),0);const cover=settings.boatPhoto||photos.find(p=>p.featured)?.data||defaultHero;const includeWeather=$('#reportIncludeWeather')?.checked!==false,includePorts=$('#reportIncludePorts')?.checked!==false,includeCosts=$('#reportIncludeCosts')?.checked!==false,includeMaintenance=$('#reportIncludeMaintenance')?.checked===true;
+  $('#reportContent').innerHTML=`<div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle||'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div><div class="report-summary-grid"><div><span>Reisetage</span><strong>${days.length}</strong></div><div><span>Seemeilen</span><strong>${dec(totalNm)} sm</strong></div><div><span>Motorstunden</span><strong>${dec(hours)} h</strong></div><div><span>Häfen</span><strong>${ports.length}</strong></div></div><p class="meta">${esc(settings.boatName)} · Baujahr ${esc(settings.buildYear)} · ${dec2(settings.length)} × ${dec2(settings.beam)} m · ${esc(settings.engine)} · Heimathafen ${esc(settings.homePort)}</p><section><h2>Der Törn auf der Karte</h2>${reportRouteSvg()}</section>${state.route.length?`<section class="report-plan"><h2>Törnplan</h2>${[...state.route].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((stage,index)=>`<div><b>${index+1}. ${fmtDate(stage.date)} · ${esc(stage.from||'—')} → ${esc(stage.to||'—')}</b><span>${dec(stage.nm)} sm${stage.departTime?` · Ablegen ${esc(stage.departTime)} Uhr`:''}${includeWeather&&stage.wind?` · ${esc(stage.wind)}`:''}${includeWeather&&stage.wave?` · Welle ${esc(stage.wave)}`:''}${includeWeather&&stage.tide?` · ${esc(stage.tide)}`:''}</span></div>`).join('')}</section>`:''}${days.map(day=>{const dayPhotos=photos.filter(photo=>photo.relatedId===day.id||(!photo.relatedId&&photo.date===day.date)).sort((a,b)=>Number(b.featured===true||b.featured==='true')-Number(a.featured===true||a.featured==='true'));return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title||`${day.fromPort||''} → ${day.toPort||''}`)}</h2><p class="meta">${esc(day.fromPort||'')} → ${esc(day.toPort||'')} · ${dec(day.distance)} sm${includeWeather?` · ${esc(day.wind||'')} · ${esc(day.wave||'')}`:''}</p><p>${esc(day.summary||'').replace(/\n/g,'<br>')}</p>${day.moment?`<blockquote>„${esc(day.moment)}“</blockquote>`:''}${dayPhotos.map(photo=>photo.data?`<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption||'')}"><figcaption>${esc(photo.caption||'')}</figcaption></figure>`:'').join('')}</section>`;}).join('')||'<p>Noch keine Tagesberichte vorhanden.</p>'}${includePorts&&ports.length?`<section><h2>Hafenbuch</h2><table class="report-port-table"><thead><tr><th>Hafen</th><th>Bewertung</th><th>Liegeplatz</th><th>Kosten</th></tr></thead><tbody>${ports.map(port=>`<tr><td>${esc(port.name)}</td><td>${'★'.repeat(Math.round(num(port.rating)))}${'☆'.repeat(5-Math.round(num(port.rating)))}</td><td>${esc(port.berth||'—')}</td><td>${port.cost?eur(port.cost):'—'}</td></tr>`).join('')}</tbody></table></section>`:''}${includeCosts?`<section><h2>Diesel & Reisekosten</h2><div class="report-costs"><div><span>Getankt</span><strong>${dec(fuelLiters)} l</strong></div><div><span>Dieselkosten</span><strong>${eur(fuelCost)}</strong></div><div><span>Liegeplätze</span><strong>${eur(portCost)}</strong></div></div></section>`:''}${includeMaintenance&&state.maintenance.length?`<section><h2>Technik & Wartung</h2>${state.maintenance.map(item=>`<p><b>${fmtDate(item.date)} · ${esc(item.title)}</b><br>${esc(item.note||'')}${item.cost?` · ${eur(item.cost)}`:''}</p>`).join('')}</section>`:''}`;
+}
+
+function renderV6Extras() {
+  renderOperations(); renderHistory(); renderAutoBackups(); renderRouteWeatherOptions(); photoRelationOptions();
+  const conflicts=(state.conflicts||[]).filter(item=>item.status==='open');const badge=$('#conflictNavBadge');if(badge){badge.hidden=!conflicts.length;badge.textContent=String(conflicts.length)}
+}
+
+async function setupV6Defaults() {
+  if (!(await all('inventory')).length) {
+    const defaults = [
+      ['default-dieselfilter-vorfilter','Dieselfilter Vorfilter',3,1,'Stück','Motorraum'],
+      ['default-motoroel','Motoröl passend für Perkins M135',0,5,'Liter','Vorrat'],
+      ['default-impeller','Impeller',1,1,'Stück','Ersatzteilfach'],
+      ['default-keilriemen','Keilriemen',1,1,'Stück','Ersatzteilfach'],
+      ['default-kuehlmittel','Kühlmittel',0,2,'Liter','Vorrat']
+    ];
+    for (const item of defaults) await put('inventory',{id:item[0],name:item[1],category:item[1].includes('Diesel')?'Dieselanlage':'Motor',quantity:item[2],minimum:item[3],unit:item[4],location:item[5],note:''});
+  }
+  if (!(await all('safety')).length) {
+    const defaults = [
+      ['default-rettungsinsel','Rettungsinsel'],['default-feuerloescher','Feuerlöscher'],
+      ['default-rettungswesten','Rettungswesten'],['default-ukw-handfunk','UKW-Handfunkgerät'],
+      ['default-erste-hilfe','Erste-Hilfe-Ausrüstung']
+    ];
+    for (const item of defaults) await put('safety',{id:item[0],name:item[1],lastCheck:'',dueDate:'',status:'ok',note:''});
+  }
+}
+
+async function applyServiceWorkerUpdate() {
+  await createAutoBackup('Vor App-Aktualisierung', true);
+  if (pendingServiceWorker) pendingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
+  else location.reload();
+}
+
+function setupServiceWorkerUpdates(registration) {
+  if (!registration) return;
+  const show = worker => { pendingServiceWorker=worker; $('#updateBanner').hidden=false; };
+  if (registration.waiting) show(registration.waiting);
+  registration.addEventListener('updatefound',()=>{const worker=registration.installing;worker?.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)show(worker);});});
+  navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload());
+}
+
+// Zusätzliche UI-Ereignisse. Sie werden nach dem vorhandenen v5-Code gesetzt und ersetzen dessen Medienhandler.
+window.addEventListener('load', () => {
+  $('#routeWeatherForm')?.addEventListener('submit', analyzeRouteWeather);
+  $('#historyStoreFilter')?.addEventListener('change', renderHistory);
+  $('#undoLastChangeButton')?.addEventListener('click', undoLastOwnChange);
+  $('#verifySyncButton')?.addEventListener('click', verifySyncState);
+  $('#createAutoBackupButton')?.addEventListener('click', async()=>{await createAutoBackup('Manueller Sicherungspunkt',true);await refresh();toast('Sicherungspunkt angelegt')});
+  $('#createMaintenanceTemplates')?.addEventListener('click',createMaintenanceTemplates);
+  $('#syncPhotosButton')?.addEventListener('click',syncPhotosNow);
+  $('#photoAutoSync')?.addEventListener('change',async event=>{await put('settings',{...getSettings(),photoAutoSync:event.target.checked,id:'main'});await refresh()});
+  $('#photoForm')?.elements.relatedType?.addEventListener('change',photoRelationOptions);
+  $('#applyUpdateButton')?.addEventListener('click',applyServiceWorkerUpdate);
+  $('#dismissUpdateButton')?.addEventListener('click',()=>{$('#updateBanner').hidden=true});
+});
+
+// Formulare für Bordbetrieb
+for (const [store, formId] of [['inventory','inventoryForm'],['safety','safetyForm']]) {
+  const form=$(`#${formId}`); if(form)form.onsubmit=async event=>{event.preventDefault();const item=formObject(form);item.id=item.id||uid();await put(store,item);form.reset();await refresh();toast('Gespeichert')};
+}
+if($('#documentForm'))$('#documentForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;const data=formObject(form);const file=form.elements.file.files[0];let existing=data.id?await getOne('documents',data.id):null;let fileData=existing?.data||'';let mimeType=existing?.mimeType||'';let fileName=existing?.fileName||'';if(file){if(file.size>15e6)return alert('Die Datei ist größer als 15 MB. Bitte verkleinern.');fileData=file.type.startsWith('image/')?await compressImage(file,1800,.82):await blobToDataUrl(file);mimeType=file.type;fileName=file.name;}await put('documents',{...(existing||{}),...data,id:data.id||uid(),data:fileData,mimeType,fileName,size:file?.size||existing?.size||0,_mediaUpdatedAt:file?new Date().toISOString():existing?._mediaUpdatedAt||''});form.reset();await refresh();scheduleSync(200);toast('Dokument gespeichert')};
+
+// Medienhandler ersetzen
+if($('#photoForm'))$('#photoForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;const fd=new FormData(form);const file=fd.get('photo');if(!file||!file.size)return;if(file.size>15e6)return alert('Das Foto ist größer als 15 MB. Bitte vorher verkleinern.');const data=await compressImage(file,1800,.82);await put('photos',{id:uid(),date:fd.get('date'),caption:fd.get('caption'),relatedType:fd.get('relatedType')||'day',relatedId:fd.get('relatedId')||'',featured:fd.get('featured')==='true',data,mimeType:'image/jpeg',fileName:file.name,size:file.size,created:Date.now(),_mediaUpdatedAt:new Date().toISOString(),_cloudState:'pending'});form.reset();photoRelationOptions();await refresh();scheduleSync(200);toast('Foto verkleinert und gespeichert')};
+if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=event.target.files[0];if(!file)return;if(file.size>15e6)return alert('Das Startbild ist größer als 15 MB.');const data=await compressImage(file,2000,.86);await put('settings',{...getSettings(),boatPhoto:data,boatPhotoStoragePath:'',_mediaUpdatedAt:new Date().toISOString(),id:'main'});event.target.value='';await refresh();scheduleSync(200);toast('Startbild gespeichert')};
+
+
 (async () => {
   db = await openDB();
   await migrateLocalTimestamps();
@@ -2500,12 +3515,28 @@ document.addEventListener('visibilitychange', () => {
     else await connectDeviceAutomatically({ silent: true });
   }
   await defaults();
+  const versionMeta = await metaGet('appVersion');
+  if (versionMeta?.value && versionMeta.value !== APP_VERSION) {
+    await createAutoBackup(`Update von ${versionMeta.value} auf ${APP_VERSION}`, true);
+  }
+  await setupV6Defaults();
+  await metaSet('appVersion', { value: APP_VERSION, at: new Date().toISOString() });
+  const daily = await metaGet('dailyBackup');
+  if (!daily?.date || daily.date !== dateInputValue()) {
+    await createAutoBackup('Täglicher Sicherungspunkt', true);
+    await metaSet('dailyBackup', { date: dateInputValue() });
+  }
   await refresh();
   await onlineState();
+  if (currentSession) {
+    startRealtimeSubscription();
+    registerDeviceHeartbeat().catch(error => console.warn('Gerätestatus konnte nicht übertragen werden.', error));
+  }
   startAutoSync();
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.register('service-worker.js');
+      setupServiceWorkerUpdates(registration);
       registration.update();
     } catch (error) {
       console.warn('Service Worker konnte nicht registriert werden.', error);

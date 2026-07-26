@@ -1,0 +1,39 @@
+LEEFKE 6.0 – Überblick
+======================
+
+Synchronisierung
+- Jedes Datenfeld trägt eigenen Änderungszeitpunkt und Gerätekennung.
+- Neuester Wert desselben Feldes gewinnt; andere Felder bleiben erhalten.
+- Realtime stößt den Abgleich sofort an, die 20-Sekunden-Prüfung bleibt als Reserve.
+- Löschungen werden als Tombstones auf alle Geräte übertragen.
+- Konflikte werden sichtbar, wenn zwei Geräte dasselbe Feld nahezu gleichzeitig ändern.
+- Verlauf zeigt, was wann auf welchem Gerät geändert wurde.
+- Letzte eigene Änderung kann rückgängig gemacht werden.
+
+Sicherungen und Updates
+- Sicherung vor Synchronisierungen, Updates und einmal täglich.
+- Fünf lokale Wiederherstellungspunkte.
+- Neue Version wird als Banner angezeigt; vor Aktivierung entsteht ein Sicherungspunkt.
+
+Wetter, Wasserstand und Route
+- Wetter, Wind, Böen, Wellenhöhe, Richtung, Periode, Dünung und Strömung.
+- Quellen klar getrennt: Modell, amtliche BSH-Vorhersage und PEGELONLINE-Messwert.
+- GPX-Route mit Abfahrt und Geschwindigkeit: Prognose an sieben Routenpunkten.
+- Relative Wellenrichtung zum Kurs und verständliche Komforteinschätzung.
+
+Medien
+- Fotos werden vor dem Upload verkleinert.
+- Fotos, Titelbild und PDF-/Bilddokumente liegen privat in Supabase Storage.
+- Zugriff nur mit dem eigenen angemeldeten LEEFKE-Konto.
+
+Bordbetrieb
+- Ersatzteile und Betriebsstoffe mit Mindestbestand.
+- Sicherheitsausrüstung mit Prüf- und Fälligkeitsdatum.
+- Dokumentenablage für Anleitungen, Rechnungen, Versicherungen und Bootspapiere.
+- Wartungsvorlagen passend zur LEEFKE.
+
+Reisebericht
+- Titelbild, Törnkarte, Etappen, Tagesberichte und Fotos.
+- Hafenbewertungen, Diesel-, Liegeplatz- und Gesamtkosten.
+- Wartungsübersicht.
+- Über den Druckdialog als PDF speicherbar.

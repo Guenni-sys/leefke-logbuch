@@ -10,16 +10,20 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=5.6">
+  <link rel="stylesheet" href="style.css?v=6.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
 <body>
+  <div id="updateBanner" class="update-banner" hidden>
+    <div><strong>Neue LEEFKE-Version verfügbar</strong><span>Vor dem Aktualisieren wird automatisch eine Sicherung angelegt.</span></div>
+    <div class="actions"><button id="applyUpdateButton" class="primary" type="button">Jetzt aktualisieren</button><button id="dismissUpdateButton" type="button">Später</button></div>
+  </div>
   <header class="topbar">
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">⚓</div>
       <div>
-        <small>BORDTAGEBUCH · VERSION 5.6</small>
+        <small>BORDTAGEBUCH · VERSION 6.0</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -40,11 +44,13 @@
       <button data-view="ports"><span>⚓</span> Hafenbuch</button>
       <button data-view="fuel"><span>⛽</span> Tank & Verbrauch</button>
       <button data-view="maintenance"><span>⚙</span> Wartung</button>
+      <button data-view="operations"><span>🧰</span> Bordbetrieb</button>
       <button data-view="checklists"><span>✓</span> Checklisten</button>
       <button data-view="photos"><span>▦</span> Galerie</button>
       <button data-view="report"><span>▤</span> Reisebericht</button>
       <button data-view="settings"><span>♜</span> Schiffspass</button>
       <button data-view="sync"><span>☁</span> Konto & Sync</button>
+      <button data-view="history"><span>⟲</span> Verlauf & Konflikte <b id="conflictNavBadge" class="nav-badge" hidden>0</b></button>
       <button data-view="backup"><span>⇩</span> Sicherung</button>
       <div class="nav-footer">Stahl · Spitzgatt · 1996</div>
     </nav>
@@ -313,6 +319,42 @@
           <div class="nautical-warning weather-warning"><strong>Planungshilfe, keine Navigationsgrundlage:</strong> Wetter- und Seegangsdaten sind Modellvorhersagen. Die Tidekurve kann in Flüssen, Häfen und küstennahen Bereichen deutlich abweichen. Vor dem Ablegen weiterhin BSH, DWD, Hafeninformationen und die aktuelle Verkehrslage prüfen.</div>
           <div class="weather-attribution">Wetter & Seegang: Open-Meteo · Wellenmodelle u. a. DWD ICON Wave · Messpegel: PEGELONLINE / WSV · Seekarte: OpenStreetMap & OpenSeaMap</div>
         </article>
+
+        <div class="grid2 weather-official-grid">
+          <article class="card bsh-card">
+            <div class="card-kicker">AMTLICHE INFORMATION</div>
+            <h3>BSH Wasserstand & Gezeiten</h3>
+            <p class="meta">Für Bremerhaven, Cuxhaven und Helgoland wird die amtliche BSH-Seite passend zum gewählten Ort verknüpft. So bleiben Modellprognose, Messpegel und amtliche Quelle klar getrennt.</p>
+            <div id="bshOfficialStatus" class="official-tide-status"><strong>Noch kein Ort gewählt</strong><span>Wetterdaten laden, um die passende BSH-Station zu öffnen.</span></div>
+            <div id="bshOfficialEvents" class="official-tide-events"></div>
+            <a id="bshOfficialLink" class="button-link" href="https://wasserstand.bsh.de/" target="_blank" rel="noopener">Amtliche BSH-Vorhersage öffnen</a>
+          </article>
+          <article class="card source-legend-card">
+            <div class="card-kicker">DATEN RICHTIG LESEN</div>
+            <h3>Drei getrennte Quellen</h3>
+            <dl class="source-legend">
+              <div><dt>Vorhersage</dt><dd>Open-Meteo: Wind, Wetter, Seegang, Dünung und modellierte Strömung.</dd></div>
+              <div><dt>Amtlich</dt><dd>BSH: Wasserstandsvorhersage und Gezeiteninformationen für die deutsche Küste.</dd></div>
+              <div><dt>Gemessen</dt><dd>PEGELONLINE: aktueller Messwert mit Zeitstempel und Trend.</dd></div>
+            </dl>
+          </article>
+        </div>
+
+        <article class="card route-weather-card">
+          <div class="card-kicker">WETTER ENTLANG DER ROUTE</div>
+          <h3>GPX-Passage für die geplante Abfahrtszeit prüfen</h3>
+          <p class="meta">Die App berechnet ungefähre Ankunftszeiten an mehreren Punkten der Route und ordnet Wind und Welle relativ zum gefahrenen Kurs ein. Die Bewertung beschreibt den erwartbaren Komfort – sie ist keine Fahrtfreigabe.</p>
+          <form id="routeWeatherForm" class="route-weather-form">
+            <label>GPX-Route<select id="routeWeatherGpx" required><option value="">Route auswählen</option></select></label>
+            <label>Datum<input id="routeWeatherDate" type="date" required></label>
+            <label>Abfahrt<input id="routeWeatherTime" type="time" value="07:00" required></label>
+            <label>Fahrt<input id="routeWeatherSpeed" type="number" min="2" max="15" step="0.1" value="7.5" required><span>kn</span></label>
+            <button class="primary" type="submit">Route auswerten</button>
+          </form>
+          <div id="routeWeatherState" class="sync-message" aria-live="polite"></div>
+          <div id="routeWeatherSummary" class="route-weather-summary"></div>
+          <div class="table-scroll"><table class="route-weather-table"><thead><tr><th>Punkt / ETA</th><th>Kurs</th><th>Wind</th><th>Welle</th><th>Periode</th><th>Einfall</th><th>Einschätzung</th></tr></thead><tbody id="routeWeatherRows"></tbody></table></div>
+        </article>
       </section>
 
       <section id="ports" class="view">
@@ -381,7 +423,34 @@
         <form id="maintenanceForm" class="card form">
           <input type="hidden" name="id"><label>Datum<input required type="date" name="date"></label><label>Kategorie<select name="category"><option>Motor · Perkins M135</option><option>Getriebe</option><option>Dieselanlage</option><option>Hydraulik</option><option>Elektrik</option><option>Navigation</option><option>Rumpf</option><option>Sicherheit</option><option>Sonstiges</option></select></label><label class="wide">Titel<input required name="title"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Erledigt<select name="done"><option value="false">Nein</option><option value="true">Ja</option></select></label><label>Fällig am<input type="date" name="dueDate"></label><label>Fällig bei Motorstunden<input type="number" step="0.1" name="dueHours"></label><label>Kosten (€)<input type="number" step="0.01" name="cost"></label><label class="wide">Notiz<textarea rows="4" name="note"></textarea></label><div class="wide actions"><button class="primary">Speichern</button><button type="reset">Leeren</button></div>
         </form>
+        <article class="card maintenance-templates">
+          <div><div class="card-kicker">LEEFKE-WARTUNGSPLAN</div><h3>Typische Intervalle vorbereiten</h3><p class="meta">Legt editierbare Erinnerungen für Perkins M135, Dieselfilter, Impeller, Keilriemen, Rettungsinsel und Feuerlöscher an.</p></div>
+          <button id="createMaintenanceTemplates" type="button">Wartungsplan anlegen</button>
+        </article>
         <div id="maintenanceList" class="stack"></div>
+      </section>
+
+      <section id="operations" class="view">
+        <div class="title"><small>BORDBETRIEB</small><h2>Vorräte, Sicherheit & Dokumente</h2><p>Was an Bord ist, wann Prüfungen fällig werden und wo Rechnungen oder Anleitungen abgelegt sind.</p></div>
+        <div class="stats compact operations-stats"><article><span>Vorräte knapp</span><strong id="inventoryLowCount">0</strong></article><article><span>Prüfungen fällig</span><strong id="safetyDueCount">0</strong></article><article><span>Dokumente</span><strong id="documentCount">0</strong></article><article><span>Wartung offen</span><strong id="operationMaintCount">0</strong></article></div>
+        <div class="grid2 operations-grid">
+          <article class="card">
+            <div class="card-kicker">ERSATZTEILE & BETRIEBSSTOFFE</div><h3>Bestand an Bord</h3>
+            <form id="inventoryForm" class="form compact-form"><input type="hidden" name="id"><label>Artikel<input required name="name" placeholder="z. B. Dieselfilter"></label><label>Kategorie<select name="category"><option>Motor</option><option>Dieselanlage</option><option>Elektrik</option><option>Sicherheit</option><option>Deck</option><option>Sonstiges</option></select></label><label>Menge<input type="number" step="0.1" name="quantity"></label><label>Mindestens<input type="number" step="0.1" name="minimum"></label><label>Einheit<input name="unit" placeholder="Stück / Liter"></label><label>Ort an Bord<input name="location"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Speichern</button><button type="reset">Leeren</button></div></form>
+            <div id="inventoryList" class="stack compact-stack"></div>
+          </article>
+          <article class="card">
+            <div class="card-kicker">SICHERHEITSAUSRÜSTUNG</div><h3>Prüf- und Ablaufdaten</h3>
+            <form id="safetyForm" class="form compact-form"><input type="hidden" name="id"><label>Gegenstand<input required name="name" placeholder="z. B. Rettungsinsel"></label><label>Prüfung / Ablauf<input type="date" name="dueDate"></label><label>Letzte Prüfung<input type="date" name="lastCheck"></label><label>Status<select name="status"><option value="ok">In Ordnung</option><option value="due">Prüfung fällig</option><option value="replace">Ersetzen</option></select></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Speichern</button><button type="reset">Leeren</button></div></form>
+            <div id="safetyList" class="stack compact-stack"></div>
+          </article>
+        </div>
+        <article class="card">
+          <div class="card-kicker">DOKUMENTENABLAGE</div><h3>Anleitungen, Rechnungen & Nachweise</h3>
+          <p class="meta">PDFs und Bilder werden verschlüsselt über das angemeldete LEEFKE-Konto in einem privaten Supabase-Speicher abgelegt. Ohne eingerichteten Speicher bleiben sie lokal.</p>
+          <form id="documentForm" class="form"><input type="hidden" name="id"><label>Titel<input required name="title"></label><label>Kategorie<select name="category"><option>Anleitung</option><option>Rechnung</option><option>Versicherung</option><option>Prüfnachweis</option><option>Bootspapiere</option><option>Sonstiges</option></select></label><label>Datum<input type="date" name="date"></label><label>Datei<input type="file" name="file" accept="application/pdf,image/*"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Dokument speichern</button><button type="reset">Leeren</button></div></form>
+          <div id="documentList" class="document-list"></div>
+        </article>
       </section>
 
       <section id="checklists" class="view">
@@ -392,13 +461,14 @@
 
       <section id="photos" class="view">
         <div class="title"><small>ERINNERUNGEN</small><h2>LEEFKE unterwegs</h2><p>Fotos aus Häfen, von Überfahrten und besonderen Tagen an Bord.</p></div>
-        <form id="photoForm" class="card form"><label>Datum<input type="date" name="date"></label><label>Bildunterschrift<input name="caption"></label><label class="wide">Foto<input required type="file" accept="image/*" name="photo"></label><div class="wide"><button class="primary">Foto hinzufügen</button></div></form>
+        <article class="card photo-cloud-controls"><div><div class="card-kicker">PRIVATE FOTO-CLOUD</div><h3>Auf allen Geräten verfügbar</h3><p id="photoCloudStatus" class="meta">Nach der Anmeldung werden verkleinerte Fotos automatisch in den privaten LEEFKE-Speicher übertragen.</p></div><div class="actions"><label class="switch-label"><input id="photoAutoSync" type="checkbox" checked> Fotos automatisch synchronisieren</label><button id="syncPhotosButton" type="button">Fotos jetzt abgleichen</button></div></article>
+        <form id="photoForm" class="card form"><label>Datum<input type="date" name="date"></label><label>Bildunterschrift<input name="caption"></label><label>Zuordnung<select name="relatedType"><option value="day">Tageslogbuch</option><option value="port">Hafen</option><option value="trip">Gesamter Törn</option></select></label><label>Bezug<select id="photoRelatedId" name="relatedId"><option value="">Automatisch über Datum</option></select></label><label class="wide">Foto<input required type="file" accept="image/*" name="photo"></label><label class="switch-label wide"><input type="checkbox" name="featured" value="true"> Als Titelbild für diesen Tag verwenden</label><div class="wide"><button class="primary">Foto hinzufügen</button></div></form>
         <div id="photoGrid" class="gallery"></div>
       </section>
 
       <section id="report" class="view">
         <div class="title"><small>REISEBERICHT</small><h2>Das Törntagebuch der LEEFKE</h2><p>Aus Tagesberichten und Fotos entsteht ein druckbarer Reisebericht.</p></div>
-        <article class="card no-print"><p>Über „Drucken / als PDF speichern“ lässt sich der Bericht unter Windows und auf dem iPad sichern.</p><div class="actions"><button id="buildReport" class="primary">Bericht aktualisieren</button><button id="printReport">Drucken / als PDF speichern</button></div></article>
+        <article class="card no-print report-controls"><div><p>Der Bericht kombiniert Törnplan, Seekartenübersicht, Wetter, Tagesberichte, Hafenbewertungen, Verbrauch, Kosten und Fotos.</p><div class="report-options"><label><input id="reportIncludeWeather" type="checkbox" checked> Wetter & Seegang</label><label><input id="reportIncludePorts" type="checkbox" checked> Hafenbewertungen</label><label><input id="reportIncludeCosts" type="checkbox" checked> Diesel & Kosten</label><label><input id="reportIncludeMaintenance" type="checkbox"> Wartung</label></div></div><div class="actions"><button id="buildReport" class="primary">Bericht aktualisieren</button><button id="printReport">Drucken / als PDF speichern</button></div></article>
         <div id="reportContent" class="report-paper"></div>
       </section>
 
@@ -406,7 +476,7 @@
         <div class="title"><small>SCHIFFSPASS</small><h2>Die LEEFKE</h2><p>Die bekannten Schiffsdaten sind bereits hinterlegt und bleiben vollständig bearbeitbar.</p></div>
 
         <article class="card photo-settings">
-          <div><div class="card-kicker">STARTBILD</div><h3>Foto der LEEFKE</h3><p>Das mitgelieferte Foto kann jederzeit durch ein eigenes Startbild ersetzt werden. Es wird nur auf diesem Gerät gespeichert und in der Sicherung mitgeführt.</p><input id="boatPhotoInput" type="file" accept="image/*"><button id="boatPhotoReset" type="button">Mitgeliefertes Foto verwenden</button></div>
+          <div><div class="card-kicker">STARTBILD</div><h3>Foto der LEEFKE</h3><p>Das mitgelieferte Foto kann jederzeit durch ein eigenes Startbild ersetzt werden. Nach Anmeldung wird es zusammen mit den Galeriefotos privat synchronisiert.</p><input id="boatPhotoInput" type="file" accept="image/*"><button id="boatPhotoReset" type="button">Mitgeliefertes Foto verwenden</button></div>
           <img id="boatPhotoPreview" src="leefke-hero.jpg" alt="Vorschau Startbild">
         </article>
 
@@ -467,10 +537,14 @@
                 <div><dt>Status</dt><dd id="syncStatusText">Noch nicht synchronisiert</dd></div>
                 <div><dt>Letzte Synchronisierung</dt><dd id="lastSyncText">—</dd></div>
                 <div><dt>Gerät</dt><dd id="deviceNameText">Dieses Gerät</dd></div>
+                <div><dt>Echtzeitverbindung</dt><dd id="realtimeStatusText">Noch nicht aktiv</dd></div>
+                <div><dt>Offene Änderungen</dt><dd id="pendingChangesText">—</dd></div>
+                <div><dt>Konflikte</dt><dd id="syncConflictText">0</dd></div>
                 <div><dt>Automatischer Abgleich</dt><dd id="autoSyncText">Noch nicht aktiv</dd></div>
               </dl>
               <div class="actions">
                 <button id="syncNowButton" class="primary" type="button">Jetzt vollständig abgleichen</button>
+                <button id="verifySyncButton" type="button">Datenstand prüfen</button>
                 <button id="signOutButton" type="button">Abmelden</button>
               </div>
               <div id="syncMessage" class="sync-message" aria-live="polite"></div>
@@ -485,7 +559,7 @@
               <div><span>2</span><p><strong>Unterwegs offline</strong><br>Die LEEFKE-App bleibt auch ohne Mobilfunk nutzbar.</p></div>
               <div><span>3</span><p><strong>Automatisch abgleichen</strong><br>Offene Geräte prüfen alle 20 Sekunden auf neue Einträge. Beim Öffnen wird sofort abgeglichen.</p></div>
             </div>
-            <p class="nautical-warning"><strong>Wichtig:</strong> Einträge vom Handy werden in die Cloud übertragen und anschließend auch auf Tablet und Laptop geladen. Eine vollständig geschlossene App wird beim nächsten Öffnen sofort aktualisiert.<br><br><strong>Aktuell synchronisiert:</strong> Tageslogbuch, Törnplanung, Häfen, Tankbuch, Wartung, Checklisten, Schiffsdaten, GPX-Routen und gespeicherte Wettervorhersagen. Fotos und ein selbst gewähltes Startbild bleiben vorerst lokal auf dem jeweiligen Gerät.</p>
+            <p class="nautical-warning"><strong>Wichtig:</strong> Einträge vom Handy werden in die Cloud übertragen und anschließend auch auf Tablet und Laptop geladen. Eine vollständig geschlossene App wird beim nächsten Öffnen sofort aktualisiert.<br><br><strong>Synchronisiert:</strong> Tageslogbuch, Törnplanung, Häfen, Tankbuch, Wartung, Checklisten, Schiffsdaten, GPX-Routen, Wettervorhersagen, Fotos, Dokumente, Vorräte und Sicherheitsprüfungen. Änderungen werden feldweise mit Zeit und Gerät protokolliert. Bei einem echten Widerspruch wird nichts still überschrieben – die App zeigt ihn unter „Verlauf & Konflikte“ an.</p>
           </article>
         </div>
 
@@ -500,11 +574,19 @@
         </article>
       </section>
 
+      <section id="history" class="view">
+        <div class="title"><small>NACHVOLLZIEHBAR</small><h2>Änderungsverlauf & Konflikte</h2><p>Welche Änderung kam von welchem Gerät – und wo müssen zwei widersprüchliche Eingaben entschieden werden?</p></div>
+        <div class="stats compact history-stats"><article><span>Offene Konflikte</span><strong id="openConflictCount">0</strong></article><article><span>Änderungen heute</span><strong id="changesTodayCount">0</strong></article><article><span>Letztes Gerät</span><strong id="lastChangeDevice">—</strong></article><article><span>Letzte Änderung</span><strong id="lastChangeTime">—</strong></article></div>
+        <article class="card"><div class="card-kicker">KONFLIKTE</div><h3>Widersprüchliche Änderungen entscheiden</h3><p class="meta">Die App übernimmt zunächst den zeitlich neueren Wert, bewahrt aber beide Fassungen. Hier kannst du bewusst auswählen.</p><div id="conflictList" class="conflict-list"></div></article>
+        <article class="card"><div class="history-toolbar"><div><div class="card-kicker">ÄNDERUNGSPROTOKOLL</div><h3>Die letzten Änderungen</h3></div><div><select id="historyStoreFilter"><option value="">Alle Bereiche</option><option value="settings">Schiffsdaten</option><option value="days">Tageslogbuch</option><option value="route">Törnplanung</option><option value="fuel">Tankbuch</option><option value="maintenance">Wartung</option><option value="ports">Häfen</option><option value="photos">Fotos</option></select><button id="undoLastChangeButton" type="button">Letzte eigene Änderung rückgängig</button></div></div><div id="changeLogList" class="change-log-list"></div></article>
+      </section>
+
       <section id="backup" class="view">
         <div class="title"><small>DATENSICHERUNG</small><h2>Das Bordbuch zusätzlich sichern</h2><p>Die Cloud-Synchronisierung ersetzt keine eigene Sicherungsdatei. Ein Export ist vor größeren Änderungen weiterhin sinnvoll.</p></div>
         <article class="card"><h3>Vollständige Sicherung</h3><p>Alle Einträge, Schiffsdaten, GPX-Routen, Bewertungen und Fotos werden in einer Datei gesichert.</p><button id="export" class="primary">Sicherung exportieren</button></article>
         <article class="card"><h3>Wiederherstellen</h3><input id="import" type="file" accept="application/json,.json"></article>
-        <article class="card warning"><strong>Wichtig:</strong> Fotos bleiben in Version 5 noch lokal. Sie sind in der Sicherungsdatei enthalten und sollten deshalb regelmäßig exportiert werden.</article>
+        <article class="card"><div class="backup-heading"><div><div class="card-kicker">AUTOMATISCHE SICHERUNGSPUNKTE</div><h3>Vor Abgleich und Updates</h3><p class="meta">Die App legt täglich sowie vor größeren Synchronisierungen und Aktualisierungen lokale Sicherungspunkte an. Die neuesten fünf bleiben erhalten.</p></div><button id="createAutoBackupButton" type="button">Jetzt Sicherungspunkt anlegen</button></div><div id="autoBackupList" class="backup-list"></div></article>
+        <article class="card warning"><strong>Wichtig:</strong> Cloud-Synchronisierung und automatische Sicherungspunkte ergänzen sich, ersetzen aber keinen gelegentlichen JSON-Export auf einen unabhängigen Datenträger.</article>
       </section>
     </main>
   </div>
@@ -512,6 +594,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=5.6"></script>
+  <script src="app.js?v=6.0"></script>
 </body>
 </html>

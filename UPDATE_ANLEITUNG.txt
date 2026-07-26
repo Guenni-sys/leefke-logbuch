@@ -1,26 +1,79 @@
-LEEFKE Bordtagebuch – Version 5.6
+LEEFKE Bordtagebuch – Version 6.0 Komplettausbau
+================================================
 
-NEU: Wetter & Gezeiten
-- Feste Orte: Lemwerder, Bremerhaven, Cuxhaven und Helgoland
-- Orte aus geplanten Etappen
-- Freier Wetterpunkt direkt auf einer OpenSeaMap-Seekarte
-- Stündlicher Wind, Böen, Temperatur und Niederschlagswahrscheinlichkeit
-- Wellenhöhe, Wellenrichtung, Wellenperiode und Wellenfolge pro Minute
-- Windsee und Dünung getrennt, sofern das Modell Daten liefert
-- Modellierte Strömung und Tidekurve mit Hoch-/Niedrigwasser-Scheitelpunkten
-- Aktueller Wasserstand des nächstgelegenen PEGELONLINE-Messpegels
-- Wetterdaten können direkt in eine geplante Etappe übernommen werden
-- Geladene Vorhersagen bleiben offline sichtbar und werden zwischen Geräten synchronisiert
+WICHTIG VORHER
+---------------
+1. Auf jedem Gerät LEEFKE öffnen.
+2. Unter „Sicherung“ eine Sicherungsdatei exportieren.
+3. Die installierte App noch nicht löschen.
 
-INSTALLATION
-1. In der bisherigen App unter Sicherung eine JSON-Sicherung exportieren.
-2. Diese ZIP-Datei vollständig entpacken.
-3. Im GitHub-Repository Add file -> Upload files wählen.
-4. Alle Dateien aus diesem Ordner hochladen, nicht die ZIP-Datei.
-5. Commit changes drücken.
-6. Nach etwa zwei Minuten öffnen:
-   https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.6
-7. Unter Windows Strg+F5 drücken. Auf iPhone/iPad die App vollständig schließen und neu öffnen.
+A. DATEIEN BEI GITHUB HOCHLADEN
+-------------------------------
+1. Diese ZIP-Datei vollständig entpacken.
+2. Repository öffnen:
+   https://github.com/Guenni-sys/leefke-logbuch
+3. Add file → Upload files.
+4. Alle Dateien AUS dem entpackten Ordner auswählen.
+   Nicht die ZIP-Datei und nicht den äußeren Ordner hochladen.
+5. Commit-Text: LEEFKE Version 6.0 Komplettausbau
+6. Commit changes drücken.
 
-HINWEIS
-Die Wetter-, Seegangs-, Strömungs- und Tidedaten sind Modellvorhersagen und nur Planungshilfen. Die modellierte Tide ist nicht zur Küstennavigation geeignet. Messpegelwerte beziehen sich auf ein örtliches Pegelnull und sind nicht direkt mit der Modellhöhe vergleichbar.
+B. SUPABASE EINMAL ERWEITERN
+----------------------------
+Dieser Schritt ist nötig für Sofort-Synchronisierung, Cloud-Fotos und Dokumente.
+
+1. Supabase-Projekt öffnen.
+2. Links „SQL Editor“ öffnen.
+3. „New query“ wählen.
+4. Die Datei SUPABASE_SETUP_V6.sql mit einem Texteditor öffnen.
+5. Den gesamten Inhalt kopieren und in das SQL-Feld einfügen.
+6. „Run“ drücken.
+7. Eine grüne Erfolgsmeldung ist richtig.
+
+Der Befehl löscht keine vorhandenen LEEFKE-Daten.
+
+C. VERSION 6.0 ÖFFNEN
+----------------------
+Nach etwa 2–3 Minuten öffnen:
+https://guenni-sys.github.io/leefke-logbuch/index.html?v=6.0
+
+Windows: einmal Strg + F5 drücken.
+iPhone/iPad: App vollständig schließen und neu öffnen.
+Oben muss „BORDTAGEBUCH · VERSION 6.0“ stehen.
+
+D. GERÄTE ABGLEICHEN
+--------------------
+1. Auf jedem Gerät mit demselben LEEFKE-Konto angemeldet bleiben.
+2. Konto & Sync öffnen.
+3. „Jetzt vollständig abgleichen“ drücken.
+4. Danach gibt es kein Hauptgerät: iPhone, iPad und Laptop sind gleichberechtigt.
+
+E. FOTOS UND DOKUMENTE TESTEN
+-----------------------------
+1. Auf einem Gerät ein kleines Testfoto hinzufügen.
+2. „Fotos jetzt synchronisieren“ drücken.
+3. Auf einem zweiten Gerät „Jetzt synchronisieren“ drücken.
+4. Das Foto sollte dort erscheinen.
+
+NEU IN VERSION 6.0
+------------------
+- feldweise, bidirektionale Synchronisierung
+- Supabase Realtime für schnellen Geräteabgleich
+- synchronisierte Löschungen
+- Konflikterkennung und manuelle Auflösung
+- Änderungsverlauf und Rückgängig-Funktion
+- automatische lokale Sicherungspunkte
+- amtliche BSH-Ansicht getrennt von Modellwerten
+- aktuelle PEGELONLINE-Messwerte
+- Wetter und Seegang entlang einer GPX-Route
+- Cloud-Synchronisierung für Fotos, Startbild und Dokumente
+- ausführlicher Reisebericht zum Drucken oder als PDF
+- Vorräte, Sicherheitsausrüstung und Dokumentenablage
+- Wartungsvorlagen für LEEFKE
+- Hinweis auf neue App-Versionen mit Sicherung vor dem Update
+
+HINWEIS ZUR NAVIGATION
+----------------------
+Wetter, Seegang, Routenbewertung und modellierte Tide sind Planungshilfen.
+Sie ersetzen keine amtlichen Warnungen, aktuelle Revierinformationen,
+zugelassenen Seekarten oder die eigene nautische Entscheidung.
