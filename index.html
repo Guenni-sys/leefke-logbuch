@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=5.2">
+  <link rel="stylesheet" href="style.css?v=5.4">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -19,7 +19,7 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">⚓</div>
       <div>
-        <small>BORDTAGEBUCH · VERSION 5.2</small>
+        <small>BORDTAGEBUCH · VERSION 5.4</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -378,7 +378,7 @@
                 <div><dt>Automatischer Abgleich</dt><dd id="autoSyncText">Noch nicht aktiv</dd></div>
               </dl>
               <div class="actions">
-                <button id="syncNowButton" class="primary" type="button">Jetzt synchronisieren</button>
+                <button id="syncNowButton" class="primary" type="button">Jetzt vollständig abgleichen</button>
                 <button id="signOutButton" type="button">Abmelden</button>
               </div>
               <div id="syncMessage" class="sync-message" aria-live="polite"></div>
@@ -398,14 +398,13 @@
         </div>
 
         <article id="initialSyncPanel" class="card initial-sync-panel" hidden>
-          <div class="card-kicker">ERSTE VERBINDUNG DIESES GERÄTS</div>
-          <h3>Welcher Datenstand soll verwendet werden?</h3>
-          <p>Diese Auswahl ist nur einmal nötig. Auf dem Gerät mit deinen bisherigen LEEFKE-Einträgen nimmst du die erste Option. Auf weiteren Geräten nimmst du die zweite.</p>
-          <div class="initial-sync-options">
-            <button id="uploadLocalButton" class="initial-option primary" type="button"><span>↑</span><strong>Daten dieses Geräts in die Cloud übertragen</strong><small>Für das bisherige Hauptgerät mit deinen vorhandenen Einträgen.</small></button>
-            <button id="downloadCloudButton" class="initial-option" type="button"><span>↓</span><strong>Cloud-Daten auf dieses Gerät laden</strong><small>Für Handy, Tablet oder Laptop, auf denen die Daten noch fehlen.</small></button>
-            <button id="mergeDataButton" class="initial-option" type="button"><span>⇄</span><strong>Beide Datenstände zusammenführen</strong><small>Nur verwenden, wenn auf beiden Seiten wichtige Einträge vorhanden sind.</small></button>
+          <div class="card-kicker">DIESES GERÄT VERBINDEN</div>
+          <h3>Ein Knopf – der richtige Datenstand wird automatisch erkannt</h3>
+          <p>Die App prüft selbst, ob dieses Gerät leer ist, ob bereits Cloud-Daten vorhanden sind oder ob auf beiden Seiten neue Einträge liegen. Vorhandene LEEFKE-Daten werden automatisch zusammengeführt; ein leeres Gerät übernimmt den Cloud-Datenstand.</p>
+          <div class="initial-sync-options single-option">
+            <button id="connectDeviceButton" class="initial-option primary" type="button"><span>⇄</span><strong>Gerät verbinden und vollständig abgleichen</strong><small>Danach sind Handy, Tablet und Laptop gleichberechtigt. Es gibt kein Hauptgerät.</small></button>
           </div>
+          <p class="meta">Die Verbindung startet nach der Anmeldung normalerweise automatisch. Der Knopf ist nur als zusätzliche Sicherheit da.</p>
         </article>
       </section>
 
@@ -421,6 +420,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=5.2"></script>
+  <script src="app.js?v=5.4"></script>
 </body>
 </html>

@@ -1,39 +1,28 @@
-LEEFKE Bordtagebuch – Version 5.2
+LEEFKE Bordtagebuch – Version 5.4
 
-NEU:
-- Menüknopf auf iPhones mit Dynamic Island nach unten versetzt
-- Safe-Area-Abstände für Statusleiste, Displayausschnitt und Home-Indikator
-- größere, leichter antippbare Menüfläche
-- bidirektionale Cloud-Synchronisierung aus Version 5.1 bleibt erhalten
+AUTOMATISCHE GERÄTEVERBINDUNG
 
-UPDATE:
-1. ZIP entpacken.
-2. Alle enthaltenen Dateien direkt ins Hauptverzeichnis des GitHub-Repositories hochladen.
-3. Vorhandene Dateien ersetzen und Commit changes wählen.
-4. Danach öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.2
-5. Auf dem iPhone die installierte App vollständig schließen und neu öffnen. Falls noch Version 5.1 erscheint, die Website in Safari mit ?v=5.2 öffnen und die PWA erneut starten.
+Neu:
+- Die drei verwirrenden Optionen Hochladen, Herunterladen und Zusammenführen sind entfernt.
+- Es gibt nur noch „Gerät verbinden und vollständig abgleichen“.
+- Die App entscheidet automatisch:
+  * leeres/neues Gerät + Cloud-Daten: Cloud-Daten werden geladen;
+  * erstes Gerät + leere Cloud: lokale Daten werden hochgeladen;
+  * Daten auf beiden Seiten: beide Datenstände werden zusammengeführt.
+- Danach sind iPhone, iPad, Tablet und Windows-Laptop vollständig gleichberechtigt.
+- Bereits früher unterschiedlich eingerichtete Geräte werden beim nächsten vollständigen Abgleich wieder zusammengeführt.
+- Schiffsdaten bleiben feldweise synchronisiert; der jeweils zuletzt geänderte Wert gewinnt.
 
-LEEFKE Bordtagebuch – Update auf Version 5.1
+WICHTIG ZUR BISHERIGEN EINRICHTUNG
+Unterschiedlich gedrückte Knöpfe sind normalerweise kein dauerhaftes Problem. Solange ein fehlender Eintrag noch auf mindestens einem Gerät vorhanden ist, wird er mit Version 5.4 beim vollständigen Abgleich wieder in die Cloud übertragen. Nur Daten, die auf allen Geräten gelöscht oder überschrieben wurden, lassen sich ohne Sicherungsdatei nicht automatisch zurückholen.
 
-NEU
-- Handy, Tablet und Laptop sind gleichberechtigt.
-- Änderungen eines Geräts werden automatisch in die Cloud übertragen.
-- Andere geöffnete Geräte prüfen alle 20 Sekunden auf neue Daten.
-- Beim Öffnen, Zurückkehren zur App oder Wiederherstellen der Internetverbindung wird sofort synchronisiert.
-- Gleichzeitige Änderungen gehen nicht mehr verloren; die zeitlich neuere Fassung gewinnt.
+UPDATE
+1. Auf jedem Gerät möglichst zuerst unter Sicherung eine Sicherung exportieren.
+2. ZIP entpacken.
+3. Alle Dateien direkt in das GitHub-Repository hochladen und vorhandene Dateien ersetzen.
+4. Commit changes anklicken.
+5. Danach öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.4
+6. Unter Windows Strg+F5 drücken. Auf iPhone/iPad die App vollständig schließen und erneut öffnen.
+7. Auf jedem Gerät einmal Konto & Sync → Jetzt vollständig abgleichen drücken.
 
-WICHTIG
-Eine auf iPad oder Handy vollständig geschlossene App kann ihren lokalen Speicher nicht im Hintergrund aktualisieren. Die Daten liegen aber bereits in der Cloud und werden beim nächsten Öffnen sofort geladen.
-
-INSTALLATION
-1. In der bestehenden App unter „Sicherung“ eine Sicherung exportieren.
-2. Diese ZIP-Datei unter Windows vollständig entpacken.
-3. GitHub öffnen: https://github.com/Guenni-sys/leefke-logbuch
-4. Add file → Upload files.
-5. Alle Dateien aus diesem Ordner hochladen – nicht die ZIP-Datei.
-6. Commit changes anklicken.
-7. Zwei bis drei Minuten warten.
-8. Öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.1
-9. Unter Windows Strg + F5 drücken. Auf iPad/Handy die App vollständig schließen und neu öffnen.
-
-Es sind keine neuen SQL-Befehle in Supabase nötig. Das bestehende Konto und die vorhandenen Daten bleiben erhalten.
+Danach genügt die automatische Synchronisierung.

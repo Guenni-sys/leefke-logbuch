@@ -1,4 +1,4 @@
-const APP_VERSION = '5.1';
+const APP_VERSION = '5.4';
 const AUTO_SYNC_INTERVAL_MS = 20000;
 const DB_NAME = 'leefke-v2';
 const DB_VERSION = 3;
@@ -67,6 +67,7 @@ let syncTimer = null;
 let autoSyncTimer = null;
 let syncRequested = false;
 let suppressSyncTracking = false;
+let deviceConnectInProgress = false;
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -247,15 +248,211 @@ function cleanPayload(store, item) {
   return payload;
 }
 
+const SETTINGS_META_FIELDS = new Set(['id', '_updatedAt', '_fieldUpdatedAt', 'boatPhoto']);
+
+function settingsFields(...records) {
+  const fields = new Set(Object.keys(DEFAULT_SETTINGS));
+  for (const record of records) {
+    Object.keys(record || {}).forEach(key => {
+      if (!SETTINGS_META_FIELDS.has(key)) fields.add(key);
+    });
+  }
+  return [...fields].filter(key => !SETTINGS_META_FIELDS.has(key));
+}
+
+function settingsFieldTime(record, field, fallback) {
+  return safeIso(record?._fieldUpdatedAt?.[field] || record?._updatedAt || fallback);
+}
+
+function normalizeSettingsRecord(record, fallbackTimestamp) {
+  const source = { ...DEFAULT_SETTINGS, ...(record || {}), id: 'main' };
+  const fallback = safeIso(source._updatedAt || fallbackTimestamp || '2000-01-01T00:00:00.000Z');
+  const fieldTimes = { ...(source._fieldUpdatedAt || {}) };
+  for (const field of settingsFields(source)) {
+    fieldTimes[field] = settingsFieldTime(source, field, fallback);
+  }
+  return { ...source, _fieldUpdatedAt: fieldTimes, _updatedAt: fallback };
+}
+
+function mergeSettingsRecords(localRecord, remoteRecord, remoteUpdatedAt) {
+  const local = normalizeSettingsRecord(localRecord, localRecord?._updatedAt);
+  const remote = normalizeSettingsRecord(remoteRecord, remoteUpdatedAt);
+  const merged = { id: 'main', _fieldUpdatedAt: {} };
+
+  for (const field of settingsFields(local, remote)) {
+    const hasLocal = Object.prototype.hasOwnProperty.call(local, field);
+    const hasRemote = Object.prototype.hasOwnProperty.call(remoteRecord || {}, field);
+    const localTime = settingsFieldTime(local, field, local._updatedAt);
+    const remoteTime = settingsFieldTime(remote, field, remoteUpdatedAt);
+    const remoteWins = hasRemote && (!hasLocal || Date.parse(remoteTime) > Date.parse(localTime));
+    merged[field] = remoteWins ? remote[field] : local[field];
+    merged._fieldUpdatedAt[field] = remoteWins ? remoteTime : localTime;
+  }
+
+  merged.boatPhoto = localRecord?.boatPhoto || '';
+  const timestamps = [local._updatedAt, remoteUpdatedAt, ...Object.values(merged._fieldUpdatedAt)].map(value => Date.parse(value || 0) || 0);
+  merged._updatedAt = new Date(Math.max(...timestamps, 0)).toISOString();
+  return merged;
+}
+
+function comparablePayload(store, payload) {
+  const cleaned = cleanPayload(store, payload || {});
+  delete cleaned._updatedAt;
+  return JSON.stringify(cleaned, Object.keys(cleaned).sort());
+}
+
 async function migrateLocalTimestamps() {
   for (const store of syncableStores) {
     const items = await all(store);
     for (const item of items) {
-      if (!item._updatedAt) {
-        const fallback = item.created ? new Date(Number(item.created)).toISOString() : '2000-01-01T00:00:00.000Z';
+      const fallback = item._updatedAt || (item.created ? new Date(Number(item.created)).toISOString() : '2000-01-01T00:00:00.000Z');
+      if (store === 'settings') {
+        await rawPut(store, normalizeSettingsRecord(item, fallback));
+      } else if (!item._updatedAt) {
         await rawPut(store, { ...item, _updatedAt: safeIso(fallback) });
       }
     }
+  }
+}
+
+
+const FACTORY_ROUTE_SIGNATURES = new Set([
+  '2026-08-01|Bremerhaven|Cuxhaven|59',
+  '2026-08-02|Cuxhaven|Brunsbüttel|17',
+  '2026-08-03|Brunsbüttel|Rendsburg|0',
+  '2026-08-04|Rendsburg|Laboe|16',
+  '2026-08-05|Laboe|Marstal|36'
+]);
+
+const FACTORY_CHECK_SIGNATURES = new Set([
+  'Vor dem Ablegen|Wetter, Wind, Wellen und Sicht geprüft',
+  'Vor dem Ablegen|Tiden und Strömung geprüft',
+  'Vor dem Ablegen|Motorraum und drei Dieselfilter kontrolliert',
+  'Vor dem Ablegen|Bilge und Bilgenpumpen kontrolliert',
+  'Vor dem Ablegen|Motoröl, Kühlwasser und Keilriemen geprüft',
+  'Vor dem Ablegen|Hydraulik und Bugstrahlruder geprüft',
+  'Vor dem Ablegen|Navigation, AIS, Radar und UKW eingeschaltet',
+  'Vor dem Ablegen|Leinen, Fender und Anker klar',
+  'Nach dem Anlegen|Motorstunden und Tankstand notiert',
+  'Nach dem Anlegen|Landstrom angeschlossen und geprüft',
+  'Nach dem Anlegen|Leinen und Fender kontrolliert',
+  'Nach dem Anlegen|Motorraum auf Leckagen geprüft',
+  'Nach dem Anlegen|Logbucheintrag ergänzt',
+  'Nach dem Anlegen|Wetter und Tiden für morgen geprüft',
+  'Sicherheit|UKW-Funk betriebsbereit',
+  'Sicherheit|AIS-Transponder und Radar betriebsbereit',
+  'Sicherheit|Papierkarten und Kompass an Bord',
+  'Sicherheit|Rettungsinsel und Rettungsmittel kontrolliert',
+  'Sicherheit|Ankerwinde und Kette einsatzbereit'
+]);
+
+function settingsMatchFactory(record) {
+  const ignored = new Set(['id', '_updatedAt', '_fieldUpdatedAt', 'boatPhoto']);
+  for (const [field, expected] of Object.entries(DEFAULT_SETTINGS)) {
+    if (ignored.has(field)) continue;
+    const actual = record?.[field];
+    if (Array.isArray(expected)) {
+      if (JSON.stringify(actual || []) !== JSON.stringify(expected)) return false;
+    } else if (String(actual ?? '') !== String(expected ?? '')) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function routeMatchesFactory(item) {
+  const signature = `${item.date || ''}|${item.from || ''}|${item.to || ''}|${num(item.nm)}`;
+  const extraFieldsEmpty = !item.hours && (item.status || 'planned') === 'planned' && !item.departTime &&
+    !item.weather && !item.wind && !item.wave && !item.tide && !item.berth && !item.gpxId && !item.note;
+  return FACTORY_ROUTE_SIGNATURES.has(signature) && extraFieldsEmpty;
+}
+
+function checklistMatchesFactory(item) {
+  return !item.done && FACTORY_CHECK_SIGNATURES.has(`${item.group || ''}|${item.item || ''}`);
+}
+
+async function localDataIsOnlyFactoryDefaults() {
+  for (const store of ['days', 'fuel', 'maintenance', 'ports', 'gpx']) {
+    if ((await all(store)).length) return false;
+  }
+
+  const routes = await all('route');
+  if (routes.length && (routes.length !== FACTORY_ROUTE_SIGNATURES.size || routes.some(item => !routeMatchesFactory(item)))) return false;
+
+  const checks = await all('checklists');
+  if (checks.length && (checks.length !== FACTORY_CHECK_SIGNATURES.size || checks.some(item => !checklistMatchesFactory(item)))) return false;
+
+  const settings = await getOne('settings', 'main');
+  if (settings && !settingsMatchFactory(settings)) return false;
+
+  return true;
+}
+
+async function replaceLocalWithRemote(remoteRows) {
+  const previousSettings = await getOne('settings', 'main');
+  const localBoatPhoto = previousSettings?.boatPhoto || '';
+  suppressSyncTracking = true;
+  try {
+    for (const store of syncableStores) await rawClear(store);
+    await rawClear('syncTombstones');
+    for (const row of remoteRows) {
+      if (!syncableStores.includes(row.record_type) || row.deleted_at) continue;
+      let payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
+      if (row.record_type === 'settings') {
+        payload = normalizeSettingsRecord(payload, row.updated_at);
+        if (localBoatPhoto) payload.boatPhoto = localBoatPhoto;
+      }
+      await rawPut(row.record_type, payload);
+    }
+  } finally {
+    suppressSyncTracking = false;
+  }
+}
+
+async function connectDeviceAutomatically(options = {}) {
+  if (deviceConnectInProgress || !currentSession?.user?.id) return;
+  if (!navigator.onLine) {
+    if (!options.silent) setMessage('#syncMessage', 'Dieses Gerät wird verbunden, sobald wieder Internet vorhanden ist.', 'error');
+    await updateSyncUI();
+    return;
+  }
+
+  deviceConnectInProgress = true;
+  try {
+    syncInProgress = true;
+    await updateSyncUI();
+    if (!options.silent) setMessage('#syncMessage', 'Datenstände werden automatisch geprüft …');
+
+    const remote = await fetchRemoteRecords();
+    const remoteHasData = remote.some(row => syncableStores.includes(row.record_type));
+    const localIsFactoryOnly = await localDataIsOnlyFactoryDefaults();
+
+    if (remoteHasData && localIsFactoryOnly) {
+      await replaceLocalWithRemote(remote);
+      await markLinked('automatic-cloud');
+      await setDirty(false);
+      await metaSet('lastSync', { at: new Date().toISOString() });
+      await refresh();
+      if (!options.silent) setMessage('#syncMessage', 'Gerät verbunden. Der gemeinsame Cloud-Datenstand wurde geladen.', 'success');
+    } else {
+      await markLinked(remoteHasData ? 'automatic-merge' : 'automatic-first-device');
+      await setDirty(true);
+      syncInProgress = false;
+      await syncNow({ force: true, silent: options.silent });
+      if (!options.silent) setMessage('#syncMessage', remoteHasData
+        ? 'Gerät verbunden. Lokale und gemeinsame Daten wurden zusammengeführt.'
+        : 'Gerät verbunden. Der erste gemeinsame Datenstand wurde angelegt.', 'success');
+    }
+
+    toast('Gerät mit LEEFKE-Cloud verbunden');
+    startAutoSync(1200);
+  } catch (error) {
+    console.error('Automatische Geräteverbindung fehlgeschlagen', error);
+    setMessage('#syncMessage', `Verbindung fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+  } finally {
+    syncInProgress = false;
+    deviceConnectInProgress = false;
+    await updateSyncUI();
   }
 }
 
@@ -305,8 +502,8 @@ async function updateSyncUI() {
     detail = dirty ? 'Änderungen warten auf Internet' : 'Offline – letzter Stand bleibt verfügbar';
     className = 'sync-status offline';
   } else if (loggedIn && !linked) {
-    label = 'Ersteinrichtung';
-    detail = 'Bitte den Datenstand dieses Geräts auswählen';
+    label = deviceConnectInProgress ? 'Gerät wird verbunden …' : 'Gerät verbinden';
+    detail = deviceConnectInProgress ? 'Datenstände werden automatisch abgeglichen' : 'Einmal verbinden – die App entscheidet automatisch';
     className = 'sync-status attention';
   } else if (syncInProgress) {
     label = 'Synchronisiere …';
@@ -351,13 +548,17 @@ async function initializeSupabase() {
     currentSession = session || null;
     window.setTimeout(async () => {
       await updateSyncUI();
-      if (currentSession && await isLinkedForCurrentUser()) {
-        if (navigator.onLine) scheduleSync(250);
-        startAutoSync(1200);
+      if (currentSession) {
+        if (await isLinkedForCurrentUser()) {
+          if (navigator.onLine) scheduleSync(250);
+          startAutoSync(1200);
+        } else if (navigator.onLine) {
+          await connectDeviceAutomatically({ silent: true });
+        }
       } else {
         stopAutoSync();
       }
-      if (event === 'SIGNED_IN') setMessage('#authMessage', 'Anmeldung erfolgreich.', 'success');
+      if (event === 'SIGNED_IN') setMessage('#authMessage', 'Anmeldung erfolgreich. Dieses Gerät wird automatisch abgeglichen.', 'success');
     }, 0);
   });
   await updateSyncUI();
@@ -452,8 +653,11 @@ async function downloadCloudAsSource() {
     for (const store of syncableStores) await rawClear(store);
     await rawClear('syncTombstones');
     for (const row of active) {
-      const payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
-      if (row.record_type === 'settings' && localBoatPhoto) payload.boatPhoto = localBoatPhoto;
+      let payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
+      if (row.record_type === 'settings') {
+        payload = normalizeSettingsRecord(payload, row.updated_at);
+        if (localBoatPhoto) payload.boatPhoto = localBoatPhoto;
+      }
       await rawPut(row.record_type, payload);
     }
     suppressSyncTracking = false;
@@ -493,7 +697,7 @@ async function syncNow(options = {}) {
   }
   const linked = await isLinkedForCurrentUser();
   if (!linked && !options.force) {
-    await updateSyncUI();
+    await connectDeviceAutomatically({ silent: options.silent });
     return;
   }
 
@@ -523,9 +727,13 @@ async function syncNow(options = {}) {
           await rawDel(row.record_type, row.record_id);
           await rawDel('syncTombstones', key);
         }
+      } else if (row.record_type === 'settings') {
+        const remotePayload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
+        const merged = mergeSettingsRecords(local, remotePayload, row.updated_at);
+        await rawPut('settings', merged);
+        await rawDel('syncTombstones', key);
       } else if (remoteTs > Math.max(localTs, tombTs)) {
         const payload = { ...(row.payload || {}), id: row.record_id, _updatedAt: row.updated_at };
-        if (row.record_type === 'settings' && local?.boatPhoto) payload.boatPhoto = local.boatPhoto;
         await rawPut(row.record_type, payload);
         await rawDel('syncTombstones', key);
       }
@@ -538,8 +746,12 @@ async function syncNow(options = {}) {
         const key = `${store}:${item.id}`;
         const existingRemote = remoteMap.get(key);
         const localTs = syncTimestamp(item);
-        if (!existingRemote || localTs > remoteTimestamp(existingRemote)) {
-          const updatedAt = safeIso(item._updatedAt);
+        const payload = cleanPayload(store, item);
+        const settingsDiffer = store === 'settings' && existingRemote && comparablePayload(store, payload) !== comparablePayload(store, existingRemote.payload || {});
+        if (!existingRemote || localTs > remoteTimestamp(existingRemote) || settingsDiffer) {
+          const updatedAt = settingsDiffer && localTs <= remoteTimestamp(existingRemote)
+            ? new Date().toISOString()
+            : safeIso(item._updatedAt);
           outgoing.push({
             user_id: userId,
             record_type: store,
@@ -713,13 +925,14 @@ async function defaults() {
 
   const settingsRows = await all('settings');
   if (!settingsRows.length) {
-    await put('settings', { ...DEFAULT_SETTINGS });
+    const now = new Date().toISOString();
+    await put('settings', normalizeSettingsRecord({ ...DEFAULT_SETTINGS, _updatedAt: now }, now));
   } else {
     const existing = settingsRows.find(item => item.id === 'main') || settingsRows[0];
-    const migrated = { ...DEFAULT_SETTINGS, ...existing, id: 'main' };
+    const migrated = normalizeSettingsRecord({ ...DEFAULT_SETTINGS, ...existing, id: 'main' }, existing._updatedAt);
     if (migrated.homePort === 'Lemwerder') migrated.homePort = 'Weser Yacht Club Lemwerder';
     if (!migrated.model) migrated.model = 'Finse';
-    await put('settings', migrated);
+    await rawPut('settings', migrated);
   }
 }
 
@@ -881,15 +1094,22 @@ function render() {
 }
 
 function renderTank(settings) {
-  const latestFuelWithLevel = state.fuel.find(item => item.tankPercent !== '' && item.tankPercent !== undefined && item.tankPercent !== null);
-  const rawPercent = latestFuelWithLevel ? latestFuelWithLevel.tankPercent : settings.currentTankPercent;
+  const fuelLevels = state.fuel.filter(item => item.tankPercent !== '' && item.tankPercent !== undefined && item.tankPercent !== null);
+  const latestFuelWithLevel = fuelLevels.sort((a, b) => syncTimestamp(b) - syncTimestamp(a))[0] || null;
+  const settingsTime = Date.parse(settings._fieldUpdatedAt?.currentTankPercent || settings._updatedAt || 0) || 0;
+  const fuelTime = syncTimestamp(latestFuelWithLevel);
+  const settingsHasValue = settings.currentTankPercent !== '' && settings.currentTankPercent !== undefined && settings.currentTankPercent !== null;
+  const useFuelLevel = latestFuelWithLevel && (!settingsHasValue || fuelTime > settingsTime);
+  const rawPercent = useFuelLevel ? latestFuelWithLevel.tankPercent : settings.currentTankPercent;
   const hasValue = rawPercent !== '' && rawPercent !== undefined && rawPercent !== null;
   const percent = hasValue ? clamp(num(rawPercent), 0, 100) : 0;
   const capacity = num(settings.tankCapacity) || 400;
   const liters = capacity * percent / 100;
   $('#tankFill').style.width = `${percent}%`;
   $('#tankPercent').textContent = hasValue ? `${dec2(percent)} %` : '—';
-  $('#tankLiters').textContent = hasValue ? `etwa ${dec2(liters)} von ${dec2(capacity)} Litern` : `Tankkapazität ${dec2(capacity)} Liter · Stand noch nicht eingetragen`;
+  $('#tankLiters').textContent = hasValue
+    ? `etwa ${dec2(liters)} von ${dec2(capacity)} Litern · ${useFuelLevel ? 'aus dem letzten Tankbucheintrag' : 'aktueller Bordstand'}`
+    : `Tankkapazität ${dec2(capacity)} Liter · Stand noch nicht eingetragen`;
 }
 
 function renderDays() {
@@ -1105,11 +1325,17 @@ for (const id of ['day', 'fuel', 'maintenance', 'route', 'port']) {
 
 $('#settingsForm').onsubmit = async event => {
   event.preventDefault();
-  const current = getSettings();
-  const updated = { ...current, ...formObject(event.target), id: 'main' };
+  const current = normalizeSettingsRecord(getSettings(), getSettings()._updatedAt);
+  const formValues = formObject(event.target);
+  const now = new Date().toISOString();
+  const fieldTimes = { ...(current._fieldUpdatedAt || {}) };
+  for (const [field, value] of Object.entries(formValues)) {
+    if (String(current[field] ?? '') !== String(value ?? '')) fieldTimes[field] = now;
+  }
+  const updated = { ...current, ...formValues, id: 'main', _fieldUpdatedAt: fieldTimes };
   await put('settings', updated);
   await refresh();
-  toast('Schiffsdaten der LEEFKE gespeichert');
+  toast('Schiffsdaten der LEEFKE gespeichert und zur Synchronisierung vorgemerkt');
 };
 
 $('#checkForm').onsubmit = async event => {
@@ -1565,15 +1791,17 @@ $('#signOutButton').onclick = async () => {
   await updateSyncUI();
 };
 
-$('#syncNowButton').onclick = () => syncNow();
-$('#uploadLocalButton').onclick = uploadLocalAsSource;
-$('#downloadCloudButton').onclick = downloadCloudAsSource;
-$('#mergeDataButton').onclick = mergeInitialData;
+$('#syncNowButton').onclick = async () => {
+  if (currentSession && !await isLinkedForCurrentUser()) return connectDeviceAutomatically();
+  return syncNow();
+};
+$('#connectDeviceButton').onclick = () => connectDeviceAutomatically();
 
 async function onlineState() {
   await updateSyncUI();
-  if (navigator.onLine && currentSession && await isLinkedForCurrentUser()) {
-    await syncNow({ silent: true, reason: 'online' });
+  if (navigator.onLine && currentSession) {
+    if (await isLinkedForCurrentUser()) await syncNow({ silent: true, reason: 'online' });
+    else await connectDeviceAutomatically({ silent: true });
     startAutoSync();
   } else if (!navigator.onLine) {
     stopAutoSync();
@@ -1592,7 +1820,10 @@ document.addEventListener('visibilitychange', () => {
   db = await openDB();
   await migrateLocalTimestamps();
   await initializeSupabase();
-  if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow({ silent: true, reason: 'startup' });
+  if (currentSession && navigator.onLine) {
+    if (await isLinkedForCurrentUser()) await syncNow({ silent: true, reason: 'startup' });
+    else await connectDeviceAutomatically({ silent: true });
+  }
   await defaults();
   await refresh();
   await onlineState();
