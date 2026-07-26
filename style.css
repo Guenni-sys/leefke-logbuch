@@ -258,3 +258,39 @@ img{max-width:100%}
 .initial-option.primary>span{background:#163f53}
 @media(max-width:1000px){.sync-grid{grid-template-columns:1fr}.initial-sync-options{grid-template-columns:1fr}}
 @media(max-width:650px){.sync-status{max-width:150px;white-space:normal;text-align:center}.sync-facts div{grid-template-columns:1fr;gap:3px}.initial-option{grid-template-columns:42px 1fr;padding:14px;min-height:110px}.initial-option>span{width:39px;height:39px}.auth-actions{display:grid;grid-template-columns:1fr}.auth-actions button{width:100%}}
+
+
+/* Version 5.2 – iPhone Safe Area / Dynamic Island
+   Die Kopfzeile bleibt unterhalb von Statusleiste und Dynamic Island bedienbar. */
+.topbar{
+  padding-top:calc(12px + env(safe-area-inset-top, 0px));
+  padding-right:calc(22px + env(safe-area-inset-right, 0px));
+  padding-left:calc(22px + env(safe-area-inset-left, 0px));
+}
+.menu-button{
+  min-width:46px;
+  min-height:46px;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  touch-action:manipulation;
+  -webkit-tap-highlight-color:transparent;
+}
+@media(max-width:850px){
+  .menu-button{display:inline-flex}
+  nav{
+    top:calc(76px + env(safe-area-inset-top, 0px));
+    bottom:env(safe-area-inset-bottom, 0px);
+  }
+  main{padding-bottom:calc(60px + env(safe-area-inset-bottom, 0px))}
+}
+@media(max-width:560px){
+  .topbar{
+    padding-top:calc(10px + env(safe-area-inset-top, 0px));
+    padding-right:calc(12px + env(safe-area-inset-right, 0px));
+    padding-bottom:10px;
+    padding-left:calc(12px + env(safe-area-inset-left, 0px));
+  }
+  .head-actions{flex:0 0 auto;align-self:center}
+  .menu-button{font-size:1.45rem;padding:7px 10px}
+}

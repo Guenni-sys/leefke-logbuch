@@ -1,3 +1,18 @@
+LEEFKE Bordtagebuch – Version 5.2
+
+NEU:
+- Menüknopf auf iPhones mit Dynamic Island nach unten versetzt
+- Safe-Area-Abstände für Statusleiste, Displayausschnitt und Home-Indikator
+- größere, leichter antippbare Menüfläche
+- bidirektionale Cloud-Synchronisierung aus Version 5.1 bleibt erhalten
+
+UPDATE:
+1. ZIP entpacken.
+2. Alle enthaltenen Dateien direkt ins Hauptverzeichnis des GitHub-Repositories hochladen.
+3. Vorhandene Dateien ersetzen und Commit changes wählen.
+4. Danach öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.2
+5. Auf dem iPhone die installierte App vollständig schließen und neu öffnen. Falls noch Version 5.1 erscheint, die Website in Safari mit ?v=5.2 öffnen und die PWA erneut starten.
+
 LEEFKE Bordtagebuch – Update auf Version 5.1
 
 NEU
