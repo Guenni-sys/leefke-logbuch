@@ -1,4 +1,4 @@
-const APP_VERSION = '6.0';
+const APP_VERSION = '6.1';
 const AUTO_SYNC_INTERVAL_MS = 20000;
 const DB_NAME = 'leefke-v2';
 const DB_VERSION = 6;
@@ -74,6 +74,8 @@ let portLayer = null;
 let activeGpxLayer = null;
 let activeRouteBounds = null;
 let selectedGpxId = '';
+let reportRouteMap = null;
+let reportMapReadyPromise = Promise.resolve();
 let weatherMap = null;
 let weatherMarker = null;
 let weatherSelectedLocation = null;
@@ -2399,7 +2401,13 @@ $('#weatherHourly').onclick = event => {
 };
 
 $('#buildReport').onclick = buildReport;
-$('#printReport').onclick = () => { buildReport(); window.print(); };
+$('#printReport').onclick = async () => {
+  const mapReady = buildReport();
+  try { await mapReady; } catch (error) { console.info('Reisebericht-Seekarte konnte nicht vollständig vorgeladen werden.', error); }
+  await new Promise(resolve => window.setTimeout(resolve, 350));
+  reportRouteMap?.invalidateSize(false);
+  window.print();
+};
 
 $('#export').onclick = async () => {
   const backup = { app: 'LEEFKE Bordbuch', version: APP_VERSION, exported: new Date().toISOString() };
@@ -2514,7 +2522,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* =========================
-   LEEFKE VERSION 6.0
+   LEEFKE VERSION 6.1
    Feldweise Synchronisierung, Realtime, Medien-Cloud, Sicherungen,
    Konfliktauflösung, Bordbetrieb und Routenwetter
    ========================= */
@@ -3429,15 +3437,138 @@ function renderWeatherSnapshot(snapshot, requestedIndex = null) {
   loadOfficialBsh(snapshot);
 }
 
-function reportRouteSvg() {
-  const routes=state.gpx.filter(item=>item.points?.length); if(!routes.length)return '<div class="empty-state">Keine GPX-Route für die Kartenübersicht vorhanden.</div>';
-  const points=routes.flatMap(route=>route.points); const lats=points.map(p=>p[0]),lons=points.map(p=>p[1]);const minLat=Math.min(...lats),maxLat=Math.max(...lats),minLon=Math.min(...lons),maxLon=Math.max(...lons);const w=900,h=420,pad=35;const x=lon=>pad+(lon-minLon)/Math.max(.001,maxLon-minLon)*(w-2*pad);const y=lat=>h-pad-(lat-minLat)/Math.max(.001,maxLat-minLat)*(h-2*pad);
-  return `<div class="report-map"><svg class="report-route-svg" viewBox="0 0 ${w} ${h}" role="img" aria-label="Routenübersicht"><rect width="100%" height="100%" fill="#e8f0ef"/>${Array.from({length:10},(_,i)=>`<line x1="${i*w/9}" x2="${i*w/9}" y1="0" y2="${h}" stroke="#c9d8d7" stroke-width="1"/><line y1="${i*h/9}" y2="${i*h/9}" x1="0" x2="${w}" stroke="#c9d8d7" stroke-width="1"/>`).join('')}${routes.map((route,index)=>`<polyline points="${route.points.map(p=>`${x(p[1]).toFixed(1)},${y(p[0]).toFixed(1)}`).join(' ')}" fill="none" stroke="${index%2?'#1f6d83':'#c79a42'}" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/><circle cx="${x(route.points[0][1])}" cy="${y(route.points[0][0])}" r="7" fill="#2d7650"/><circle cx="${x(route.points.at(-1)[1])}" cy="${y(route.points.at(-1)[0])}" r="7" fill="#a74438"/>`).join('')}</svg></div>`;
+function reportMapContentAvailable() {
+  const routes = state.gpx.filter(item => item.points?.length);
+  const ports = state.ports.map(port => ({ port, point: parseCoordinates(port.coords) })).filter(item => item.point);
+  return routes.length > 0 || ports.length > 0;
+}
+
+function reportRouteMapHtml() {
+  if (!reportMapContentAvailable()) {
+    return '<div class="empty-state">Noch keine GPX-Route oder Hafenkoordinaten für die Seekartenübersicht vorhanden.</div>';
+  }
+  return `<div class="report-map-shell">
+    <div id="reportRouteMap" class="report-map" role="img" aria-label="Seekarte des Törns">
+      <div id="reportMapLoading" class="report-map-loading"><span>⚓</span><strong>Seekarte wird geladen …</strong><small>Küstenkarte und Seezeichen werden eingeblendet.</small></div>
+    </div>
+    <div class="report-map-caption"><span><i class="report-legend-line"></i> GPX-Route</span><span>⚓ Start / Hafen</span><span>◆ Ziel</span><span>Seezeichen: OpenSeaMap</span></div>
+    <p class="report-map-warning">Planungs- und Dokumentationsansicht – keine zugelassene Navigationskarte.</p>
+  </div>`;
+}
+
+function removeReportRouteMap() {
+  if (!reportRouteMap) return;
+  try { reportRouteMap.remove(); } catch (error) { console.info('Alte Reisebericht-Karte konnte nicht entfernt werden.', error); }
+  reportRouteMap = null;
+}
+
+function waitForReportTileLayer(layer, timeout = 4500) {
+  return new Promise(resolve => {
+    let finished = false;
+    const done = status => {
+      if (finished) return;
+      finished = true;
+      window.clearTimeout(timer);
+      resolve(status);
+    };
+    const timer = window.setTimeout(() => done('timeout'), timeout);
+    layer.once('load', () => done('loaded'));
+    layer.once('tileerror', () => window.setTimeout(() => done('partial'), 500));
+  });
+}
+
+function reportRouteLabel(route, index) {
+  return esc(route.name || route.fileName || `Route ${index + 1}`);
+}
+
+function addReportRouteLayers(map) {
+  const bounds = L.latLngBounds([]);
+  const routes = state.gpx.filter(item => item.points?.length);
+  routes.forEach((route, index) => {
+    const latLngs = route.points
+      .map(point => [num(point[0]), num(point[1])])
+      .filter(point => Number.isFinite(point[0]) && Number.isFinite(point[1]));
+    if (!latLngs.length) return;
+    latLngs.forEach(point => bounds.extend(point));
+    L.polyline(latLngs, { color: '#08283b', weight: 9, opacity: .9, lineCap: 'round', lineJoin: 'round', interactive: false }).addTo(map);
+    L.polyline(latLngs, { color: '#f2bd2e', weight: 4.5, opacity: 1, lineCap: 'round', lineJoin: 'round' })
+      .bindPopup(`<strong>${reportRouteLabel(route, index)}</strong><br>${route.distanceNm ? `${dec(route.distanceNm)} sm` : `${latLngs.length} Punkte`}`)
+      .addTo(map);
+    const start = latLngs[0];
+    const finish = latLngs.at(-1);
+    L.marker(start, { icon: routeMarker('start', index === 0 ? 'Start' : `Start ${index + 1}`), title: 'Start' }).addTo(map);
+    L.marker(finish, { icon: routeMarker('finish', index === routes.length - 1 ? 'Ziel' : `Ziel ${index + 1}`), title: 'Ziel' }).addTo(map);
+  });
+
+  state.ports.forEach(port => {
+    const point = parseCoordinates(port.coords);
+    if (!point) return;
+    bounds.extend(point);
+    const rating = clamp(Math.round(num(port.rating)), 0, 5);
+    L.marker(point, { icon: portMarkerIcon(), title: port.name || 'Hafen' })
+      .bindPopup(`<div class="port-map-popup"><strong>${esc(port.name || 'Hafen')}</strong>${rating ? `<div>${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</div>` : ''}${port.berth ? `<span>Liegeplatz: ${esc(port.berth)}</span>` : ''}</div>`)
+      .addTo(map);
+  });
+  return bounds;
+}
+
+function initReportRouteMap() {
+  removeReportRouteMap();
+  const element = $('#reportRouteMap');
+  if (!element || !reportMapContentAvailable()) return Promise.resolve();
+  if (!window.L) {
+    element.innerHTML = '<div class="report-map-loading error"><span>⚠</span><strong>Seekarte konnte nicht gestartet werden.</strong><small>Bitte die Seite mit Internetverbindung neu laden.</small></div>';
+    return Promise.resolve();
+  }
+
+  reportRouteMap = L.map(element, {
+    zoomControl: true,
+    attributionControl: true,
+    scrollWheelZoom: false,
+    doubleClickZoom: true,
+    dragging: true,
+    tap: true,
+    preferCanvas: false
+  });
+
+  const baseLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    maxZoom: 19,
+    crossOrigin: true,
+    attribution: '&copy; OpenStreetMap-Mitwirkende'
+  }).addTo(reportRouteMap);
+  const seaMarkLayer = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
+    maxZoom: 18,
+    opacity: 1,
+    crossOrigin: true,
+    attribution: 'Seezeichen &copy; OpenSeaMap'
+  }).addTo(reportRouteMap);
+
+  L.control.scale({ metric: true, imperial: false, maxWidth: 140, position: 'bottomleft' }).addTo(reportRouteMap);
+  const bounds = addReportRouteLayers(reportRouteMap);
+  if (bounds.isValid()) reportRouteMap.fitBounds(bounds, { padding: [28, 28], maxZoom: 12 });
+  else reportRouteMap.setView([53.75, 8.35], 8);
+
+  const loading = $('#reportMapLoading');
+  const tileState = Promise.all([waitForReportTileLayer(baseLayer), waitForReportTileLayer(seaMarkLayer)]).then(states => {
+    reportRouteMap?.invalidateSize(false);
+    if (!loading) return;
+    const baseLoaded = states[0] === 'loaded';
+    if (baseLoaded) loading.remove();
+    else {
+      loading.classList.add('warning');
+      loading.innerHTML = '<span>⌁</span><strong>Kartenhintergrund noch nicht vollständig geladen</strong><small>Bitte Internetverbindung prüfen. Bereits gespeicherte Kacheln bleiben offline verfügbar.</small>';
+      window.setTimeout(() => loading.remove(), 5000);
+    }
+  });
+  window.setTimeout(() => reportRouteMap?.invalidateSize(false), 120);
+  return tileState;
 }
 
 function buildReport() {
   const settings=getSettings();const days=[...state.days].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const photos=[...state.photos];const ports=[...state.ports].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const totalNm=days.reduce((s,i)=>s+num(i.distance),0);const hours=days.reduce((s,i)=>s+Math.max(0,num(i.engineEnd)-num(i.engineStart)),0);const fuelLiters=state.fuel.reduce((s,i)=>s+num(i.liters),0);const fuelCost=state.fuel.reduce((s,i)=>s+num(i.liters)*num(i.price),0);const portCost=ports.reduce((s,i)=>s+num(i.cost),0);const cover=settings.boatPhoto||photos.find(p=>p.featured)?.data||defaultHero;const includeWeather=$('#reportIncludeWeather')?.checked!==false,includePorts=$('#reportIncludePorts')?.checked!==false,includeCosts=$('#reportIncludeCosts')?.checked!==false,includeMaintenance=$('#reportIncludeMaintenance')?.checked===true;
-  $('#reportContent').innerHTML=`<div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle||'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div><div class="report-summary-grid"><div><span>Reisetage</span><strong>${days.length}</strong></div><div><span>Seemeilen</span><strong>${dec(totalNm)} sm</strong></div><div><span>Motorstunden</span><strong>${dec(hours)} h</strong></div><div><span>Häfen</span><strong>${ports.length}</strong></div></div><p class="meta">${esc(settings.boatName)} · Baujahr ${esc(settings.buildYear)} · ${dec2(settings.length)} × ${dec2(settings.beam)} m · ${esc(settings.engine)} · Heimathafen ${esc(settings.homePort)}</p><section><h2>Der Törn auf der Karte</h2>${reportRouteSvg()}</section>${state.route.length?`<section class="report-plan"><h2>Törnplan</h2>${[...state.route].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((stage,index)=>`<div><b>${index+1}. ${fmtDate(stage.date)} · ${esc(stage.from||'—')} → ${esc(stage.to||'—')}</b><span>${dec(stage.nm)} sm${stage.departTime?` · Ablegen ${esc(stage.departTime)} Uhr`:''}${includeWeather&&stage.wind?` · ${esc(stage.wind)}`:''}${includeWeather&&stage.wave?` · Welle ${esc(stage.wave)}`:''}${includeWeather&&stage.tide?` · ${esc(stage.tide)}`:''}</span></div>`).join('')}</section>`:''}${days.map(day=>{const dayPhotos=photos.filter(photo=>photo.relatedId===day.id||(!photo.relatedId&&photo.date===day.date)).sort((a,b)=>Number(b.featured===true||b.featured==='true')-Number(a.featured===true||a.featured==='true'));return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title||`${day.fromPort||''} → ${day.toPort||''}`)}</h2><p class="meta">${esc(day.fromPort||'')} → ${esc(day.toPort||'')} · ${dec(day.distance)} sm${includeWeather?` · ${esc(day.wind||'')} · ${esc(day.wave||'')}`:''}</p><p>${esc(day.summary||'').replace(/\n/g,'<br>')}</p>${day.moment?`<blockquote>„${esc(day.moment)}“</blockquote>`:''}${dayPhotos.map(photo=>photo.data?`<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption||'')}"><figcaption>${esc(photo.caption||'')}</figcaption></figure>`:'').join('')}</section>`;}).join('')||'<p>Noch keine Tagesberichte vorhanden.</p>'}${includePorts&&ports.length?`<section><h2>Hafenbuch</h2><table class="report-port-table"><thead><tr><th>Hafen</th><th>Bewertung</th><th>Liegeplatz</th><th>Kosten</th></tr></thead><tbody>${ports.map(port=>`<tr><td>${esc(port.name)}</td><td>${'★'.repeat(Math.round(num(port.rating)))}${'☆'.repeat(5-Math.round(num(port.rating)))}</td><td>${esc(port.berth||'—')}</td><td>${port.cost?eur(port.cost):'—'}</td></tr>`).join('')}</tbody></table></section>`:''}${includeCosts?`<section><h2>Diesel & Reisekosten</h2><div class="report-costs"><div><span>Getankt</span><strong>${dec(fuelLiters)} l</strong></div><div><span>Dieselkosten</span><strong>${eur(fuelCost)}</strong></div><div><span>Liegeplätze</span><strong>${eur(portCost)}</strong></div></div></section>`:''}${includeMaintenance&&state.maintenance.length?`<section><h2>Technik & Wartung</h2>${state.maintenance.map(item=>`<p><b>${fmtDate(item.date)} · ${esc(item.title)}</b><br>${esc(item.note||'')}${item.cost?` · ${eur(item.cost)}`:''}</p>`).join('')}</section>`:''}`;
+  $('#reportContent').innerHTML=`<div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle||'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div><div class="report-summary-grid"><div><span>Reisetage</span><strong>${days.length}</strong></div><div><span>Seemeilen</span><strong>${dec(totalNm)} sm</strong></div><div><span>Motorstunden</span><strong>${dec(hours)} h</strong></div><div><span>Häfen</span><strong>${ports.length}</strong></div></div><p class="meta">${esc(settings.boatName)} · Baujahr ${esc(settings.buildYear)} · ${dec2(settings.length)} × ${dec2(settings.beam)} m · ${esc(settings.engine)} · Heimathafen ${esc(settings.homePort)}</p><section class="report-map-section"><h2>Der Törn auf der Seekarte</h2>${reportRouteMapHtml()}</section>${state.route.length?`<section class="report-plan"><h2>Törnplan</h2>${[...state.route].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((stage,index)=>`<div><b>${index+1}. ${fmtDate(stage.date)} · ${esc(stage.from||'—')} → ${esc(stage.to||'—')}</b><span>${dec(stage.nm)} sm${stage.departTime?` · Ablegen ${esc(stage.departTime)} Uhr`:''}${includeWeather&&stage.wind?` · ${esc(stage.wind)}`:''}${includeWeather&&stage.wave?` · Welle ${esc(stage.wave)}`:''}${includeWeather&&stage.tide?` · ${esc(stage.tide)}`:''}</span></div>`).join('')}</section>`:''}${days.map(day=>{const dayPhotos=photos.filter(photo=>photo.relatedId===day.id||(!photo.relatedId&&photo.date===day.date)).sort((a,b)=>Number(b.featured===true||b.featured==='true')-Number(a.featured===true||a.featured==='true'));return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title||`${day.fromPort||''} → ${day.toPort||''}`)}</h2><p class="meta">${esc(day.fromPort||'')} → ${esc(day.toPort||'')} · ${dec(day.distance)} sm${includeWeather?` · ${esc(day.wind||'')} · ${esc(day.wave||'')}`:''}</p><p>${esc(day.summary||'').replace(/\n/g,'<br>')}</p>${day.moment?`<blockquote>„${esc(day.moment)}“</blockquote>`:''}${dayPhotos.map(photo=>photo.data?`<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption||'')}"><figcaption>${esc(photo.caption||'')}</figcaption></figure>`:'').join('')}</section>`;}).join('')||'<p>Noch keine Tagesberichte vorhanden.</p>'}${includePorts&&ports.length?`<section><h2>Hafenbuch</h2><table class="report-port-table"><thead><tr><th>Hafen</th><th>Bewertung</th><th>Liegeplatz</th><th>Kosten</th></tr></thead><tbody>${ports.map(port=>`<tr><td>${esc(port.name)}</td><td>${'★'.repeat(Math.round(num(port.rating)))}${'☆'.repeat(5-Math.round(num(port.rating)))}</td><td>${esc(port.berth||'—')}</td><td>${port.cost?eur(port.cost):'—'}</td></tr>`).join('')}</tbody></table></section>`:''}${includeCosts?`<section><h2>Diesel & Reisekosten</h2><div class="report-costs"><div><span>Getankt</span><strong>${dec(fuelLiters)} l</strong></div><div><span>Dieselkosten</span><strong>${eur(fuelCost)}</strong></div><div><span>Liegeplätze</span><strong>${eur(portCost)}</strong></div></div></section>`:''}${includeMaintenance&&state.maintenance.length?`<section><h2>Technik & Wartung</h2>${state.maintenance.map(item=>`<p><b>${fmtDate(item.date)} · ${esc(item.title)}</b><br>${esc(item.note||'')}${item.cost?` · ${eur(item.cost)}`:''}</p>`).join('')}</section>`:''}`;
+  reportMapReadyPromise = initReportRouteMap();
+  return reportMapReadyPromise;
 }
 
 function renderV6Extras() {

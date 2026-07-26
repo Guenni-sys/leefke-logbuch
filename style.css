@@ -348,3 +348,38 @@ img{max-width:100%}
 @media(max-width:850px){.update-banner{position:relative;flex-direction:column;align-items:stretch}.maintenance-templates,.photo-cloud-controls,.backup-heading,.report-controls,.history-toolbar{align-items:stretch;flex-direction:column}.route-weather-form,.compact-form{grid-template-columns:1fr}.route-weather-summary,.official-tide-events,.report-summary-grid,.report-costs{grid-template-columns:1fr 1fr}.change-entry,.conflict-entry{grid-template-columns:auto 1fr}.change-entry>.actions,.conflict-entry>.actions{grid-column:1/-1}.document-row{grid-template-columns:auto 1fr}.document-row>.actions{grid-column:1/-1}.conflict-values{grid-template-columns:1fr}}
 @media(max-width:560px){.route-weather-summary,.official-tide-events,.report-summary-grid,.report-costs,.sync-health-grid{grid-template-columns:1fr}.source-legend div{grid-template-columns:1fr}.photo-cloud-controls .actions{justify-content:flex-start}.history-toolbar>div:last-child{flex-direction:column}.history-toolbar select{width:100%}}
 @media print{.update-banner,.route-weather-card,.photo-cloud-controls{display:none!important}.report-summary-grid{grid-template-columns:repeat(4,1fr)}.report-map{height:260px}.report-port-table{font-size:10pt}}
+
+/* Version 6.1: echte Seekarte im Reisebericht */
+.report-map-section{break-inside:avoid;page-break-inside:avoid}
+.report-map-shell{margin:16px 0 22px}
+.report-map{height:clamp(360px,48vw,520px);border:1px solid #9eb3b8;border-radius:12px;position:relative;background:#cfe1e6;overflow:hidden;box-shadow:0 8px 24px rgba(8,31,48,.13);print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.report-map .leaflet-tile-pane,.report-map .leaflet-overlay-pane,.report-map .leaflet-marker-pane{print-color-adjust:exact;-webkit-print-color-adjust:exact}
+.report-map-loading{position:absolute;z-index:1000;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:7px;padding:24px;text-align:center;color:#173e50;background:linear-gradient(rgba(21,74,99,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(21,74,99,.08) 1px,transparent 1px),rgba(229,239,240,.94);background-size:42px 42px;pointer-events:none}
+.report-map-loading span{font-size:2rem;color:var(--brass)}
+.report-map-loading strong{font-family:Georgia,serif;font-size:1.1rem;color:var(--navy-900)}
+.report-map-loading small{max-width:520px;color:#506d78}
+.report-map-loading.warning{inset:auto 12px 12px 12px;min-height:86px;border:1px solid rgba(181,126,37,.38);border-radius:9px;background:rgba(255,248,226,.95);box-shadow:0 5px 18px rgba(0,0,0,.14)}
+.report-map-loading.error{background:rgba(250,241,236,.96);color:#8b3d32}
+.report-map-caption{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;margin-top:9px;color:#435e69;font-size:.78rem;font-weight:750}
+.report-map-caption span{display:inline-flex;align-items:center;gap:6px}
+.report-legend-line{display:inline-block;width:30px;height:5px;border-radius:999px;background:#f2bd2e;box-shadow:0 0 0 2px #08283b}
+.report-map-warning{margin:7px 0 0;padding:7px 10px;border-left:3px solid var(--brass);background:rgba(201,164,93,.1);color:#635a49;font-size:.74rem}
+.report-map .leefke-route-marker b{display:none}
+.report-map .leefke-route-marker span{width:31px;height:31px;font-size:14px;border-width:2px}
+.report-map .leefke-port-marker span{width:29px;height:29px;font-size:15px}
+
+@media(max-width:560px){
+  .report-map{height:370px;border-radius:9px}
+  .report-map-caption{gap:7px 12px;font-size:.72rem}
+}
+
+@media print{
+  .report-map-section{break-inside:avoid!important;page-break-inside:avoid!important}
+  .report-map{height:285px!important;border-radius:0;box-shadow:none;background:#cfe1e6!important;overflow:hidden!important}
+  .report-map-loading{display:none!important}
+  .report-map .leaflet-control-zoom,.report-map .leaflet-control-scale{display:none!important}
+  .report-map .leaflet-control-attribution{display:block!important;max-width:80%;font-size:7pt!important;line-height:1.15!important}
+  .report-map-caption{font-size:8pt}
+  .report-map-warning{font-size:7.5pt}
+  .report-map .leaflet-tile{visibility:visible!important;opacity:1!important}
+}

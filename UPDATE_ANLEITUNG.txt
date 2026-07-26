@@ -1,79 +1,32 @@
-LEEFKE Bordtagebuch – Version 6.0 Komplettausbau
-================================================
+LEEFKE Bordtagebuch – Version 6.1 Reisebericht mit Seekarte
 
-WICHTIG VORHER
----------------
-1. Auf jedem Gerät LEEFKE öffnen.
-2. Unter „Sicherung“ eine Sicherungsdatei exportieren.
-3. Die installierte App noch nicht löschen.
+WAS WURDE GEÄNDERT?
+- Im Reisebericht wird der Törn jetzt auf einer echten interaktiven Seekartenansicht dargestellt.
+- Grundlage: OpenStreetMap; Tonnen, Baken und Seezeichen: OpenSeaMap.
+- GPX-Routen, Start, Ziel und Häfen mit Koordinaten werden über der Karte angezeigt.
+- Beim Drucken / Speichern als PDF wartet die App kurz, bis die Kartenkacheln geladen sind.
+- Bereits geladene Kartenbereiche können über den App-Zwischenspeicher auch offline sichtbar bleiben.
 
-A. DATEIEN BEI GITHUB HOCHLADEN
--------------------------------
-1. Diese ZIP-Datei vollständig entpacken.
-2. Repository öffnen:
-   https://github.com/Guenni-sys/leefke-logbuch
-3. Add file → Upload files.
-4. Alle Dateien AUS dem entpackten Ordner auswählen.
-   Nicht die ZIP-Datei und nicht den äußeren Ordner hochladen.
-5. Commit-Text: LEEFKE Version 6.0 Komplettausbau
-6. Commit changes drücken.
+WICHTIG
+- Für noch nicht geladene Kartenbereiche ist Internet nötig.
+- Die Darstellung ist eine Planungs- und Dokumentationsansicht und keine zugelassene Navigationskarte.
+- In Supabase muss für dieses Update nichts geändert werden.
 
-B. SUPABASE EINMAL ERWEITERN
-----------------------------
-Dieser Schritt ist nötig für Sofort-Synchronisierung, Cloud-Fotos und Dokumente.
+UPDATE
+1. In der LEEFKE-App vorsichtshalber eine Sicherung exportieren.
+2. ZIP-Datei unter Windows vollständig entpacken.
+3. GitHub-Repository Guenni-sys/leefke-logbuch öffnen.
+4. Add file → Upload files.
+5. Alle Dateien aus dem entpackten Ordner hochladen und vorhandene Dateien ersetzen.
+6. Commit-Text: LEEFKE Version 6.1 Reisebericht Seekarte
+7. Commit changes anklicken.
+8. Nach etwa zwei Minuten öffnen:
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=6.1
+9. Unter Windows einmal Strg + F5 drücken; auf iPhone/iPad die App vollständig schließen und neu öffnen.
+10. Oben muss „BORDTAGEBUCH · VERSION 6.1“ stehen.
 
-1. Supabase-Projekt öffnen.
-2. Links „SQL Editor“ öffnen.
-3. „New query“ wählen.
-4. Die Datei SUPABASE_SETUP_V6.sql mit einem Texteditor öffnen.
-5. Den gesamten Inhalt kopieren und in das SQL-Feld einfügen.
-6. „Run“ drücken.
-7. Eine grüne Erfolgsmeldung ist richtig.
-
-Der Befehl löscht keine vorhandenen LEEFKE-Daten.
-
-C. VERSION 6.0 ÖFFNEN
-----------------------
-Nach etwa 2–3 Minuten öffnen:
-https://guenni-sys.github.io/leefke-logbuch/index.html?v=6.0
-
-Windows: einmal Strg + F5 drücken.
-iPhone/iPad: App vollständig schließen und neu öffnen.
-Oben muss „BORDTAGEBUCH · VERSION 6.0“ stehen.
-
-D. GERÄTE ABGLEICHEN
---------------------
-1. Auf jedem Gerät mit demselben LEEFKE-Konto angemeldet bleiben.
-2. Konto & Sync öffnen.
-3. „Jetzt vollständig abgleichen“ drücken.
-4. Danach gibt es kein Hauptgerät: iPhone, iPad und Laptop sind gleichberechtigt.
-
-E. FOTOS UND DOKUMENTE TESTEN
------------------------------
-1. Auf einem Gerät ein kleines Testfoto hinzufügen.
-2. „Fotos jetzt synchronisieren“ drücken.
-3. Auf einem zweiten Gerät „Jetzt synchronisieren“ drücken.
-4. Das Foto sollte dort erscheinen.
-
-NEU IN VERSION 6.0
-------------------
-- feldweise, bidirektionale Synchronisierung
-- Supabase Realtime für schnellen Geräteabgleich
-- synchronisierte Löschungen
-- Konflikterkennung und manuelle Auflösung
-- Änderungsverlauf und Rückgängig-Funktion
-- automatische lokale Sicherungspunkte
-- amtliche BSH-Ansicht getrennt von Modellwerten
-- aktuelle PEGELONLINE-Messwerte
-- Wetter und Seegang entlang einer GPX-Route
-- Cloud-Synchronisierung für Fotos, Startbild und Dokumente
-- ausführlicher Reisebericht zum Drucken oder als PDF
-- Vorräte, Sicherheitsausrüstung und Dokumentenablage
-- Wartungsvorlagen für LEEFKE
-- Hinweis auf neue App-Versionen mit Sicherung vor dem Update
-
-HINWEIS ZUR NAVIGATION
-----------------------
-Wetter, Seegang, Routenbewertung und modellierte Tide sind Planungshilfen.
-Sie ersetzen keine amtlichen Warnungen, aktuelle Revierinformationen,
-zugelassenen Seekarten oder die eigene nautische Entscheidung.
+TEST
+- Reisebericht öffnen.
+- Bericht aktualisieren anklicken.
+- Unter „Der Törn auf der Seekarte“ müssen Küstenkarte, Seezeichen und die GPX-Route sichtbar sein.
+- Erst danach „Drucken / als PDF speichern“ verwenden.
