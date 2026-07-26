@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=5.0">
+  <link rel="stylesheet" href="style.css?v=5.1">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -19,7 +19,7 @@
     <div class="brand">
       <div class="brand-mark" aria-hidden="true">⚓</div>
       <div>
-        <small>BORDTAGEBUCH · VERSION 5.0</small>
+        <small>BORDTAGEBUCH · VERSION 5.1</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -375,6 +375,7 @@
                 <div><dt>Status</dt><dd id="syncStatusText">Noch nicht synchronisiert</dd></div>
                 <div><dt>Letzte Synchronisierung</dt><dd id="lastSyncText">—</dd></div>
                 <div><dt>Gerät</dt><dd id="deviceNameText">Dieses Gerät</dd></div>
+                <div><dt>Automatischer Abgleich</dt><dd id="autoSyncText">Noch nicht aktiv</dd></div>
               </dl>
               <div class="actions">
                 <button id="syncNowButton" class="primary" type="button">Jetzt synchronisieren</button>
@@ -386,13 +387,13 @@
 
           <article class="card sync-explain-card">
             <div class="card-kicker">SO FUNKTIONIERT ES</div>
-            <h3>Offline erfassen, später automatisch abgleichen</h3>
+            <h3>Alle Geräte sind gleichberechtigt</h3>
             <div class="sync-flow">
               <div><span>1</span><p><strong>Eintragen</strong><br>Neue Daten werden sofort auf dem Gerät gespeichert.</p></div>
               <div><span>2</span><p><strong>Unterwegs offline</strong><br>Die LEEFKE-App bleibt auch ohne Mobilfunk nutzbar.</p></div>
-              <div><span>3</span><p><strong>Automatisch abgleichen</strong><br>Sobald Internet da ist, werden Änderungen übertragen.</p></div>
+              <div><span>3</span><p><strong>Automatisch abgleichen</strong><br>Offene Geräte prüfen alle 20 Sekunden auf neue Einträge. Beim Öffnen wird sofort abgeglichen.</p></div>
             </div>
-            <p class="nautical-warning"><strong>Aktuell synchronisiert:</strong> Tageslogbuch, Törnplanung, Häfen, Tankbuch, Wartung, Checklisten, Schiffsdaten und GPX-Routen. Fotos und ein selbst gewähltes Startbild bleiben vorerst lokal auf dem jeweiligen Gerät.</p>
+            <p class="nautical-warning"><strong>Wichtig:</strong> Einträge vom Handy werden in die Cloud übertragen und anschließend auch auf Tablet und Laptop geladen. Eine vollständig geschlossene App wird beim nächsten Öffnen sofort aktualisiert.<br><br><strong>Aktuell synchronisiert:</strong> Tageslogbuch, Törnplanung, Häfen, Tankbuch, Wartung, Checklisten, Schiffsdaten und GPX-Routen. Fotos und ein selbst gewähltes Startbild bleiben vorerst lokal auf dem jeweiligen Gerät.</p>
           </article>
         </div>
 
@@ -420,6 +421,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=5.0"></script>
+  <script src="app.js?v=5.1"></script>
 </body>
 </html>

@@ -218,7 +218,7 @@ img{max-width:100%}
 @media(max-width:850px){.gpx-import-card{position:static}.voyage-board-head{align-items:flex-start;flex-direction:column}.voyage-board-head .summarybar{text-align:left}.stage-heading,.stage-footer,.stage-port{align-items:flex-start;flex-direction:column}.stage-distance{text-align:left}.stage-port>div:last-child{justify-content:flex-start}.stage-actions{justify-content:flex-start}}
 @media(max-width:560px){.trip-overview{grid-template-columns:1fr}.voyage-board:before{left:20px}.voyage-stage{grid-template-columns:42px minmax(0,1fr)}.stage-rail{padding-top:19px}.stage-rail span{width:29px;height:29px;font-size:.78rem;border-width:2px}.stage-content{padding:17px 14px 15px}.stage-topline{align-items:flex-start;flex-direction:column}.stage-heading h3{font-size:1.28rem}.stage-conditions{grid-template-columns:1fr}.stage-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}.stage-actions button{width:100%}.stage-gpx{width:100%}.stage-footer{align-items:stretch}.route-form .section-heading{margin-bottom:3px}}
 
-/* Version 5.0 – LEEFKE Cloud & Gerätesynchronisierung */
+/* Version 5.1 – bidirektionale Gerätesynchronisierung */
 .sync-status{appearance:none;margin:0;padding:7px 12px;border-radius:999px;font-size:.76rem;font-weight:850;line-height:1.1;color:#fff;background:rgba(255,255,255,.09);border:1px solid rgba(255,255,255,.24);box-shadow:none;transform:none}
 .sync-status:hover{transform:none;box-shadow:none;background:rgba(255,255,255,.15)}
 .sync-status.synced{border-color:rgba(131,213,163,.65);background:rgba(50,132,83,.28)}

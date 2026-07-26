@@ -1,4 +1,5 @@
-const APP_VERSION = '5.0';
+const APP_VERSION = '5.1';
+const AUTO_SYNC_INTERVAL_MS = 20000;
 const DB_NAME = 'leefke-v2';
 const DB_VERSION = 3;
 const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx'];
@@ -63,6 +64,8 @@ let supabaseClient = null;
 let currentSession = null;
 let syncInProgress = false;
 let syncTimer = null;
+let autoSyncTimer = null;
+let syncRequested = false;
 let suppressSyncTracking = false;
 
 const $ = selector => document.querySelector(selector);
@@ -287,6 +290,11 @@ async function updateSyncUI() {
   if ($('#accountEmail')) $('#accountEmail').textContent = currentSession?.user?.email || '—';
   if ($('#lastSyncText')) $('#lastSyncText').textContent = lastSync?.at ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastSync.at)) : '—';
   if ($('#deviceNameText')) $('#deviceNameText').textContent = deviceLabel();
+  if ($('#autoSyncText')) {
+    $('#autoSyncText').textContent = loggedIn && linked
+      ? (navigator.onLine ? 'Aktiv · alle 20 Sekunden, solange die App geöffnet ist' : 'Wartet auf Internet')
+      : 'Noch nicht aktiv';
+  }
 
   let label = 'Nicht angemeldet';
   let detail = 'Cloud-Synchronisierung ist nicht aktiv';
@@ -343,7 +351,12 @@ async function initializeSupabase() {
     currentSession = session || null;
     window.setTimeout(async () => {
       await updateSyncUI();
-      if (currentSession && await isLinkedForCurrentUser() && navigator.onLine) scheduleSync(250);
+      if (currentSession && await isLinkedForCurrentUser()) {
+        if (navigator.onLine) scheduleSync(250);
+        startAutoSync(1200);
+      } else {
+        stopAutoSync();
+      }
       if (event === 'SIGNED_IN') setMessage('#authMessage', 'Anmeldung erfolgreich.', 'success');
     }, 0);
   });
@@ -410,6 +423,7 @@ async function uploadLocalAsSource() {
     await metaSet('lastSync', { at: new Date().toISOString() });
     setMessage('#syncMessage', `${rows.length} Datensätze wurden in die LEEFKE-Cloud übertragen.`, 'success');
     toast('LEEFKE-Daten synchronisiert');
+    startAutoSync();
   } catch (error) {
     console.error(error);
     setMessage('#syncMessage', `Übertragung fehlgeschlagen: ${readableAuthError(error)}`, 'error');
@@ -449,6 +463,7 @@ async function downloadCloudAsSource() {
     await refresh();
     setMessage('#syncMessage', `${active.length} Cloud-Datensätze wurden auf dieses Gerät geladen.`, 'success');
     toast('Cloud-Daten geladen');
+    startAutoSync();
   } catch (error) {
     suppressSyncTracking = false;
     console.error(error);
@@ -464,10 +479,15 @@ async function mergeInitialData() {
   await markLinked('merge');
   await setDirty(true);
   await syncNow({ force: true });
+  startAutoSync();
 }
 
 async function syncNow(options = {}) {
-  if (syncInProgress || !supabaseClient || !currentSession?.user?.id || !navigator.onLine) {
+  if (syncInProgress) {
+    syncRequested = true;
+    return;
+  }
+  if (!supabaseClient || !currentSession?.user?.id || !navigator.onLine) {
     await updateSyncUI();
     return;
   }
@@ -478,12 +498,13 @@ async function syncNow(options = {}) {
   }
 
   syncInProgress = true;
+  const dirtyAtStart = await metaGet('dirty');
   await updateSyncUI();
-  setMessage('#syncMessage', 'LEEFKE-Daten werden abgeglichen …');
+  if (!options.silent) setMessage('#syncMessage', 'LEEFKE-Daten werden abgeglichen …');
 
   try {
     const userId = currentSession.user.id;
-    let remote = await fetchRemoteRecords();
+    const remote = await fetchRemoteRecords();
     const remoteMap = new Map(remote.map(row => [`${row.record_type}:${row.record_id}`, row]));
     const tombstones = await all('syncTombstones');
     const tombstoneMap = new Map(tombstones.map(item => [item.id, item]));
@@ -549,10 +570,19 @@ async function syncNow(options = {}) {
 
     await upsertRows(outgoing);
     for (const tombstone of pendingTombstones) await rawDel('syncTombstones', tombstone.id);
-    await setDirty(false);
+
+    const dirtyNow = await metaGet('dirty');
+    if (!dirtyNow?.value || dirtyNow.changedAt === dirtyAtStart?.changedAt) {
+      await setDirty(false);
+    } else {
+      syncRequested = true;
+    }
+
     await metaSet('lastSync', { at: new Date().toISOString() });
     await refresh();
-    setMessage('#syncMessage', outgoing.length ? `${outgoing.length} Änderung(en) abgeglichen.` : 'Alle LEEFKE-Daten sind auf dem neuesten Stand.', 'success');
+    if (!options.silent) {
+      setMessage('#syncMessage', outgoing.length ? `${outgoing.length} Änderung(en) abgeglichen.` : 'Alle LEEFKE-Daten sind auf dem neuesten Stand.', 'success');
+    }
   } catch (error) {
     suppressSyncTracking = false;
     console.error('Synchronisierung fehlgeschlagen', error);
@@ -561,6 +591,10 @@ async function syncNow(options = {}) {
   } finally {
     syncInProgress = false;
     await updateSyncUI();
+    if (syncRequested) {
+      syncRequested = false;
+      scheduleSync(250);
+    }
   }
 }
 
@@ -570,6 +604,33 @@ function scheduleSync(delay = 1400) {
     if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow();
     else await updateSyncUI();
   }, delay);
+}
+
+function stopAutoSync() {
+  window.clearTimeout(autoSyncTimer);
+  autoSyncTimer = null;
+}
+
+function startAutoSync(delay = AUTO_SYNC_INTERVAL_MS) {
+  stopAutoSync();
+  if (document.visibilityState !== 'visible') return;
+  autoSyncTimer = window.setTimeout(async () => {
+    try {
+      if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) {
+        await syncNow({ silent: true, reason: 'auto' });
+      }
+    } finally {
+      startAutoSync(AUTO_SYNC_INTERVAL_MS);
+    }
+  }, delay);
+}
+
+async function syncOnForeground() {
+  if (document.visibilityState !== 'visible') return;
+  if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) {
+    await syncNow({ silent: true, reason: 'foreground' });
+  }
+  startAutoSync();
 }
 
 function view(id) {
@@ -1499,6 +1560,7 @@ $('#signOutButton').onclick = async () => {
   if (!supabaseClient) return;
   await supabaseClient.auth.signOut();
   currentSession = null;
+  stopAutoSync();
   setMessage('#syncMessage', 'Abgemeldet. Die lokalen Daten bleiben auf diesem Gerät erhalten.');
   await updateSyncUI();
 };
@@ -1510,19 +1572,31 @@ $('#mergeDataButton').onclick = mergeInitialData;
 
 async function onlineState() {
   await updateSyncUI();
-  if (navigator.onLine && currentSession && await isLinkedForCurrentUser()) scheduleSync(250);
+  if (navigator.onLine && currentSession && await isLinkedForCurrentUser()) {
+    await syncNow({ silent: true, reason: 'online' });
+    startAutoSync();
+  } else if (!navigator.onLine) {
+    stopAutoSync();
+  }
 }
 window.addEventListener('online', onlineState);
 window.addEventListener('offline', onlineState);
+window.addEventListener('focus', syncOnForeground);
+window.addEventListener('pageshow', syncOnForeground);
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') syncOnForeground();
+  else stopAutoSync();
+});
 
 (async () => {
   db = await openDB();
   await migrateLocalTimestamps();
   await initializeSupabase();
-  if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow();
+  if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow({ silent: true, reason: 'startup' });
   await defaults();
   await refresh();
   await onlineState();
+  startAutoSync();
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.register('service-worker.js');

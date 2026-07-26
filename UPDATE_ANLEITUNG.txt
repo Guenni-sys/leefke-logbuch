@@ -1,38 +1,24 @@
-LEEFKE Bordtagebuch – Update auf Version 5.0
+LEEFKE Bordtagebuch – Update auf Version 5.1
 
-NEU:
-- gemeinsames LEEFKE-Konto für iPad, Handy und Windows
-- zentrale Speicherung über die eingerichtete Supabase-Datenbank
-- automatische Synchronisierung bei Internetverbindung
-- vollständige lokale Nutzung ohne Internet
-- sichtbarer Status: synchronisiert, offline oder Änderungen ausstehend
-- sichere Ersteinrichtung mit drei Möglichkeiten: lokales Gerät hochladen, Cloud laden oder zusammenführen
-- synchronisiert werden Tageslogbuch, Törnplanung, Häfen, Tankbuch, Wartung, Checklisten, Schiffsdaten und GPX-Routen
+NEU
+- Handy, Tablet und Laptop sind gleichberechtigt.
+- Änderungen eines Geräts werden automatisch in die Cloud übertragen.
+- Andere geöffnete Geräte prüfen alle 20 Sekunden auf neue Daten.
+- Beim Öffnen, Zurückkehren zur App oder Wiederherstellen der Internetverbindung wird sofort synchronisiert.
+- Gleichzeitige Änderungen gehen nicht mehr verloren; die zeitlich neuere Fassung gewinnt.
 
-WICHTIG:
-Fotos und ein selbst ausgewähltes Startbild bleiben in Version 5.0 noch lokal. Sie sind weiterhin in der JSON-Sicherung enthalten.
+WICHTIG
+Eine auf iPad oder Handy vollständig geschlossene App kann ihren lokalen Speicher nicht im Hintergrund aktualisieren. Die Daten liegen aber bereits in der Cloud und werden beim nächsten Öffnen sofort geladen.
 
-UPDATE AUF GITHUB:
-1. In der bisherigen App unter „Sicherung“ eine Sicherung exportieren.
-2. Diese ZIP-Datei unter Windows mit „Alle extrahieren“ entpacken.
-3. Im Repository https://github.com/Guenni-sys/leefke-logbuch „Add file“ und „Upload files“ wählen.
-4. Alle Dateien AUS dem entpackten Ordner hochladen – nicht die ZIP-Datei.
-5. Vorhandene Dateien ersetzen und „Commit changes“ drücken.
-6. Zwei bis drei Minuten warten.
-7. Öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.0
-8. Unter Windows einmal Strg+F5 drücken. Auf dem iPad die App vollständig schließen und neu öffnen.
+INSTALLATION
+1. In der bestehenden App unter „Sicherung“ eine Sicherung exportieren.
+2. Diese ZIP-Datei unter Windows vollständig entpacken.
+3. GitHub öffnen: https://github.com/Guenni-sys/leefke-logbuch
+4. Add file → Upload files.
+5. Alle Dateien aus diesem Ordner hochladen – nicht die ZIP-Datei.
+6. Commit changes anklicken.
+7. Zwei bis drei Minuten warten.
+8. Öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.1
+9. Unter Windows Strg + F5 drücken. Auf iPad/Handy die App vollständig schließen und neu öffnen.
 
-ERSTE ANMELDUNG AUF DEM BISHERIGEN HAUPTGERÄT:
-1. „Konto & Sync“ öffnen.
-2. E-Mail-Adresse und ein neues Passwort mit mindestens 8 Zeichen eingeben.
-3. „Konto anlegen“ drücken.
-4. Bestätigungs-E-Mail öffnen und den Link antippen.
-5. Danach in der LEEFKE-App anmelden.
-6. „Daten dieses Geräts in die Cloud übertragen“ wählen.
-
-WEITERE GERÄTE:
-1. Version 5.0 öffnen oder installieren.
-2. Mit derselben E-Mail-Adresse und demselben Passwort anmelden.
-3. „Cloud-Daten auf dieses Gerät laden“ wählen.
-
-Danach erfolgt der Abgleich automatisch, sobald Internet vorhanden ist.
+Es sind keine neuen SQL-Befehle in Supabase nötig. Das bestehende Konto und die vorhandenen Daten bleiben erhalten.
