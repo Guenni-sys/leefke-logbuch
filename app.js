@@ -1,9 +1,9 @@
-const APP_VERSION = '5.5';
+const APP_VERSION = '5.6';
 const AUTO_SYNC_INTERVAL_MS = 20000;
 const DB_NAME = 'leefke-v2';
-const DB_VERSION = 3;
-const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx'];
-const syncableStores = ['days', 'fuel', 'maintenance', 'checklists', 'route', 'ports', 'settings', 'gpx'];
+const DB_VERSION = 4;
+const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx', 'weather'];
+const syncableStores = ['days', 'fuel', 'maintenance', 'checklists', 'route', 'ports', 'settings', 'gpx', 'weather'];
 const SETTINGS_FIELD_RECORD_TYPE = 'settings_field';
 const systemStores = ['syncMeta', 'syncTombstones'];
 const SUPABASE_URL = 'https://fzaxoivuwpubwhgabahz.supabase.co';
@@ -52,6 +52,16 @@ const DEFAULT_SETTINGS = {
   boatPhoto: ''
 };
 
+
+const WEATHER_LOCATIONS = {
+  lemwerder: { key: 'lemwerder', name: 'Lemwerder', latitude: 53.1668, longitude: 8.6158, zoom: 12, note: 'Unterweser: Wellenwerte sind hier nur eine grobe Modellorientierung.' },
+  bremerhaven: { key: 'bremerhaven', name: 'Bremerhaven', latitude: 53.5505, longitude: 8.5795, zoom: 11 },
+  cuxhaven: { key: 'cuxhaven', name: 'Cuxhaven', latitude: 53.8688, longitude: 8.7064, zoom: 11 },
+  helgoland: { key: 'helgoland', name: 'Helgoland', latitude: 54.1825, longitude: 7.8854, zoom: 11 }
+};
+const WEATHER_TIMEZONE = 'Europe/Berlin';
+const WEATHER_MAX_FORECAST_DAYS = 7;
+
 let db;
 let state = {};
 let nauticalMap = null;
@@ -61,6 +71,13 @@ let portLayer = null;
 let activeGpxLayer = null;
 let activeRouteBounds = null;
 let selectedGpxId = '';
+let weatherMap = null;
+let weatherMarker = null;
+let weatherSelectedLocation = null;
+let activeWeatherSnapshot = null;
+let activeWeatherHourIndex = 0;
+let activeWeatherRouteId = '';
+let weatherMapPickMode = false;
 let supabaseClient = null;
 let currentSession = null;
 let syncInProgress = false;
@@ -473,7 +490,7 @@ function checklistMatchesFactory(item) {
 }
 
 async function localDataIsOnlyFactoryDefaults() {
-  for (const store of ['days', 'fuel', 'maintenance', 'ports', 'gpx']) {
+  for (const store of ['days', 'fuel', 'maintenance', 'ports', 'gpx', 'weather']) {
     if ((await all(store)).length) return false;
   }
 
@@ -945,6 +962,12 @@ function view(id) {
   if (id === 'report') buildReport();
   if (id === 'sync') updateSyncUI();
   if (id === 'day') prepareDayForm();
+  if (id === 'weather') {
+    window.setTimeout(() => {
+      prepareWeatherView();
+      weatherMap?.invalidateSize();
+    }, 80);
+  }
   if (id === 'route') {
     window.setTimeout(() => {
       ensureNauticalMap();
@@ -1183,6 +1206,13 @@ function render() {
   renderSettings(settings);
   renderGpxSelect();
   renderPortDatalist();
+  renderWeatherLocationOptions();
+  if (activeWeatherSnapshot?.id) {
+    activeWeatherSnapshot = state.weather?.find(item => item.id === activeWeatherSnapshot.id) || activeWeatherSnapshot;
+  } else if (state.weather?.length) {
+    activeWeatherSnapshot = [...state.weather].sort((a, b) => Date.parse(b.loadedAt || b._updatedAt || 0) - Date.parse(a.loadedAt || a._updatedAt || 0))[0];
+  }
+  if (activeWeatherSnapshot) renderWeatherSnapshot(activeWeatherSnapshot, activeWeatherHourIndex);
   if (nauticalMap) refreshPortLayer();
 }
 
@@ -1302,6 +1332,7 @@ function renderRoute() {
           <div class="stage-gpx">${linkedGpx ? `<span>⌁ ${esc(linkedGpx.name)} · ${dec(linkedGpx.distanceNm)} sm</span>` : '<span class="muted">Keine GPX-Route zugeordnet</span>'}</div>
           <div class="stage-actions">
             ${linkedGpx ? `<button type="button" onclick="showRouteGpx('${item.id}')">Auf Seekarte</button>` : ''}
+            <button type="button" onclick="weatherForRoute('${item.id}')">Wetter & Tide</button>
             <button type="button" onclick="routeToDay('${item.id}')">Ins Tageslog</button>
             <button type="button" onclick="editItem('route','${item.id}')">Bearbeiten</button>
             <button type="button" class="danger-text" onclick="removeItem('route','${item.id}')">Löschen</button>
@@ -1776,6 +1807,537 @@ function drawGpx(id) {
   map.fitBounds(activeRouteBounds, { padding: [36, 36], maxZoom: 14 });
 }
 
+
+
+function round(value, digits = 1) {
+  const factor = 10 ** digits;
+  return Math.round(num(value) * factor) / factor;
+}
+
+function dateInputValue(date = new Date()) {
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return local.toISOString().slice(0, 10);
+}
+
+function addDays(dateString, days) {
+  const date = new Date(`${dateString}T12:00:00`);
+  date.setDate(date.getDate() + days);
+  return dateInputValue(date);
+}
+
+function parseCoordinateString(value) {
+  const text = String(value || '').trim();
+  let match = text.match(/(-?\d+(?:[.,]\d+)?)\s*[;/]\s*(-?\d+(?:[.,]\d+)?)/);
+  if (!match) match = text.match(/(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+  if (!match) match = text.match(/(-?\d+(?:[.,]\d+)?)\s+(-?\d+(?:[.,]\d+)?)/);
+  if (!match) return null;
+  const latitude = Number(match[1].replace(',', '.'));
+  const longitude = Number(match[2].replace(',', '.'));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  return { latitude, longitude };
+}
+
+function coordinateLabel(latitude, longitude) {
+  const lat = Math.abs(latitude).toFixed(4).replace('.', ',');
+  const lon = Math.abs(longitude).toFixed(4).replace('.', ',');
+  return `${lat}° ${latitude >= 0 ? 'N' : 'S'} · ${lon}° ${longitude >= 0 ? 'E' : 'W'}`;
+}
+
+function normalizePlaceName(value) {
+  return String(value || '').toLocaleLowerCase('de').replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss').replace(/[^a-z0-9]/g, '');
+}
+
+function fixedLocationByName(name) {
+  const normalized = normalizePlaceName(name);
+  return Object.values(WEATHER_LOCATIONS).find(item => normalizePlaceName(item.name) === normalized) || null;
+}
+
+function routeEndpointLocation(route, side) {
+  if (!route) return null;
+  const placeName = side === 'from' ? route.from : route.to;
+  const fixed = fixedLocationByName(placeName);
+  if (fixed) return { ...fixed, source: 'route', routeId: route.id, routeSide: side };
+  const port = portByName(placeName);
+  const coords = parseCoordinateString(port?.coords);
+  if (coords) return { name: placeName || port.name, ...coords, source: 'route', routeId: route.id, routeSide: side, zoom: 11 };
+  const gpx = state.gpx?.find(item => item.id === route.gpxId);
+  const point = side === 'from' ? gpx?.points?.[0] : gpx?.points?.at(-1);
+  if (point) return { name: placeName || `${side === 'from' ? 'Start' : 'Ziel'} der Etappe`, latitude: num(point[0]), longitude: num(point[1]), source: 'route', routeId: route.id, routeSide: side, zoom: 11 };
+  return { name: placeName || 'Etappenpunkt', source: 'route', routeId: route.id, routeSide: side, unresolved: true };
+}
+
+async function geocodeWeatherLocation(location) {
+  if (!location?.unresolved || !location.name || !navigator.onLine) return location;
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(location.name)}&count=5&language=de&format=json`;
+  const response = await fetch(url);
+  if (!response.ok) throw new Error('Der Etappenort konnte nicht gefunden werden. Bitte Koordinaten im Hafenbuch hinterlegen oder den Punkt auf der Seekarte wählen.');
+  const data = await response.json();
+  const result = (data.results || []).find(item => ['DE', 'DK', 'NL'].includes(item.country_code)) || data.results?.[0];
+  if (!result) throw new Error('Der Etappenort konnte nicht gefunden werden. Bitte den Punkt auf der Seekarte wählen.');
+  return { ...location, latitude: result.latitude, longitude: result.longitude, unresolved: false, geocoded: true, name: location.name || result.name };
+}
+
+function renderWeatherLocationOptions() {
+  const select = $('#weatherLocation');
+  if (!select) return;
+  const current = select.value || 'fixed:lemwerder';
+  const fixedOptions = Object.values(WEATHER_LOCATIONS).map(item => `<option value="fixed:${item.key}">${esc(item.name)}</option>`).join('');
+  const routeOptions = [...state.route].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((route, index) => {
+    const date = fmtDate(route.date);
+    return `<option value="route:${route.id}:from">Etappe ${index + 1}${date ? ` · ${date}` : ''} · Start: ${esc(route.from || 'offen')}</option><option value="route:${route.id}:to">Etappe ${index + 1}${date ? ` · ${date}` : ''} · Ziel: ${esc(route.to || 'offen')}</option>`;
+  }).join('');
+  select.innerHTML = `<optgroup label="Feste Orte">${fixedOptions}</optgroup>${routeOptions ? `<optgroup label="Ort aus geplanter Etappe">${routeOptions}</optgroup>` : ''}<optgroup label="Freier Punkt"><option value="map:custom">Punkt direkt auf der Seekarte</option></optgroup>`;
+  if ([...select.options].some(option => option.value === current)) select.value = current;
+  else select.value = 'fixed:lemwerder';
+}
+
+function weatherMarkerIcon() {
+  return L.divIcon({ className: 'weather-pick-marker', html: '<span><b>⚓</b></span>', iconSize: [34, 34], iconAnchor: [10, 31] });
+}
+
+function ensureWeatherMap() {
+  const element = $('#weatherMap');
+  if (!element || typeof L === 'undefined') return null;
+  if (weatherMap) return weatherMap;
+  weatherMap = L.map(element, { zoomControl: true, attributionControl: true }).setView([53.72, 8.55], 8);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18, attribution: '&copy; OpenStreetMap' }).addTo(weatherMap);
+  L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', { maxZoom: 18, opacity: .95, attribution: 'OpenSeaMap' }).addTo(weatherMap);
+  weatherMap.on('click', event => {
+    const location = { name: 'Punkt auf der Seekarte', latitude: event.latlng.lat, longitude: event.latlng.lng, source: 'map', zoom: weatherMap.getZoom() };
+    setWeatherLocation(location, { pan: false });
+    $('#weatherLocation').value = 'map:custom';
+    weatherMapPickMode = false;
+    $('#weatherMapPickButton').textContent = 'Punkt auf Seekarte wählen';
+    toast('Wetterpunkt auf der Seekarte gewählt');
+  });
+  return weatherMap;
+}
+
+function setWeatherLocation(location, options = {}) {
+  if (!location || !Number.isFinite(num(location.latitude)) || !Number.isFinite(num(location.longitude))) return;
+  weatherSelectedLocation = { ...location, latitude: num(location.latitude), longitude: num(location.longitude) };
+  const map = ensureWeatherMap();
+  if (map) {
+    if (weatherMarker) weatherMarker.setLatLng([weatherSelectedLocation.latitude, weatherSelectedLocation.longitude]);
+    else weatherMarker = L.marker([weatherSelectedLocation.latitude, weatherSelectedLocation.longitude], { icon: weatherMarkerIcon() }).addTo(map);
+    if (options.pan !== false) map.setView([weatherSelectedLocation.latitude, weatherSelectedLocation.longitude], weatherSelectedLocation.zoom || 11);
+  }
+  $('#weatherMapCoordinate').textContent = coordinateLabel(weatherSelectedLocation.latitude, weatherSelectedLocation.longitude);
+  const extra = weatherSelectedLocation.note ? ` · ${weatherSelectedLocation.note}` : '';
+  $('#weatherSelectionInfo').textContent = `${weatherSelectedLocation.name} · ${coordinateLabel(weatherSelectedLocation.latitude, weatherSelectedLocation.longitude)}${extra}`;
+  activeWeatherRouteId = weatherSelectedLocation.routeId || '';
+  $('#weatherApplyRouteButton').hidden = !activeWeatherRouteId;
+}
+
+async function weatherLocationFromSelection(value = $('#weatherLocation')?.value) {
+  if (value?.startsWith('fixed:')) return { ...WEATHER_LOCATIONS[value.split(':')[1]], source: 'fixed' };
+  if (value?.startsWith('route:')) {
+    const [, id, side] = value.split(':');
+    return geocodeWeatherLocation(routeEndpointLocation(state.route.find(item => item.id === id), side));
+  }
+  if (value === 'map:custom' && weatherSelectedLocation?.source === 'map') return weatherSelectedLocation;
+  return weatherSelectedLocation || { ...WEATHER_LOCATIONS.lemwerder, source: 'fixed' };
+}
+
+async function updateWeatherSelection() {
+  try {
+    const location = await weatherLocationFromSelection();
+    if (location?.unresolved) throw new Error('Für diesen Etappenort fehlen Koordinaten. Bitte im Hafenbuch hinterlegen oder auf der Seekarte wählen.');
+    setWeatherLocation(location);
+  } catch (error) {
+    setWeatherMessage(error.message, 'error');
+  }
+}
+
+function prepareWeatherView() {
+  const today = dateInputValue();
+  const date = $('#weatherDate');
+  if (date && !date.value) date.value = today;
+  if (date) {
+    date.min = today;
+    date.max = addDays(today, WEATHER_MAX_FORECAST_DAYS);
+  }
+  renderWeatherLocationOptions();
+  ensureWeatherMap();
+  if (!weatherSelectedLocation) updateWeatherSelection();
+  else setWeatherLocation(weatherSelectedLocation, { pan: false });
+}
+
+function setWeatherMessage(text = '', type = '') {
+  const element = $('#weatherLoadState');
+  if (!element) return;
+  element.textContent = text;
+  element.className = `sync-message${type ? ` ${type}` : ''}`;
+}
+
+function windDirectionText(degrees) {
+  if (degrees === null || degrees === undefined || Number.isNaN(Number(degrees))) return '—';
+  const labels = ['N', 'NNO', 'NO', 'ONO', 'O', 'OSO', 'SO', 'SSO', 'S', 'SSW', 'SW', 'WSW', 'W', 'WNW', 'NW', 'NNW'];
+  return labels[Math.round((Number(degrees) % 360) / 22.5) % 16];
+}
+
+function beaufortFromKnots(knots) {
+  const thresholds = [1, 4, 7, 11, 17, 22, 28, 34, 41, 48, 56, 64];
+  const value = num(knots);
+  for (let i = 0; i < thresholds.length; i += 1) if (value < thresholds[i]) return i;
+  return 12;
+}
+
+function weatherCodeInfo(code) {
+  const lookup = {
+    0: ['☀️', 'klar'], 1: ['🌤️', 'überwiegend klar'], 2: ['⛅', 'teilweise bewölkt'], 3: ['☁️', 'bedeckt'],
+    45: ['🌫️', 'Nebel'], 48: ['🌫️', 'Reifnebel'], 51: ['🌦️', 'leichter Nieselregen'], 53: ['🌦️', 'Nieselregen'], 55: ['🌧️', 'starker Nieselregen'],
+    61: ['🌦️', 'leichter Regen'], 63: ['🌧️', 'Regen'], 65: ['🌧️', 'starker Regen'], 66: ['🌧️', 'gefrierender Regen'], 67: ['🌧️', 'starker gefrierender Regen'],
+    71: ['🌨️', 'leichter Schneefall'], 73: ['🌨️', 'Schneefall'], 75: ['🌨️', 'starker Schneefall'], 77: ['🌨️', 'Schneegriesel'],
+    80: ['🌦️', 'leichte Schauer'], 81: ['🌧️', 'Schauer'], 82: ['⛈️', 'starke Schauer'], 85: ['🌨️', 'Schneeschauer'], 86: ['🌨️', 'starke Schneeschauer'],
+    95: ['⛈️', 'Gewitter'], 96: ['⛈️', 'Gewitter mit Hagel'], 99: ['⛈️', 'starkes Gewitter mit Hagel']
+  };
+  return lookup[Number(code)] || ['⚓', 'Wetterlage'];
+}
+
+function finiteOrNull(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function mergeForecastHours(weather, marine, date) {
+  const map = new Map();
+  const weatherHourly = weather?.hourly || {};
+  (weatherHourly.time || []).forEach((time, index) => {
+    if (!String(time).startsWith(date)) return;
+    map.set(time, {
+      time,
+      temperature: finiteOrNull(weatherHourly.temperature_2m?.[index]),
+      apparentTemperature: finiteOrNull(weatherHourly.apparent_temperature?.[index]),
+      precipitationProbability: finiteOrNull(weatherHourly.precipitation_probability?.[index]),
+      weatherCode: finiteOrNull(weatherHourly.weather_code?.[index]),
+      visibility: finiteOrNull(weatherHourly.visibility?.[index]),
+      windSpeed: finiteOrNull(weatherHourly.wind_speed_10m?.[index]),
+      windDirection: finiteOrNull(weatherHourly.wind_direction_10m?.[index]),
+      windGust: finiteOrNull(weatherHourly.wind_gusts_10m?.[index])
+    });
+  });
+  const marineHourly = marine?.hourly || {};
+  (marineHourly.time || []).forEach((time, index) => {
+    if (!String(time).startsWith(date)) return;
+    const entry = map.get(time) || { time };
+    Object.assign(entry, {
+      waveHeight: finiteOrNull(marineHourly.wave_height?.[index]),
+      waveDirection: finiteOrNull(marineHourly.wave_direction?.[index]),
+      wavePeriod: finiteOrNull(marineHourly.wave_period?.[index]),
+      wavePeakPeriod: finiteOrNull(marineHourly.wave_peak_period?.[index]),
+      windWaveHeight: finiteOrNull(marineHourly.wind_wave_height?.[index]),
+      windWaveDirection: finiteOrNull(marineHourly.wind_wave_direction?.[index]),
+      windWavePeriod: finiteOrNull(marineHourly.wind_wave_period?.[index]),
+      swellHeight: finiteOrNull(marineHourly.swell_wave_height?.[index]),
+      swellDirection: finiteOrNull(marineHourly.swell_wave_direction?.[index]),
+      swellPeriod: finiteOrNull(marineHourly.swell_wave_period?.[index]),
+      seaLevel: finiteOrNull(marineHourly.sea_level_height_msl?.[index]),
+      currentVelocityKmh: finiteOrNull(marineHourly.ocean_current_velocity?.[index]),
+      currentDirection: finiteOrNull(marineHourly.ocean_current_direction?.[index])
+    });
+    map.set(time, entry);
+  });
+  return [...map.values()].sort((a, b) => String(a.time).localeCompare(String(b.time)));
+}
+
+function currentKnots(hour) {
+  return hour.currentVelocityKmh === null || hour.currentVelocityKmh === undefined ? null : hour.currentVelocityKmh / 1.852;
+}
+
+function chooseWeatherHour(hours, date) {
+  if (!hours.length) return 0;
+  const today = dateInputValue();
+  const targetHour = date === today ? new Date().getHours() : 12;
+  return hours.reduce((best, hour, index) => {
+    const hourValue = Number(String(hour.time).slice(11, 13));
+    const bestValue = Number(String(hours[best].time).slice(11, 13));
+    return Math.abs(hourValue - targetHour) < Math.abs(bestValue - targetHour) ? index : best;
+  }, 0);
+}
+
+function tideExtrema(hours) {
+  const valid = hours.map((hour, index) => ({ index, time: hour.time, value: finiteOrNull(hour.seaLevel) })).filter(item => item.value !== null);
+  const events = [];
+  for (let i = 1; i < valid.length - 1; i += 1) {
+    const previous = valid[i - 1];
+    const current = valid[i];
+    const next = valid[i + 1];
+    if (current.value > previous.value && current.value >= next.value) events.push({ ...current, type: 'HW' });
+    if (current.value < previous.value && current.value <= next.value) events.push({ ...current, type: 'NW' });
+  }
+  return events;
+}
+
+function tideStateAt(hours, index) {
+  const current = hours[index];
+  if (current?.seaLevel === null || current?.seaLevel === undefined) return { state: 'nicht verfügbar', next: null };
+  const nextHour = hours[Math.min(index + 1, hours.length - 1)];
+  const delta = finiteOrNull(nextHour?.seaLevel) === null ? 0 : nextHour.seaLevel - current.seaLevel;
+  const state = delta > .015 ? 'steigend' : delta < -.015 ? 'fallend' : 'nahe Scheitelpunkt';
+  const currentTime = new Date(current.time).getTime();
+  const next = tideExtrema(hours).find(event => new Date(event.time).getTime() >= currentTime) || null;
+  return { state, next };
+}
+
+function formatTime(time) {
+  return time ? String(time).slice(11, 16) : '—';
+}
+
+function valueText(value, unit, digits = 1) {
+  return value === null || value === undefined ? '—' : `${Number(value).toLocaleString('de-DE', { minimumFractionDigits: digits, maximumFractionDigits: digits })} ${unit}`;
+}
+
+function renderTideChart(hours, events) {
+  const container = $('#tideChart');
+  const points = hours.map((hour, index) => ({ index, time: hour.time, value: finiteOrNull(hour.seaLevel) })).filter(point => point.value !== null);
+  if (points.length < 2) {
+    container.innerHTML = '<div class="map-placeholder"><strong>Keine Tidekurve verfügbar</strong><span>Für diesen Modellpunkt wurden keine Wasserstandsdaten geliefert.</span></div>';
+    return;
+  }
+  const width = 760, height = 230, left = 42, right = 18, top = 22, bottom = 34;
+  const min = Math.min(...points.map(point => point.value));
+  const max = Math.max(...points.map(point => point.value));
+  const range = Math.max(.05, max - min);
+  const x = index => left + (index / Math.max(1, hours.length - 1)) * (width - left - right);
+  const y = value => top + (max - value) / range * (height - top - bottom);
+  const line = points.map(point => `${x(point.index).toFixed(1)},${y(point.value).toFixed(1)}`).join(' ');
+  const area = `${left},${height - bottom} ${line} ${x(points.at(-1).index)},${height - bottom}`;
+  const grid = [0, 6, 12, 18, 23].map(hour => `<line class="tide-axis" x1="${x(hour)}" x2="${x(hour)}" y1="${top}" y2="${height-bottom}"/><text class="tide-time-label" x="${x(hour)}" y="${height-12}" text-anchor="middle">${String(hour).padStart(2,'0')}:00</text>`).join('');
+  const markers = events.map(event => `<circle class="${event.type === 'HW' ? 'tide-point-high' : 'tide-point-low'}" cx="${x(event.index)}" cy="${y(event.value)}" r="6"/><text class="tide-label" x="${x(event.index)}" y="${y(event.value) - 11}" text-anchor="middle">${event.type} ${formatTime(event.time)}</text>`).join('');
+  container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="Modellierte Tidekurve"><defs><linearGradient id="tideGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5ca7bb"/><stop offset="1" stop-color="#e8f3f7"/></linearGradient></defs>${grid}<polygon class="tide-area" points="${area}"/><polyline class="tide-line" points="${line}"/>${markers}<text class="tide-time-label" x="8" y="${top+5}">${max.toFixed(2).replace('.',',')} m</text><text class="tide-time-label" x="8" y="${height-bottom}">${min.toFixed(2).replace('.',',')} m</text></svg>`;
+}
+
+function renderPegel(pegel) {
+  const title = $('#pegelTitle');
+  const current = $('#pegelCurrent');
+  const meta = $('#pegelMeta');
+  if (!pegel?.measurement) {
+    title.textContent = 'Kein Messpegel gefunden';
+    current.innerHTML = '<strong>—</strong><span>Für diesen Punkt ist kein naher PEGELONLINE-Wasserstand verfügbar.</span>';
+    meta.textContent = '';
+    return;
+  }
+  const measurement = pegel.measurement;
+  title.textContent = pegel.stationName || 'PEGELONLINE';
+  current.innerHTML = `<strong>${valueText(measurement.value, measurement.unit || 'cm', 0)}</strong><span>${pegel.trend || 'Trend nicht bestimmt'}</span>`;
+  meta.textContent = `Messzeit ${measurement.timestamp ? new Date(measurement.timestamp).toLocaleString('de-DE') : '—'} · Entfernung zum gewählten Punkt ca. ${round(pegel.distanceKm, 1).toLocaleString('de-DE')} km`;
+}
+
+function renderWeatherSnapshot(snapshot, requestedIndex = null) {
+  if (!snapshot) return;
+  activeWeatherSnapshot = snapshot;
+  const hours = snapshot.hours || mergeForecastHours(snapshot.weather, snapshot.marine, snapshot.date);
+  if (!hours.length) return;
+  const index = requestedIndex === null || requestedIndex === undefined ? chooseWeatherHour(hours, snapshot.date) : clamp(Number(requestedIndex), 0, hours.length - 1);
+  activeWeatherHourIndex = index;
+  const hour = hours[index];
+  const condition = weatherCodeInfo(hour.weatherCode);
+  const bft = beaufortFromKnots(hour.windSpeed);
+  const current = currentKnots(hour);
+  const tide = tideStateAt(hours, index);
+  const events = tideExtrema(hours);
+  const offline = snapshot.offline ? '<span class="weather-offline-badge">offline gespeichert</span>' : '';
+
+  $('#weatherResults').hidden = false;
+  $('#weatherHeadline').innerHTML = `${esc(snapshot.locationName)} · ${fmtDate(snapshot.date)}${offline}`;
+  $('#weatherSubline').textContent = `Bezugszeit ${formatTime(hour.time)} Uhr · geladen ${snapshot.loadedAt ? new Date(snapshot.loadedAt).toLocaleString('de-DE') : '—'} · ${coordinateLabel(snapshot.latitude, snapshot.longitude)}`;
+  $('#wxWind').textContent = valueText(hour.windSpeed, 'kn', 1);
+  $('#wxWindDir').textContent = `${windDirectionText(hour.windDirection)} · ${hour.windDirection === null ? '—' : `${Math.round(hour.windDirection)}°`}`;
+  $('#wxGust').textContent = valueText(hour.windGust, 'kn', 1);
+  $('#wxBeaufort').textContent = `${bft} Bft mittlerer Wind`;
+  $('#wxWave').textContent = valueText(hour.waveHeight, 'm', 1);
+  $('#wxWaveDir').textContent = hour.waveHeight === null ? 'am Modellpunkt nicht verfügbar' : `${windDirectionText(hour.waveDirection)} · aus ${hour.waveDirection === null ? '—' : `${Math.round(hour.waveDirection)}°`}`;
+  $('#wxPeriod').textContent = valueText(hour.wavePeriod, 's', 1);
+  $('#wxFrequency').textContent = hour.wavePeriod ? `etwa ${(60 / hour.wavePeriod).toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} Wellen/min` : 'Wellenfolge nicht verfügbar';
+  $('#wxSwell').textContent = valueText(hour.swellHeight, 'm', 1);
+  $('#wxSwellDir').textContent = hour.swellHeight === null ? 'nicht getrennt verfügbar' : `${windDirectionText(hour.swellDirection)} · ${valueText(hour.swellPeriod, 's', 1)}`;
+  $('#wxCurrent').textContent = current === null ? '—' : `${current.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} kn`;
+  $('#wxCurrentDir').textContent = current === null ? 'am Modellpunkt nicht verfügbar' : `setzt nach ${windDirectionText(hour.currentDirection)} · ${Math.round(hour.currentDirection)}°`;
+  $('#wxTemperature').textContent = valueText(hour.temperature, '°C', 1);
+  $('#wxCondition').textContent = `${condition[0]} ${condition[1]}${hour.precipitationProbability !== null ? ` · Regen ${Math.round(hour.precipitationProbability)} %` : ''}`;
+  $('#wxTideState').textContent = tide.state;
+  $('#wxNextTide').textContent = tide.next ? `${tide.next.type} ca. ${formatTime(tide.next.time)} Uhr` : 'kein weiterer Scheitel im Zeitraum';
+
+  renderTideChart(hours, events);
+  $('#tideEvents').innerHTML = events.length ? events.map(event => `<div class="tide-event"><span>${event.type === 'HW' ? '↑' : '↓'}</span><div><small>${event.type === 'HW' ? 'HOCHWASSER' : 'NIEDRIGWASSER'} · MODELL</small><strong>ca. ${formatTime(event.time)} Uhr · ${valueText(event.value, 'm', 2)}</strong></div></div>`).join('') : '<div class="muted">Für diesen Punkt wurden keine eindeutigen Scheitelpunkte im gewählten Tagesfenster erkannt.</div>';
+  renderPegel(snapshot.pegel);
+
+  $('#weatherHourly').innerHTML = hours.map((item, itemIndex) => {
+    const info = weatherCodeInfo(item.weatherCode);
+    const itemCurrent = currentKnots(item);
+    return `<tr data-weather-index="${itemIndex}" class="${itemIndex === index ? 'active' : ''}"><td><strong>${formatTime(item.time)}</strong></td><td><div class="weather-condition-cell"><span>${info[0]}</span><div><strong>${valueText(item.temperature, '°C', 1)}</strong><small>${info[1]}</small></div></div></td><td><strong>${windDirectionText(item.windDirection)} ${valueText(item.windSpeed, 'kn', 1)}</strong><small>${beaufortFromKnots(item.windSpeed)} Bft</small></td><td>${valueText(item.windGust, 'kn', 1)}</td><td><strong>${valueText(item.waveHeight, 'm', 1)}</strong><small>${windDirectionText(item.waveDirection)}</small></td><td><strong>${valueText(item.wavePeriod, 's', 1)}</strong><small>${item.wavePeriod ? `${(60/item.wavePeriod).toFixed(1).replace('.',',')}/min` : '—'}</small></td><td><strong>${valueText(item.swellHeight, 'm', 1)}</strong><small>${windDirectionText(item.swellDirection)}</small></td><td><strong>${itemCurrent === null ? '—' : `${itemCurrent.toFixed(1).replace('.',',')} kn`}</strong><small>${itemCurrent === null ? '—' : `nach ${windDirectionText(item.currentDirection)}`}</small></td><td><strong>${valueText(item.seaLevel, 'm', 2)}</strong><small>${tideStateAt(hours, itemIndex).state}</small></td></tr>`;
+  }).join('');
+  setWeatherLocation({ name: snapshot.locationName, latitude: snapshot.latitude, longitude: snapshot.longitude, source: snapshot.source, routeId: snapshot.routeId, routeSide: snapshot.routeSide, zoom: 11 }, { pan: false });
+}
+
+function haversineKm(a, b) {
+  const radius = 6371;
+  const dLat = (b.latitude - a.latitude) * Math.PI / 180;
+  const dLon = (b.longitude - a.longitude) * Math.PI / 180;
+  const lat1 = a.latitude * Math.PI / 180;
+  const lat2 = b.latitude * Math.PI / 180;
+  const value = Math.sin(dLat/2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLon/2) ** 2;
+  return 2 * radius * Math.asin(Math.sqrt(value));
+}
+
+function waterTimeseries(station) {
+  return (station?.timeseries || []).find(series => series.shortname === 'W' || series.unit === 'cm' || /Wasserstand/i.test(series.longname || '')) || null;
+}
+
+async function loadPegelData(location) {
+  try {
+    const stationUrl = `https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations.json?latitude=${location.latitude}&longitude=${location.longitude}&radius=35&includeTimeseries=true&includeCurrentMeasurement=true`;
+    const response = await fetch(stationUrl);
+    if (!response.ok) return null;
+    const stations = await response.json();
+    const candidates = (stations || []).map(station => {
+      const series = waterTimeseries(station);
+      const measurement = series?.currentMeasurement || station.currentMeasurement || null;
+      return { station, series, measurement, distanceKm: haversineKm(location, { latitude: num(station.latitude), longitude: num(station.longitude) }) };
+    }).filter(item => item.measurement).sort((a, b) => a.distanceKm - b.distanceKm);
+    const selected = candidates[0];
+    if (!selected || selected.distanceKm > 35) return null;
+    let trend = 'Trend nicht bestimmt';
+    try {
+      const historyResponse = await fetch(`https://www.pegelonline.wsv.de/webservices/rest-api/v2/stations/${selected.station.uuid}/W/measurements.json?start=P6H`);
+      if (historyResponse.ok) {
+        const history = await historyResponse.json();
+        if (history.length >= 2) {
+          const delta = num(history.at(-1).value) - num(history[Math.max(0, history.length - 3)].value);
+          trend = delta > 2 ? 'Wasserstand steigt' : delta < -2 ? 'Wasserstand fällt' : 'Wasserstand nahezu gleichbleibend';
+        }
+      }
+    } catch {}
+    return {
+      stationName: selected.station.longname || selected.station.shortname,
+      stationUuid: selected.station.uuid,
+      distanceKm: selected.distanceKm,
+      trend,
+      measurement: {
+        value: selected.measurement.value,
+        timestamp: selected.measurement.timestamp,
+        unit: selected.series?.unit || 'cm'
+      }
+    };
+  } catch {
+    return null;
+  }
+}
+
+function weatherSnapshotId(location, date) {
+  return `forecast:${date}:${num(location.latitude).toFixed(4)}:${num(location.longitude).toFixed(4)}`;
+}
+
+function cachedWeatherSnapshot(location, date) {
+  const exactId = weatherSnapshotId(location, date);
+  return state.weather?.find(item => item.id === exactId) || [...(state.weather || [])].filter(item => item.date === date).sort((a, b) => haversineKm(location, a) - haversineKm(location, b))[0] || null;
+}
+
+async function fetchWeatherData(location, date) {
+  const weatherVariables = 'temperature_2m,apparent_temperature,precipitation_probability,weather_code,visibility,wind_speed_10m,wind_direction_10m,wind_gusts_10m';
+  const marineVariables = 'wave_height,wave_direction,wave_period,wind_wave_height,wind_wave_direction,wind_wave_period,swell_wave_height,swell_wave_direction,swell_wave_period,sea_level_height_msl,ocean_current_velocity,ocean_current_direction';
+  const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=${location.latitude}&longitude=${location.longitude}&hourly=${weatherVariables}&timezone=${encodeURIComponent(WEATHER_TIMEZONE)}&wind_speed_unit=kn&start_date=${date}&end_date=${date}`;
+  const marineUrl = `https://marine-api.open-meteo.com/v1/marine?latitude=${location.latitude}&longitude=${location.longitude}&hourly=${marineVariables}&timezone=${encodeURIComponent(WEATHER_TIMEZONE)}&start_date=${date}&end_date=${date}&cell_selection=sea`;
+  const [weatherResult, marineResult, pegel] = await Promise.allSettled([
+    fetch(weatherUrl).then(response => { if (!response.ok) throw new Error('Wetterdaten konnten nicht geladen werden.'); return response.json(); }),
+    fetch(marineUrl).then(response => { if (!response.ok) throw new Error('Seegangsdaten konnten nicht geladen werden.'); return response.json(); }),
+    loadPegelData(location)
+  ]);
+  if (weatherResult.status === 'rejected' && marineResult.status === 'rejected') throw new Error('Wetter- und Seegangsdaten konnten nicht geladen werden. Bitte Internetverbindung und Datum prüfen.');
+  const weather = weatherResult.status === 'fulfilled' ? weatherResult.value : null;
+  const marine = marineResult.status === 'fulfilled' ? marineResult.value : null;
+  const snapshot = {
+    id: weatherSnapshotId(location, date),
+    locationName: location.name,
+    latitude: location.latitude,
+    longitude: location.longitude,
+    source: location.source || 'fixed',
+    routeId: location.routeId || '',
+    routeSide: location.routeSide || '',
+    date,
+    loadedAt: new Date().toISOString(),
+    weather,
+    marine,
+    pegel: pegel.status === 'fulfilled' ? pegel.value : null
+  };
+  snapshot.hours = mergeForecastHours(weather, marine, date);
+  return snapshot;
+}
+
+async function loadWeatherForecast(options = {}) {
+  prepareWeatherView();
+  let location;
+  try {
+    location = await weatherLocationFromSelection();
+    if (!location || location.unresolved || !Number.isFinite(num(location.latitude))) throw new Error('Bitte zuerst einen gültigen Ort oder Kartenpunkt auswählen.');
+  } catch (error) {
+    setWeatherMessage(error.message, 'error');
+    return;
+  }
+  const date = $('#weatherDate').value;
+  const today = dateInputValue();
+  if (!date || date < today || date > addDays(today, WEATHER_MAX_FORECAST_DAYS)) {
+    setWeatherMessage(`Bitte ein Datum zwischen heute und ${fmtDate(addDays(today, WEATHER_MAX_FORECAST_DAYS))} wählen.`, 'error');
+    return;
+  }
+  setWeatherLocation(location);
+  setWeatherMessage('Wetter, Seegang und Pegel werden geladen …');
+  try {
+    if (!navigator.onLine) throw new Error('offline');
+    const snapshot = await fetchWeatherData(location, date);
+    if (!snapshot.hours.length) throw new Error('Für den gewählten Punkt wurden keine stündlichen Daten geliefert.');
+    await put('weather', snapshot);
+    await refresh();
+    activeWeatherSnapshot = snapshot;
+    activeWeatherHourIndex = chooseWeatherHour(snapshot.hours, date);
+    renderWeatherSnapshot(snapshot, activeWeatherHourIndex);
+    setWeatherMessage('Aktuelle Vorhersage geladen und für die Offline-Nutzung gespeichert.', 'success');
+  } catch (error) {
+    const cached = cachedWeatherSnapshot(location, date);
+    if (cached) {
+      activeWeatherSnapshot = { ...cached, offline: true };
+      renderWeatherSnapshot(activeWeatherSnapshot, chooseWeatherHour(activeWeatherSnapshot.hours || [], date));
+      setWeatherMessage('Keine aktuelle Verbindung – zuletzt gespeicherte Vorhersage wird angezeigt.', 'success');
+    } else {
+      setWeatherMessage(error.message === 'offline' ? 'Keine Internetverbindung und noch keine gespeicherte Vorhersage für diesen Ort und Tag.' : error.message, 'error');
+    }
+  }
+}
+
+window.weatherForRoute = async id => {
+  const route = state.route.find(item => item.id === id);
+  if (!route) return;
+  view('weather');
+  window.setTimeout(async () => {
+    renderWeatherLocationOptions();
+    const select = $('#weatherLocation');
+    select.value = `route:${id}:to`;
+    $('#weatherDate').value = route.date && route.date >= dateInputValue() ? route.date : dateInputValue();
+    await updateWeatherSelection();
+    loadWeatherForecast();
+  }, 120);
+};
+
+async function applyWeatherToRoute() {
+  const route = state.route.find(item => item.id === activeWeatherRouteId);
+  const snapshot = activeWeatherSnapshot;
+  const hour = snapshot?.hours?.[activeWeatherHourIndex];
+  if (!route || !hour) return toast('Keine Etappe zur Übernahme ausgewählt');
+  const condition = weatherCodeInfo(hour.weatherCode)[1];
+  const events = tideExtrema(snapshot.hours || []);
+  const tideText = events.map(event => `${event.type} ca. ${formatTime(event.time)}`).join(' · ');
+  await put('route', {
+    ...route,
+    weather: `${condition}${hour.temperature !== null ? `, ${round(hour.temperature, 1).toLocaleString('de-DE')} °C` : ''}`,
+    wind: `${windDirectionText(hour.windDirection)} ${round(hour.windSpeed, 1).toLocaleString('de-DE')} kn (${beaufortFromKnots(hour.windSpeed)} Bft)${hour.windGust !== null ? ` · Böen ${round(hour.windGust, 1).toLocaleString('de-DE')} kn` : ''}`,
+    wave: hour.waveHeight === null ? route.wave : `${round(hour.waveHeight, 1).toLocaleString('de-DE')} m aus ${windDirectionText(hour.waveDirection)} · ${round(hour.wavePeriod, 1).toLocaleString('de-DE')} s`,
+    tide: tideText || route.tide
+  });
+  await refresh();
+  toast('Wetter und Tide in die Etappe übernommen');
+}
+
 function buildReport() {
   const settings = getSettings();
   const days = [...state.days].sort((a, b) => String(a.date).localeCompare(String(b.date)));
@@ -1794,6 +2356,26 @@ function buildReport() {
       return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title || `${day.fromPort || ''} → ${day.toPort || ''}`)}</h2><p class="meta">${esc(day.fromPort || '')} → ${esc(day.toPort || '')} · ${dec(day.distance)} sm · ${esc(day.wind || '')} · ${esc(day.wave || '')}</p><p>${esc(day.summary || '').replace(/\n/g, '<br>')}</p>${day.moment ? `<blockquote>„${esc(day.moment)}“</blockquote>` : ''}${dayPhotos.map(photo => `<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption || '')}"><figcaption>${esc(photo.caption || '')}</figcaption></figure>`).join('')}</section>`;
     }).join('') || '<p>Noch keine Tagesberichte vorhanden.</p>'}`;
 }
+
+
+$('#weatherForm').onsubmit = event => { event.preventDefault(); loadWeatherForecast(); };
+$('#weatherLocation').onchange = () => updateWeatherSelection();
+$('#weatherMapPickButton').onclick = () => {
+  view('weather');
+  prepareWeatherView();
+  $('#weatherLocation').value = 'map:custom';
+  weatherMapPickMode = true;
+  $('#weatherMapPickButton').textContent = 'Jetzt in die Karte tippen …';
+  setWeatherMessage('Tippe oder klicke jetzt auf den gewünschten Punkt in der Seekarte.');
+  $('#weatherMap').scrollIntoView({ behavior: 'smooth', block: 'center' });
+};
+$('#weatherReloadButton').onclick = () => loadWeatherForecast({ force: true });
+$('#weatherApplyRouteButton').onclick = applyWeatherToRoute;
+$('#weatherHourly').onclick = event => {
+  const row = event.target.closest('[data-weather-index]');
+  if (!row || !activeWeatherSnapshot) return;
+  renderWeatherSnapshot(activeWeatherSnapshot, Number(row.dataset.weatherIndex));
+};
 
 $('#buildReport').onclick = buildReport;
 $('#printReport').onclick = () => { buildReport(); window.print(); };

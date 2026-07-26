@@ -1,22 +1,26 @@
-LEEFKE Bordtagebuch – Version 5.5
+LEEFKE Bordtagebuch – Version 5.6
 
-KORREKTUR DER SCHIFFSDATEN-SYNCHRONISIERUNG
+NEU: Wetter & Gezeiten
+- Feste Orte: Lemwerder, Bremerhaven, Cuxhaven und Helgoland
+- Orte aus geplanten Etappen
+- Freier Wetterpunkt direkt auf einer OpenSeaMap-Seekarte
+- Stündlicher Wind, Böen, Temperatur und Niederschlagswahrscheinlichkeit
+- Wellenhöhe, Wellenrichtung, Wellenperiode und Wellenfolge pro Minute
+- Windsee und Dünung getrennt, sofern das Modell Daten liefert
+- Modellierte Strömung und Tidekurve mit Hoch-/Niedrigwasser-Scheitelpunkten
+- Aktueller Wasserstand des nächstgelegenen PEGELONLINE-Messpegels
+- Wetterdaten können direkt in eine geplante Etappe übernommen werden
+- Geladene Vorhersagen bleiben offline sichtbar und werden zwischen Geräten synchronisiert
 
-Schiffsdaten wie Länge, Breite, Tiefgang, Tankkapazität, Tankfüllung und Motorstunden werden jetzt nicht mehr nur als ein gemeinsamer Datenblock behandelt. Jedes einzelne Feld erhält in der Cloud einen eigenen Datensatz und einen eigenen Änderungszeitpunkt.
+INSTALLATION
+1. In der bisherigen App unter Sicherung eine JSON-Sicherung exportieren.
+2. Diese ZIP-Datei vollständig entpacken.
+3. Im GitHub-Repository Add file -> Upload files wählen.
+4. Alle Dateien aus diesem Ordner hochladen, nicht die ZIP-Datei.
+5. Commit changes drücken.
+6. Nach etwa zwei Minuten öffnen:
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.6
+7. Unter Windows Strg+F5 drücken. Auf iPhone/iPad die App vollständig schließen und neu öffnen.
 
-Dadurch gilt:
-- Eine Änderung der Länge kann nicht mehr durch eine ältere Tankangabe überschrieben werden.
-- Änderungen dürfen auf iPhone, iPad oder Laptop erfolgen.
-- Ändern zwei Geräte dasselbe Feld, gewinnt der zuletzt gespeicherte Wert.
-- Es gibt weiterhin kein Hauptgerät.
-
-UPDATE
-1. Auf jedem Gerät vorsichtshalber unter „Sicherung“ eine Sicherung exportieren.
-2. Diese ZIP-Datei entpacken.
-3. Alle Dateien aus dem entpackten Ordner in das GitHub-Repository hochladen.
-4. Commit changes drücken und etwa zwei Minuten warten.
-5. Danach öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=5.5
-6. Auf allen Geräten prüfen, dass oben „VERSION 5.5“ steht.
-
-EINMALIGE BEREINIGUNG
-Nach dem Update auf einem beliebigen Gerät die korrekte Länge 11,50 m eintragen, „Schiffsdaten speichern“ und anschließend unter „Konto & Sync“ auf „Jetzt synchronisieren“ drücken. Danach auf den anderen Geräten ebenfalls einmal „Jetzt synchronisieren“ drücken. Künftige Änderungen laufen automatisch.
+HINWEIS
+Die Wetter-, Seegangs-, Strömungs- und Tidedaten sind Modellvorhersagen und nur Planungshilfen. Die modellierte Tide ist nicht zur Küstennavigation geeignet. Messpegelwerte beziehen sich auf ein örtliches Pegelnull und sind nicht direkt mit der Modellhöhe vergleichbar.

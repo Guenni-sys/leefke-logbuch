@@ -1,12 +1,12 @@
-const APP_CACHE = 'leefke-v5-5-20260726';
-const RUNTIME_CACHE = 'leefke-runtime-v5-5';
+const APP_CACHE = 'leefke-v5-6-20260726';
+const RUNTIME_CACHE = 'leefke-runtime-v5-6';
 const ASSETS = [
   './',
   './index.html',
   './style.css',
-  './style.css?v=5.5',
+  './style.css?v=5.6',
   './app.js',
-  './app.js?v=5.5',
+  './app.js?v=5.6',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
@@ -40,10 +40,29 @@ self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
   const isSupabaseRequest = url.hostname.endsWith('.supabase.co');
+  const isLiveDataRequest = url.hostname.endsWith('open-meteo.com') || url.hostname.endsWith('pegelonline.wsv.de');
   const isRuntimeResource = url.hostname.includes('openstreetmap.org') || url.hostname.includes('openseamap.org') || url.hostname === 'unpkg.com' || url.hostname === 'cdn.jsdelivr.net';
 
   if (isSupabaseRequest) {
     event.respondWith(fetch(event.request));
+    return;
+  }
+
+  if (isLiveDataRequest) {
+    event.respondWith((async () => {
+      try {
+        const response = await fetch(event.request);
+        if (response.ok) {
+          const cache = await caches.open(RUNTIME_CACHE);
+          await cache.put(event.request, response.clone());
+          trimCache(RUNTIME_CACHE, 700);
+        }
+        return response;
+      } catch {
+        const cached = await caches.match(event.request);
+        return cached || new Response('', { status: 503, statusText: 'Offline' });
+      }
+    })());
     return;
   }
 
