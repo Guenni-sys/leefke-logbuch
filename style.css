@@ -683,7 +683,7 @@ main{padding:21px clamp(13px,2.4vw,32px) 58px;max-width:1440px}
 
 
 /* ==========================================================================
-   Version 6.11 – gezielte mobile Endoptimierung
+   Version 6.12 – Verlauf als Dropdown und ruhigeres Schiffspass-Bild
    ========================================================================== */
 .mobile-tabbar,.mobile-action-dock,.nav-backdrop{display:none}
 .mobile-tabbar button,.mobile-action-dock button{font-family:inherit}
@@ -799,4 +799,26 @@ main{padding:21px clamp(13px,2.4vw,32px) 58px;max-width:1440px}
   .mobile-action-dock{bottom:calc(var(--mobile-tab-height) + 5px + env(safe-area-inset-bottom,0px))}.mobile-action-dock button{min-height:42px}
   .topbar{padding-bottom:44px}.global-trip-switcher{top:calc(env(safe-area-inset-top,0px) + 51px)}
   #routeMap,.report-map{height:68vh;min-height:250px}
+}
+
+
+/* Version 6.12 – Verlauf kompakter, Schiffspass-Bild ruhiger */
+.history-dropdown{margin-top:14px;border:1px solid var(--line);border-radius:14px;background:#fbfaf7;overflow:hidden}
+.history-dropdown summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px 16px;font-weight:800;color:var(--navy-900)}
+.history-dropdown summary::-webkit-details-marker{display:none}
+.history-dropdown summary::after{content:'▾';font-size:1rem;color:var(--brass-dark);transition:transform .18s ease}
+.history-dropdown[open] summary::after{transform:rotate(180deg)}
+.history-dropdown-meta{font-size:.76rem;font-weight:600;color:var(--muted);margin-left:auto;padding-right:8px}
+.change-log-panel{max-height:430px;overflow:auto;padding:12px 12px 14px;border-top:1px solid var(--line);background:#fff}
+.boat-photo-frame{margin:0;display:grid;gap:10px;align-self:stretch}
+.boat-photo-frame img{width:100%;height:250px;object-fit:cover;object-position:center 44%;border-radius:16px;border:5px solid #fff;box-shadow:var(--shadow);background:#dfe7ea}
+.boat-photo-frame figcaption{font-size:.78rem;color:var(--muted);text-align:center}
+@media (max-width:850px){
+  .boat-photo-frame img{height:240px;object-position:center 46%}
+  .change-log-panel{max-height:340px}
+}
+@media (max-width:560px){
+  .history-dropdown summary{padding:12px 14px;align-items:flex-start;flex-direction:column}
+  .history-dropdown-meta{padding-right:0}
+  .boat-photo-frame img{height:210px;object-position:center 45%}
 }

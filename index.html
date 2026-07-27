@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=6.11">
+  <link rel="stylesheet" href="style.css?v=6.12">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -27,7 +27,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 6.11</small>
+        <small>BORDTAGEBUCH · VERSION 6.12</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -539,7 +539,7 @@
 
         <article class="card photo-settings">
           <div><div class="card-kicker">STARTBILD</div><h3>Foto der LEEFKE</h3><p>Das mitgelieferte Foto kann jederzeit durch ein eigenes Startbild ersetzt werden. Nach Anmeldung wird es zusammen mit den Galeriefotos privat synchronisiert.</p><input id="boatPhotoInput" type="file" accept="image/*"><button id="boatPhotoReset" type="button">Mitgeliefertes Foto verwenden</button></div>
-          <img id="boatPhotoPreview" src="leefke-hero.jpg" alt="Vorschau Startbild">
+          <figure class="boat-photo-frame"><img id="boatPhotoPreview" src="leefke-hero.jpg" alt="Vorschau Startbild"><figcaption>Vorschau des Startbildes · mittig und ruhiger zugeschnitten</figcaption></figure>
         </article>
 
         <form id="settingsForm" class="settings-sections">
@@ -664,7 +664,7 @@
         <div class="title"><small>NACHVOLLZIEHBAR</small><h2>Änderungsverlauf & Konflikte</h2><p>Welche Änderung kam von welchem Gerät – und wo müssen zwei widersprüchliche Eingaben entschieden werden?</p></div>
         <div class="stats compact history-stats"><article><span>Offene Konflikte</span><strong id="openConflictCount">0</strong></article><article><span>Änderungen heute</span><strong id="changesTodayCount">0</strong></article><article><span>Letztes Gerät</span><strong id="lastChangeDevice">—</strong></article><article><span>Letzte Änderung</span><strong id="lastChangeTime">—</strong></article></div>
         <article class="card"><div class="card-kicker">KONFLIKTE</div><h3>Widersprüchliche Änderungen entscheiden</h3><p class="meta">Die App übernimmt zunächst den zeitlich neueren Wert, bewahrt aber beide Fassungen. Hier kannst du bewusst auswählen.</p><div id="conflictList" class="conflict-list"></div></article>
-        <article class="card"><div class="history-toolbar"><div><div class="card-kicker">ÄNDERUNGSPROTOKOLL</div><h3>Die letzten Änderungen</h3></div><div><select id="historyStoreFilter"><option value="">Alle Bereiche</option><option value="settings">Schiffsdaten</option><option value="trips">Törne</option><option value="days">Tageslogbuch</option><option value="route">Törnplanung</option><option value="fuel">Tankbuch</option><option value="maintenance">Wartung</option><option value="ports">Häfen</option><option value="photos">Fotos</option></select><button id="undoLastChangeButton" type="button">Letzte eigene Änderung rückgängig</button></div></div><div id="changeLogList" class="change-log-list"></div></article>
+        <article class="card"><div class="history-toolbar"><div><div class="card-kicker">ÄNDERUNGSPROTOKOLL</div><h3>Die letzten Änderungen</h3></div><div><select id="historyStoreFilter"><option value="">Alle Bereiche</option><option value="settings">Schiffsdaten</option><option value="trips">Törne</option><option value="days">Tageslogbuch</option><option value="route">Törnplanung</option><option value="fuel">Tankbuch</option><option value="maintenance">Wartung</option><option value="ports">Häfen</option><option value="photos">Fotos</option></select><button id="undoLastChangeButton" type="button">Letzte eigene Änderung rückgängig</button></div></div><details class="history-dropdown"><summary id="changeLogSummary"><span id="changeLogSummaryText">Änderungsprotokoll anzeigen</span><span class="history-dropdown-meta">Liste ein- und ausklappen</span></summary><div class="change-log-panel"><div id="changeLogList" class="change-log-list"></div></div></details></article>
       </section>
 
       <section id="backup" class="view">
@@ -721,6 +721,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=6.11"></script>
+  <script src="app.js?v=6.12"></script>
 </body>
 </html>

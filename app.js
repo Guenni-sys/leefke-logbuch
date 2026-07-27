@@ -1,4 +1,4 @@
-const APP_VERSION = '6.11';
+const APP_VERSION = '6.12';
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
 const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');
@@ -4158,7 +4158,9 @@ function renderHistory() {
   $('#conflictList').innerHTML = conflicts.map(item => `<div class="conflict-entry"><div class="conflict-icon">!</div><div><h4>${esc(STORE_LABELS[item.store] || item.store)} · ${esc(FIELD_LABELS[item.field] || item.field)}</h4><p>${esc(item.recordId)} · automatisch wurde zunächst „${item.autoWinner === 'remote' ? 'Cloud' : 'dieses Gerät'}“ verwendet.</p><div class="conflict-values"><div><small>${esc(item.localDevice || 'Gerät')} · ${new Date(item.localTime).toLocaleString('de-DE')}</small><strong>${esc(formatChangeValue(item.localValue))}</strong></div><div><small>${esc(item.remoteDevice || 'Cloud')} · ${new Date(item.remoteTime).toLocaleString('de-DE')}</small><strong>${esc(formatChangeValue(item.remoteValue))}</strong></div></div></div><div class="actions"><button onclick="resolveConflict('${item.id}','local')">Linken Wert nehmen</button><button class="primary" onclick="resolveConflict('${item.id}','remote')">Rechten Wert nehmen</button></div></div>`).join('') || '<div class="empty-state">Keine offenen Konflikte. Alle Eingaben konnten eindeutig zusammengeführt werden.</div>';
   const filter = $('#historyStoreFilter')?.value || '';
   const filtered = filter ? logs.filter(item => item.store === filter) : logs;
-  $('#changeLogList').innerHTML = filtered.slice(0, 150).map(item => {
+  const historySummary = $('#changeLogSummaryText');
+  if (historySummary) historySummary.textContent = filtered.length ? `Änderungsprotokoll anzeigen (${filtered.length} Einträge)` : 'Änderungsprotokoll anzeigen';
+  $('#changeLogList').innerHTML = filtered.slice(0, 80).map(item => {
     const fields = (item.fields || []).slice(0, 5).map(field => FIELD_LABELS[field] || field).join(', ');
     const icon = item.action === 'delete' ? '×' : item.action === 'create' ? '+' : '✎';
     return `<div class="change-entry"><div class="change-icon">${icon}</div><div><h4>${esc(item.title || STORE_LABELS[item.store] || item.store)}</h4><p>${esc(STORE_LABELS[item.store] || item.store)} · ${item.action === 'create' ? 'angelegt' : item.action === 'delete' ? 'gelöscht' : 'geändert'}${fields ? `: ${esc(fields)}` : ''}</p><p>${esc(item.deviceLabel || item.deviceId || 'Gerät')} · ${new Date(item.changedAt).toLocaleString('de-DE')}${item.undone ? ' · rückgängig gemacht' : ''}</p></div><div class="actions">${!item.undone ? `<button onclick="undoChange('${item.id}')">Rückgängig</button>` : ''}</div></div>`;

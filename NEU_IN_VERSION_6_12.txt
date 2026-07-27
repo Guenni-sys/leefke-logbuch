@@ -1,0 +1,7 @@
+LEEFKE Version 6.12
+
+Neu:
+- Änderungsverlauf als kompaktes Ausklappmenü statt als lange Liste
+- Liste intern scrollbar und dadurch deutlich kürzer
+- Schiffspass: Vorschau des LEEFKE-Bildes besser ausgerichtet und ruhiger zugeschnitten
+- mobile Darstellung des Ausklappmenüs optimiert
