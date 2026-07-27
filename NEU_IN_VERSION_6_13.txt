@@ -1,0 +1,7 @@
+LEEFKE Version 6.13
+
+Neu:
+- Törnauswahl aus der Kopfzeile entfernt und dezent in den Bereich „Aktueller Törn“ integriert
+- auf Mobilgeräten wieder deutlich flachere Kopfzeile
+- Android-Feinschliff für Eingabefelder, Dialoge, Touch-Bedienung und installierte PWA
+- bestehende iPhone- und iPad-Optimierungen bleiben erhalten

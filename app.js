@@ -1,4 +1,5 @@
-const APP_VERSION = '6.12';
+const APP_VERSION = '6.13';
+if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
 const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');

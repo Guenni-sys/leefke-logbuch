@@ -822,3 +822,37 @@ main{padding:21px clamp(13px,2.4vw,32px) 58px;max-width:1440px}
   .history-dropdown-meta{padding-right:0}
   .boat-photo-frame img{height:210px;object-position:center 45%}
 }
+
+
+/* ==========================================================================
+   Version 6.13 – dezente Törnauswahl und Android-Feinschliff
+   ========================================================================== */
+button,[role="button"],select{touch-action:manipulation}
+.home-trip-switcher{display:grid;grid-template-columns:auto minmax(130px,1fr);align-items:center;gap:8px;margin:9px 0 2px;padding-top:8px;border-top:1px solid rgba(231,205,145,.28)}
+.home-trip-switcher>span{font-size:.66rem;font-weight:750;letter-spacing:.05em;color:#cbd9df;white-space:nowrap}
+.home-trip-switcher select{min-width:0;width:100%;height:32px;padding:5px 28px 5px 9px;border:1px solid rgba(231,205,145,.26);border-radius:8px;background:rgba(255,255,255,.1);color:#fff;font-size:.78rem;font-weight:700;box-shadow:none}
+.home-trip-switcher select option{color:#102a39;background:#fff}
+
+/* Die Törnauswahl belegt nicht mehr eine eigene Zeile in der Kopfzeile. */
+@media(max-width:850px){
+  .topbar{padding-bottom:7px}
+  .home-trip-switcher{grid-template-columns:1fr;margin-top:8px}
+  .home-trip-switcher>span{font-size:.64rem}
+  .home-trip-switcher select{height:36px;min-height:36px;font-size:16px}
+}
+@media(max-width:560px){
+  .voyage-panel{gap:3px}
+  .home-trip-switcher{padding-top:7px;margin-bottom:3px}
+}
+
+/* Android Chrome / WebView: Eingaben bleiben zoomfrei und gut bedienbar. */
+@media(max-width:850px){
+  .android-device input:not([type="checkbox"]):not([type="radio"]),
+  .android-device textarea,
+  .android-device select{font-size:16px}
+  .android-device dialog{max-height:calc(100dvh - 18px)}
+  .android-device .mobile-tabbar{padding-bottom:max(5px,env(safe-area-inset-bottom,0px))}
+}
+@media(display-mode:standalone){
+  body{overscroll-behavior-y:contain}
+}
