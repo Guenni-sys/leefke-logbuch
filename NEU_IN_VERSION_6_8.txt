@@ -1,0 +1,14 @@
+LEEFKE BORDTAGEBUCH – VERSION 6.8
+
+NEU: GPS-GESTÜTZTER HAFENVORSCHLAG
+
+- Im Hafenbuch gibt es den Knopf „Standort verwenden“.
+- Die App fragt erst nach der Standortfreigabe des Geräts.
+- Die aktuelle Position wird in das Koordinatenfeld übernommen.
+- Für die Online-Hafensuche wird sie einmalig an den OpenStreetMap-Abfragedienst gesendet; es gibt keine dauerhafte Ortung.
+- In der Nähe liegende Häfen, Marinas und Segelvereine werden vorgeschlagen.
+- Der Benutzer wählt den richtigen Hafen ausdrücklich selbst aus.
+- Der Vorschlag wird nicht automatisch gespeichert; weitere Angaben können ergänzt werden.
+- Bereits im persönlichen Hafenbuch gespeicherte Häfen werden ebenfalls berücksichtigt.
+- Ohne Internet bleibt die GPS-Position nutzbar; die Online-Hafensuche benötigt eine Verbindung.
+- Keine Änderungen an Supabase erforderlich.

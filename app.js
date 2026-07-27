@@ -1,4 +1,4 @@
-const APP_VERSION = '6.7';
+const APP_VERSION = '6.10';
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
 const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');
@@ -36,7 +36,7 @@ const DEFAULT_SETTINGS = {
   engine: 'Perkins M135',
   enginePower: 135,
   engineYear: 2010,
-  cruiseSpeed: '6–8 kn',
+  cruiseSpeed: '6,5 kn',
   tankCapacity: 400,
   currentTankPercent: '',
   currentEngineHours: '',
@@ -59,7 +59,7 @@ const DEFAULT_SETTINGS = {
   boatPhoto: '',
   boatPhotoStoragePath: '',
   photoAutoSync: true,
-  preferredCruiseSpeed: 7.5
+  preferredCruiseSpeed: 6.5
 };
 
 
@@ -69,6 +69,33 @@ const WEATHER_LOCATIONS = {
   cuxhaven: { key: 'cuxhaven', name: 'Cuxhaven', latitude: 53.8688, longitude: 8.7064, zoom: 11 },
   helgoland: { key: 'helgoland', name: 'Helgoland', latitude: 54.1825, longitude: 7.8854, zoom: 11 }
 };
+
+const REPORT_PLACE_COORDS = {
+  lemwerder: [53.1668, 8.6158],
+  bremerhaven: [53.5505, 8.5795],
+  cuxhaven: [53.8688, 8.7064],
+  helgoland: [54.1825, 7.8854],
+  brunsbuttel: [53.8954, 9.1386],
+  rendsburg: [54.3066, 9.6631],
+  kiel: [54.3233, 10.1228],
+  kielholtenau: [54.3728, 10.1467],
+  laboe: [54.4046, 10.2236],
+  marstal: [54.8566, 10.5170],
+  aeroskobing: [54.8887, 10.4112],
+  aeroeskobing: [54.8887, 10.4112],
+  lyo: [55.0373, 10.1636],
+  faaborg: [55.0951, 10.2423],
+  svendborg: [55.0598, 10.6073],
+  bagenkop: [54.7534, 10.6733],
+  gluckstadt: [53.7882, 9.4238],
+  glueckstadt: [53.7882, 9.4238],
+  wangerooge: [53.7900, 7.9000],
+  wilhelmshaven: [53.5136, 8.1460],
+  norderney: [53.7067, 7.1519],
+  langeoog: [53.7465, 7.4826],
+  busum: [54.1270, 8.8580]
+};
+
 const WEATHER_TIMEZONE = 'Europe/Berlin';
 const WEATHER_MAX_FORECAST_DAYS = 7;
 
@@ -312,6 +339,75 @@ function normalizeSettingsRecord(record, fallbackTimestamp) {
   return { ...source, _fieldUpdatedAt: fieldTimes, _updatedAt: fallback };
 }
 
+
+const NUMERIC_SETTINGS_FIELDS = new Set([
+  'buildYear', 'length', 'beam', 'draft', 'navigationDraft', 'airDraft', 'displacement',
+  'enginePower', 'engineYear', 'tankCapacity', 'currentTankPercent', 'currentEngineHours',
+  'preferredCruiseSpeed'
+]);
+
+function normalizeSettingsFormValues(values) {
+  const normalized = { ...(values || {}) };
+  for (const field of NUMERIC_SETTINGS_FIELDS) {
+    if (!Object.prototype.hasOwnProperty.call(normalized, field)) continue;
+    const raw = String(normalized[field] ?? '').trim();
+    normalized[field] = raw === '' ? '' : Number(raw.replace(',', '.'));
+  }
+  return normalized;
+}
+
+function settingsFieldCloudRowsV610(settings, userId) {
+  const normalized = normalizeRecord('settings', settings, settings?._updatedAt, settings?._updatedBy || 'legacy');
+  const rows = [];
+  for (const field of recordFieldNames('settings', normalized)) {
+    if (field === 'boatPhoto') continue;
+    rows.push({
+      user_id: userId,
+      record_type: SETTINGS_FIELD_RECORD_TYPE,
+      record_id: field,
+      payload: {
+        value: normalized[field],
+        deviceId: fieldDevice(normalized, field, normalized._updatedBy || 'legacy'),
+        deviceLabel: normalized._updatedByLabel || ''
+      },
+      updated_at: fieldTime(normalized, field, normalized._updatedAt),
+      deleted_at: null
+    });
+  }
+  return rows;
+}
+
+async function repairLeefkeSettingsV610() {
+  if (await metaGet('settingsRepairV610')) return;
+  const existingRaw = await getOne('settings', 'main');
+  if (!existingRaw) {
+    await metaSet('settingsRepairV610', { completedAt: new Date().toISOString() });
+    return;
+  }
+  const device = await getDeviceIdentity();
+  const now = new Date().toISOString();
+  const settings = normalizeRecord('settings', existingRaw, existingRaw._updatedAt, existingRaw._updatedBy || device.id);
+  settings._fieldUpdatedAt = { ...(settings._fieldUpdatedAt || {}) };
+  settings._fieldUpdatedBy = { ...(settings._fieldUpdatedBy || {}) };
+
+  settings.length = 11.5;
+  settings.cruiseSpeed = (!settings.cruiseSpeed || /6\s*[–-]\s*8\s*kn/i.test(String(settings.cruiseSpeed))) ? '6,5 kn' : settings.cruiseSpeed;
+  if (!Number.isFinite(Number(settings.preferredCruiseSpeed)) || [7.4, 7.5].includes(Number(settings.preferredCruiseSpeed))) {
+    settings.preferredCruiseSpeed = 6.5;
+  }
+
+  for (const field of ['length', 'cruiseSpeed', 'preferredCruiseSpeed']) {
+    settings._fieldUpdatedAt[field] = now;
+    settings._fieldUpdatedBy[field] = device.id;
+  }
+  settings._updatedAt = now;
+  settings._updatedBy = device.id;
+  settings._updatedByLabel = device.label;
+  await rawPut('settings', settings);
+  await setDirty(true);
+  await metaSet('settingsRepairV610', { completedAt: now, deviceId: device.id });
+}
+
 function mergeSettingsRecords(localRecord, remoteRecord, remoteUpdatedAt) {
   const local = normalizeSettingsRecord(localRecord, localRecord?._updatedAt);
   const remote = normalizeSettingsRecord(remoteRecord, remoteUpdatedAt);
@@ -483,27 +579,92 @@ const FACTORY_ROUTE_SIGNATURES = new Set([
   '2026-08-05|Laboe|Marstal|36'
 ]);
 
-const FACTORY_CHECK_SIGNATURES = new Set([
-  'Vor dem Ablegen|Wetter, Wind, Wellen und Sicht geprüft',
-  'Vor dem Ablegen|Tiden und Strömung geprüft',
-  'Vor dem Ablegen|Motorraum und drei Dieselfilter kontrolliert',
-  'Vor dem Ablegen|Bilge und Bilgenpumpen kontrolliert',
-  'Vor dem Ablegen|Motoröl, Kühlwasser und Keilriemen geprüft',
-  'Vor dem Ablegen|Hydraulik und Bugstrahlruder geprüft',
-  'Vor dem Ablegen|Navigation, AIS, Radar und UKW eingeschaltet',
-  'Vor dem Ablegen|Leinen, Fender und Anker klar',
-  'Nach dem Anlegen|Motorstunden und Tankstand notiert',
-  'Nach dem Anlegen|Landstrom angeschlossen und geprüft',
-  'Nach dem Anlegen|Leinen und Fender kontrolliert',
-  'Nach dem Anlegen|Motorraum auf Leckagen geprüft',
-  'Nach dem Anlegen|Logbucheintrag ergänzt',
-  'Nach dem Anlegen|Wetter und Tiden für morgen geprüft',
-  'Sicherheit|UKW-Funk betriebsbereit',
-  'Sicherheit|AIS-Transponder und Radar betriebsbereit',
-  'Sicherheit|Papierkarten und Kompass an Bord',
-  'Sicherheit|Rettungsinsel und Rettungsmittel kontrolliert',
-  'Sicherheit|Ankerwinde und Kette einsatzbereit'
-]);
+const STANDARD_CHECKLIST_GROUPS = {
+  'Vor dem Ablegen': [
+    { id: 'check-depart-weather', item: 'Wetter, Sicht und amtliche Warnungen geprüft' },
+    { id: 'check-depart-tide', item: 'Tiden, Strömung und Wasserstände geprüft' },
+    { id: 'check-depart-route', item: 'Route, Verkehrslage und Ausweichhäfen geprüft' },
+    { id: 'check-depart-engine', item: 'Motorraum geprüft: Öl, Kühlwasser, Keilriemen, Filter und Leckagen' },
+    { id: 'check-depart-bilge', item: 'Bilge und Bilgenpumpen geprüft' },
+    { id: 'check-depart-fuel', item: 'Tankstand und Kraftstoffversorgung geprüft' },
+    { id: 'check-depart-steering', item: 'Steuerung, Hydraulik und Bugstrahlruder geprüft' },
+    { id: 'check-depart-navigation', item: 'Plotter, AIS, Radar, UKW und Navigationslichter geprüft' },
+    { id: 'check-depart-safety', item: 'Rettungsmittel griffbereit und Crew eingewiesen' },
+    { id: 'check-depart-deck', item: 'Landstrom getrennt; Leinen, Fender und Anker klar' }
+  ],
+  'Nach dem Anlegen': [
+    { id: 'check-arrive-mooring', item: 'Leinen, Fender und Gangway kontrolliert' },
+    { id: 'check-arrive-engine', item: 'Motorraum, Bilge und Leckagen kontrolliert' },
+    { id: 'check-arrive-shore', item: 'Landstrom und Wasser sicher angeschlossen' },
+    { id: 'check-arrive-log', item: 'Motorstunden, Strecke und Tankstand ins Logbuch übernommen' },
+    { id: 'check-arrive-plan', item: 'Wetter, Tiden und Route für den nächsten Fahrtag geprüft' },
+    { id: 'check-arrive-secure', item: 'Navigation und Elektrik auf Hafenbetrieb gestellt; Boot gesichert' }
+  ],
+  'Regelmäßige Sicherheitskontrolle': [
+    { id: 'check-safety-rescue', item: 'Rettungswesten, Rettungsring und Rettungsinsel geprüft' },
+    { id: 'check-safety-fire', item: 'Feuerlöscher, Löschdecke und Rauch-/CO-Melder geprüft' },
+    { id: 'check-safety-firstaid', item: 'Erste-Hilfe-Ausrüstung und Medikamente geprüft' },
+    { id: 'check-safety-distress', item: 'Seenotsignalmittel und Notbeleuchtung geprüft' },
+    { id: 'check-safety-radio', item: 'UKW-Handfunkgerät, Ersatzakkus und Notrufdaten geprüft' },
+    { id: 'check-safety-backup', item: 'Papierkarten, Kompass und Navigations-Backups vollständig' },
+    { id: 'check-safety-anchor', item: 'Anker, Kette und Ankerwinde geprüft' }
+  ]
+};
+
+const STANDARD_CHECKLIST_ITEMS = Object.entries(STANDARD_CHECKLIST_GROUPS)
+  .flatMap(([group, items]) => items.map(item => ({ ...item, group })));
+
+const FACTORY_CHECK_SIGNATURES = new Set(
+  STANDARD_CHECKLIST_ITEMS.map(item => `${item.group}|${item.item}`)
+);
+
+function normalizedChecklistText(value) {
+  return String(value || '')
+    .trim()
+    .toLocaleLowerCase('de-DE')
+    .replace(/[.;:]+$/g, '')
+    .replace(/\s+/g, ' ');
+}
+
+function normalizedChecklistKey(group, item) {
+  return `${normalizedChecklistText(group)}|${normalizedChecklistText(item)}`;
+}
+
+const STANDARD_CHECKLIST_BY_KEY = new Map(
+  STANDARD_CHECKLIST_ITEMS.map(item => [normalizedChecklistKey(item.group, item.item), item])
+);
+
+const LEGACY_CHECKLIST_TARGETS = new Map();
+function registerLegacyChecklist(group, item, targetId) {
+  LEGACY_CHECKLIST_TARGETS.set(normalizedChecklistKey(group, item), targetId);
+}
+
+[
+  ['Vor dem Ablegen', 'Wetter, Wind, Wellen und Sicht geprüft', 'check-depart-weather'],
+  ['Vor dem Ablegen', 'Wetter und Sicht geprüft', 'check-depart-weather'],
+  ['Vor dem Ablegen', 'Tiden und Strömung geprüft', 'check-depart-tide'],
+  ['Vor dem Ablegen', 'Motorraum und drei Dieselfilter kontrolliert', 'check-depart-engine'],
+  ['Vor dem Ablegen', 'Motorraum und Dieselfilter kontrolliert', 'check-depart-engine'],
+  ['Vor dem Ablegen', 'Motoröl, Kühlwasser und Keilriemen geprüft', 'check-depart-engine'],
+  ['Vor dem Ablegen', 'Bilge und Bilgenpumpen kontrolliert', 'check-depart-bilge'],
+  ['Vor dem Ablegen', 'Hydraulik und Bugstrahlruder geprüft', 'check-depart-steering'],
+  ['Vor dem Ablegen', 'Navigation, AIS, Radar und UKW eingeschaltet', 'check-depart-navigation'],
+  ['Vor dem Ablegen', 'Leinen, Fender und Anker klar', 'check-depart-deck'],
+  ['Nach dem Anlegen', 'Motorstunden und Tankstand notiert', 'check-arrive-log'],
+  ['Nach dem Anlegen', 'Logbucheintrag ergänzt', 'check-arrive-log'],
+  ['Nach dem Anlegen', 'Landstrom angeschlossen und geprüft', 'check-arrive-shore'],
+  ['Nach dem Anlegen', 'Leinen und Fender kontrolliert', 'check-arrive-mooring'],
+  ['Nach dem Anlegen', 'Motorraum auf Leckagen geprüft', 'check-arrive-engine'],
+  ['Nach dem Anlegen', 'Wetter und Tiden für morgen geprüft', 'check-arrive-plan'],
+  ['Sicherheit', 'UKW-Funk betriebsbereit', 'check-depart-navigation'],
+  ['Sicherheit', 'AIS-Transponder und Radar betriebsbereit', 'check-depart-navigation'],
+  ['Sicherheit', 'Papierkarten und Kompass an Bord', 'check-safety-backup'],
+  ['Sicherheit', 'Rettungsinsel und Rettungsmittel kontrolliert', 'check-safety-rescue'],
+  ['Sicherheit', 'Rettungsmittel kontrolliert', 'check-safety-rescue'],
+  ['Sicherheit', 'Ankerwinde und Kette einsatzbereit', 'check-safety-anchor']
+].forEach(args => registerLegacyChecklist(...args));
+
+const STANDARD_CHECKLIST_BY_ID = new Map(STANDARD_CHECKLIST_ITEMS.map(item => [item.id, item]));
 
 function settingsMatchFactory(record) {
   const ignored = new Set(['id', '_updatedAt', '_fieldUpdatedAt', 'boatPhoto']);
@@ -1191,35 +1352,8 @@ async function saveTripForm(event) {
 async function defaults() {
   const checks = await all('checklists');
   if (!checks.length) {
-    const groups = {
-      'Vor dem Ablegen': [
-        'Wetter, Wind, Wellen und Sicht geprüft',
-        'Tiden und Strömung geprüft',
-        'Motorraum und drei Dieselfilter kontrolliert',
-        'Bilge und Bilgenpumpen kontrolliert',
-        'Motoröl, Kühlwasser und Keilriemen geprüft',
-        'Hydraulik und Bugstrahlruder geprüft',
-        'Navigation, AIS, Radar und UKW eingeschaltet',
-        'Leinen, Fender und Anker klar'
-      ],
-      'Nach dem Anlegen': [
-        'Motorstunden und Tankstand notiert',
-        'Landstrom angeschlossen und geprüft',
-        'Leinen und Fender kontrolliert',
-        'Motorraum auf Leckagen geprüft',
-        'Logbucheintrag ergänzt',
-        'Wetter und Tiden für morgen geprüft'
-      ],
-      'Sicherheit': [
-        'UKW-Funk betriebsbereit',
-        'AIS-Transponder und Radar betriebsbereit',
-        'Papierkarten und Kompass an Bord',
-        'Rettungsinsel und Rettungsmittel kontrolliert',
-        'Ankerwinde und Kette einsatzbereit'
-      ]
-    };
-    for (const [group, items] of Object.entries(groups)) {
-      for (const item of items) await put('checklists', { id: uid(), group, item, done: false });
+    for (const item of STANDARD_CHECKLIST_ITEMS) {
+      await put('checklists', { id: item.id, group: item.group, item: item.item, done: false });
     }
   }
 
@@ -1368,7 +1502,7 @@ function render() {
   $('#headerBoatLine').textContent = `${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` · ${settings.model}` : ''} · ${settings.homePort || 'Lemwerder'}`;
   $('#tripTitle').textContent = settings.tripTitle || 'Aktueller Törn';
   $('#tripDates').textContent = [fmtDate(settings.tripStart), fmtDate(settings.tripEnd)].filter(Boolean).join(' – ');
-  $('#leefkeStory').textContent = `${settings.boatName || 'LEEFKE'} ist unser ${settings.buildYear || 1996} gebauter ${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` der Baureihe ${settings.model}` : ''}: ein ${dec2(settings.length)} Meter langer Verdränger aus ${settings.hullMaterial || 'Stahl'} mit klassischem Spitzgatt. Der ${settings.engine || 'Perkins M135'} bringt uns mit ruhigen ${settings.cruiseSpeed || '6–8 kn'} vom ${settings.homePort || 'Heimathafen'} hinaus auf Nord- und Ostsee.`;
+  $('#leefkeStory').textContent = `${settings.boatName || 'LEEFKE'} ist unser ${settings.buildYear || 1996} gebauter ${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` der Baureihe ${settings.model}` : ''}: ein ${dec2(settings.length)} Meter langer Verdränger aus ${settings.hullMaterial || 'Stahl'} mit klassischem Spitzgatt. Der ${settings.engine || 'Perkins M135'} bringt uns mit ruhigen ${settings.cruiseSpeed || '6,5 kn'} vom ${settings.homePort || 'Heimathafen'} hinaus auf Nord- und Ostsee.`;
 
   $('#vLength').textContent = `${dec2(settings.length)} m`;
   $('#vBeam').textContent = `${dec2(settings.beam)} m`;
@@ -1566,6 +1700,192 @@ function renderRoute() {
       </div>
     </article>`;
   }).join('') || '<div class="card muted">Noch keine Etappen geplant.</div>';
+}
+
+let portGpsCandidates = [];
+
+function parseCoordinateText(value) {
+  const match = String(value || '').trim().match(/^\s*(-?\d+(?:[.,]\d+)?)\s*[,;/ ]\s*(-?\d+(?:[.,]\d+)?)\s*$/);
+  if (!match) return null;
+  const latitude = Number(match[1].replace(',', '.'));
+  const longitude = Number(match[2].replace(',', '.'));
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return null;
+  return { latitude, longitude };
+}
+
+function portGpsType(tags = {}) {
+  if (tags.leisure === 'marina') return 'Marina / Yachthafen';
+  if (tags['seamark:type'] === 'harbour' || tags.harbour) return 'Hafen';
+  if (tags.landuse === 'harbour') return 'Hafengebiet';
+  if (tags.club === 'sailing' || tags.sport === 'sailing') return 'Segelverein / Yachtclub';
+  if (tags.amenity === 'ferry_terminal') return 'Fährhafen';
+  return 'Hafenanlage';
+}
+
+function setPortGpsStatus(message = '', kind = 'info') {
+  const status = $('#portGpsStatus');
+  if (!status) return;
+  status.textContent = message;
+  status.className = `port-gps-status ${kind}`;
+  status.hidden = !message;
+}
+
+function resetPortGpsAssistant() {
+  portGpsCandidates = [];
+  setPortGpsStatus();
+  const suggestions = $('#portGpsSuggestions');
+  if (suggestions) {
+    suggestions.hidden = true;
+    suggestions.innerHTML = '';
+  }
+  const button = $('#portGpsButton');
+  if (button) {
+    button.disabled = false;
+    button.textContent = '📍 Standort verwenden';
+  }
+}
+
+function storedPortGpsCandidates(location) {
+  return (state.ports || []).map(item => {
+    const position = parseCoordinateText(item.coords);
+    if (!position || !item.name) return null;
+    return {
+      name: item.name,
+      latitude: position.latitude,
+      longitude: position.longitude,
+      distanceKm: haversineKm(location, position),
+      type: 'Bereits im Hafenbuch',
+      source: 'LEEFKE'
+    };
+  }).filter(Boolean).filter(item => item.distanceKm <= 12);
+}
+
+function overpassPortQuery(latitude, longitude, radius = 9000) {
+  return `[out:json][timeout:18];(
+    nwr(around:${radius},${latitude},${longitude})["leisure"="marina"]["name"];
+    nwr(around:${radius},${latitude},${longitude})["harbour"]["name"];
+    nwr(around:${radius},${latitude},${longitude})["seamark:type"="harbour"];
+    nwr(around:${radius},${latitude},${longitude})["landuse"="harbour"]["name"];
+    nwr(around:${radius},${latitude},${longitude})["sport"="sailing"]["name"];
+    nwr(around:${radius},${latitude},${longitude})["club"="sailing"]["name"];
+    nwr(around:${radius},${latitude},${longitude})["amenity"="ferry_terminal"]["name"];
+  );out center tags;`;
+}
+
+async function fetchNearbyPorts(location) {
+  const endpoints = [
+    'https://overpass-api.de/api/interpreter',
+    'https://overpass.kumi.systems/api/interpreter'
+  ];
+  const query = overpassPortQuery(location.latitude, location.longitude);
+  let lastError = null;
+  for (const endpoint of endpoints) {
+    try {
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: `data=${encodeURIComponent(query)}`
+      });
+      if (!response.ok) throw new Error(`Kartendienst antwortet mit ${response.status}`);
+      const data = await response.json();
+      return (data.elements || []).map(element => {
+        const latitude = Number(element.lat ?? element.center?.lat);
+        const longitude = Number(element.lon ?? element.center?.lon);
+        const tags = element.tags || {};
+        const name = String(tags.name || tags['seamark:name'] || '').trim();
+        if (!name || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+        return {
+          name,
+          latitude,
+          longitude,
+          distanceKm: haversineKm(location, { latitude, longitude }),
+          type: portGpsType(tags),
+          source: 'OpenStreetMap'
+        };
+      }).filter(Boolean);
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError || new Error('Hafensuche momentan nicht erreichbar');
+}
+
+function uniquePortCandidates(items) {
+  const seen = new Set();
+  return items.sort((a, b) => a.distanceKm - b.distanceKm).filter(item => {
+    const key = item.name.toLocaleLowerCase('de-DE').replace(/\s+/g, ' ').trim();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 6);
+}
+
+function renderPortGpsCandidates(items, accuracy) {
+  const box = $('#portGpsSuggestions');
+  if (!box) return;
+  portGpsCandidates = items;
+  if (!items.length) {
+    box.hidden = false;
+    box.innerHTML = `<div class="port-gps-empty"><strong>Kein benannter Hafen in unmittelbarer Nähe gefunden.</strong><span>Die aktuelle GPS-Position wurde bereits in das Koordinatenfeld übernommen. Den Hafennamen kannst du manuell ergänzen.</span></div>`;
+    return;
+  }
+  box.hidden = false;
+  box.innerHTML = `<div class="port-gps-result-head"><strong>Welcher Hafen ist es?</strong><span>${items.length} Vorschlag${items.length === 1 ? '' : 'e'}${Number.isFinite(accuracy) ? ` · GPS ± ${Math.round(accuracy)} m` : ''}</span></div>${items.map((item, index) => `<button type="button" class="port-gps-suggestion" data-port-gps-index="${index}"><span class="port-gps-marker">⚓</span><span><strong>${esc(item.name)}</strong><small>${esc(item.type)} · ${item.distanceKm < 1 ? `${Math.round(item.distanceKm * 1000)} m` : `${item.distanceKm.toLocaleString('de-DE', { minimumFractionDigits: 1, maximumFractionDigits: 1 })} km`} entfernt</small></span><span class="port-gps-choose">Übernehmen</span></button>`).join('')}`;
+}
+
+function geolocationErrorText(error) {
+  if (error?.code === 1) return 'Standortzugriff wurde nicht erlaubt. Bitte die Standortfreigabe für Safari beziehungsweise den Browser aktivieren und erneut versuchen.';
+  if (error?.code === 2) return 'Der Standort konnte momentan nicht bestimmt werden. Bitte unter freiem Himmel oder mit besserem GPS-Empfang erneut versuchen.';
+  if (error?.code === 3) return 'Die Standortbestimmung hat zu lange gedauert. Bitte noch einmal versuchen.';
+  return 'Der Standort konnte nicht bestimmt werden.';
+}
+
+async function suggestPortFromGps() {
+  const button = $('#portGpsButton');
+  const form = $('#portForm');
+  if (!navigator.geolocation) return setPortGpsStatus('Dieses Gerät oder dieser Browser unterstützt keine GPS-Ortung.', 'error');
+  button.disabled = true;
+  button.textContent = '⌖ Standort wird bestimmt …';
+  setPortGpsStatus('Bitte die Standortabfrage des Geräts bestätigen. Die genaue Position kann einige Sekunden dauern.', 'loading');
+  $('#portGpsSuggestions').hidden = true;
+  try {
+    const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, {
+      enableHighAccuracy: true,
+      timeout: 18000,
+      maximumAge: 30000
+    }));
+    const location = {
+      latitude: position.coords.latitude,
+      longitude: position.coords.longitude
+    };
+    form.elements.coords.value = `${location.latitude.toFixed(6)}, ${location.longitude.toFixed(6)}`;
+    if (!form.elements.date.value) form.elements.date.value = dateInputValue();
+    setPortGpsStatus(`Position gefunden${Number.isFinite(position.coords.accuracy) ? ` (Genauigkeit etwa ± ${Math.round(position.coords.accuracy)} m)` : ''}. Häfen in der Nähe werden gesucht …`, 'loading');
+
+    const localCandidates = storedPortGpsCandidates(location);
+    let onlineCandidates = [];
+    let onlineError = null;
+    if (navigator.onLine) {
+      try { onlineCandidates = await fetchNearbyPorts(location); }
+      catch (error) { onlineError = error; }
+    }
+    const candidates = uniquePortCandidates([...localCandidates, ...onlineCandidates]);
+    renderPortGpsCandidates(candidates, position.coords.accuracy);
+    if (candidates.length) {
+      setPortGpsStatus('Standort gefunden. Bitte den passenden Hafen aus den Vorschlägen auswählen; gespeichert wird erst mit „Hafen speichern“.', 'success');
+    } else if (!navigator.onLine) {
+      setPortGpsStatus('GPS-Position übernommen. Für die automatische Hafensuche ist momentan eine Internetverbindung nötig.', 'warning');
+    } else if (onlineError) {
+      setPortGpsStatus('GPS-Position übernommen. Der Kartendienst für Hafenvorschläge war gerade nicht erreichbar; der Hafenname kann manuell eingetragen werden.', 'warning');
+    } else {
+      setPortGpsStatus('GPS-Position übernommen, aber im Umkreis wurde kein benannter Hafen gefunden.', 'warning');
+    }
+  } catch (error) {
+    setPortGpsStatus(geolocationErrorText(error), 'error');
+  } finally {
+    button.disabled = false;
+    button.textContent = '📍 Standort erneut bestimmen';
+  }
 }
 
 function returnLabel(value) {
@@ -1807,7 +2127,7 @@ for (const id of ['fuel', 'maintenance', 'route', 'port']) {
 $('#settingsForm').onsubmit = async event => {
   event.preventDefault();
   const current = normalizeSettingsRecord(getSettings(), getSettings()._updatedAt);
-  const formValues = formObject(event.target);
+  const formValues = normalizeSettingsFormValues(formObject(event.target));
   const now = new Date().toISOString();
   const fieldTimes = { ...(current._fieldUpdatedAt || {}) };
   for (const [field, value] of Object.entries(formValues)) {
@@ -2216,7 +2536,7 @@ function coordinateLabel(latitude, longitude) {
 }
 
 function normalizePlaceName(value) {
-  return String(value || '').toLocaleLowerCase('de').replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss').replace(/[^a-z0-9]/g, '');
+  return String(value || '').toLocaleLowerCase('de').replace(/ä/g, 'a').replace(/ö/g, 'o').replace(/ü/g, 'u').replace(/ß/g, 'ss').replace(/æ/g, 'ae').replace(/ø/g, 'o').replace(/å/g, 'a').replace(/[^a-z0-9]/g, '');
 }
 
 function fixedLocationByName(name) {
@@ -2786,7 +3106,22 @@ $('#import').onchange = async event => {
 };
 
 initRatingPickers();
-$('#portForm').addEventListener('reset', () => window.setTimeout(() => syncRatingPickers($('#portForm')), 0));
+$('#portGpsButton')?.addEventListener('click', suggestPortFromGps);
+$('#portGpsSuggestions')?.addEventListener('click', event => {
+  const button = event.target.closest('[data-port-gps-index]');
+  if (!button) return;
+  const candidate = portGpsCandidates[Number(button.dataset.portGpsIndex)];
+  const form = $('#portForm');
+  if (!candidate || !form) return;
+  form.elements.name.value = candidate.name;
+  form.elements.coords.value = `${candidate.latitude.toFixed(6)}, ${candidate.longitude.toFixed(6)}`;
+  setPortGpsStatus(`${candidate.name} wurde als Vorschlag übernommen. Bitte weitere Angaben ergänzen und anschließend „Hafen speichern“ drücken.`, 'success');
+  form.elements.name.focus();
+});
+$('#portForm').addEventListener('reset', () => window.setTimeout(() => {
+  syncRatingPickers($('#portForm'));
+  resetPortGpsAssistant();
+}, 0));
 
 $('#menu').onclick = () => $('#nav').classList.toggle('open');
 $$('nav button').forEach(button => button.onclick = () => view(button.dataset.view));
@@ -3069,6 +3404,95 @@ async function del(store, id, options = {}) {
     scheduleSync();
   }
 }
+
+
+function preferredChecklistRecord(records) {
+  return [...records].sort((a, b) => syncTimestamp(b) - syncTimestamp(a))[0] || null;
+}
+
+async function cleanupChecklistsV69({ force = false, notify = false } = {}) {
+  const marker = await metaGet('checklistCleanupV69');
+  if (marker?.completed && !force) return { removed: 0, standardized: 0, customDuplicates: 0 };
+
+  const records = await all('checklists');
+  const standardBuckets = new Map(STANDARD_CHECKLIST_ITEMS.map(item => [item.id, []]));
+  const customBuckets = new Map();
+
+  for (const record of records) {
+    const key = normalizedChecklistKey(record.group, record.item);
+    const directStandard = STANDARD_CHECKLIST_BY_KEY.get(key);
+    const targetId = directStandard?.id || LEGACY_CHECKLIST_TARGETS.get(key) || (STANDARD_CHECKLIST_BY_ID.has(record.id) ? record.id : '');
+    if (targetId && standardBuckets.has(targetId)) {
+      standardBuckets.get(targetId).push(record);
+      continue;
+    }
+    const customKey = key || `id:${record.id}`;
+    if (!customBuckets.has(customKey)) customBuckets.set(customKey, []);
+    customBuckets.get(customKey).push(record);
+  }
+
+  let removed = 0;
+  let standardized = 0;
+  let customDuplicates = 0;
+
+  for (const standard of STANDARD_CHECKLIST_ITEMS) {
+    const bucket = standardBuckets.get(standard.id) || [];
+    const preferred = preferredChecklistRecord(bucket);
+    const done = bucket.some(item => Boolean(item.done));
+    const existingCanonical = bucket.find(item => item.id === standard.id);
+    const canonical = {
+      ...(existingCanonical || preferred || {}),
+      id: standard.id,
+      group: standard.group,
+      item: standard.item,
+      done
+    };
+
+    const needsPut = !existingCanonical || existingCanonical.group !== standard.group ||
+      existingCanonical.item !== standard.item || Boolean(existingCanonical.done) !== done;
+    if (needsPut) {
+      await put('checklists', canonical, { skipLog: true });
+      standardized += 1;
+    }
+
+    for (const record of bucket) {
+      if (record.id === standard.id) continue;
+      await del('checklists', record.id, { skipLog: true });
+      removed += 1;
+    }
+  }
+
+  for (const bucket of customBuckets.values()) {
+    if (bucket.length < 2) continue;
+    const keep = preferredChecklistRecord(bucket);
+    const mergedDone = bucket.some(item => Boolean(item.done));
+    if (keep && Boolean(keep.done) !== mergedDone) {
+      await put('checklists', { ...keep, done: mergedDone }, { skipLog: true });
+    }
+    for (const record of bucket) {
+      if (!keep || record.id === keep.id) continue;
+      await del('checklists', record.id, { skipLog: true });
+      removed += 1;
+      customDuplicates += 1;
+    }
+  }
+
+  await metaSet('checklistCleanupV69', {
+    completed: true,
+    completedAt: new Date().toISOString(),
+    removed,
+    standardized,
+    customDuplicates
+  });
+  if (notify) {
+    const message = removed
+      ? `${removed} doppelte oder überholte Prüfpunkt${removed === 1 ? '' : 'e'} entfernt.`
+      : 'Die Checklisten sind bereits sauber.';
+    toast(message);
+  }
+  return { removed, standardized, customDuplicates };
+}
+window.cleanupChecklistsV69 = cleanupChecklistsV69;
 
 async function migrateLocalTimestamps() {
   const device = await getDeviceIdentity();
@@ -3374,6 +3798,7 @@ async function syncNow(options = {}) {
     await createAutoBackup('Vor Synchronisierung');
     const userId = currentSession.user.id;
     const fetched = await fetchRemoteRecords();
+    const rawRemoteMap = new Map(fetched.map(row => [`${row.record_type}:${row.record_id}`, row]));
     const remote = unifiedRemoteRows(fetched);
     const remoteMap = new Map(remote.map(row => [`${row.record_type}:${row.record_id}`, row]));
     const tombstones = await all('syncTombstones');
@@ -3420,6 +3845,19 @@ async function syncNow(options = {}) {
         if (differs || Date.parse(row.updated_at) > remoteTimestamp(remoteRow)) outgoing.push(row);
       }
     }
+
+    // Schiffsdaten zusätzlich als einzelne Cloud-Datensätze übertragen.
+    // Damit können alte Feld-Datensätze (z. B. für die Bootslänge) keinen
+    // neueren Wert aus dem Schiffspass mehr zurücküberschreiben.
+    const currentSettingsForFields = await getOne('settings', 'main');
+    if (currentSettingsForFields) {
+      for (const fieldRow of settingsFieldCloudRowsV610(currentSettingsForFields, userId)) {
+        const remoteField = rawRemoteMap.get(`${SETTINGS_FIELD_RECORD_TYPE}:${fieldRow.record_id}`);
+        const differs = !remoteField || valueSignature(remoteField.payload?.value) !== valueSignature(fieldRow.payload?.value);
+        if (differs || Date.parse(fieldRow.updated_at) > remoteTimestamp(remoteField)) outgoing.push(fieldRow);
+      }
+    }
+
     const pendingTombstones = await all('syncTombstones');
     for (const tombstone of pendingTombstones) {
       const remoteRow = remoteMap.get(tombstone.id);
@@ -3433,6 +3871,8 @@ async function syncNow(options = {}) {
     // Medienpfade nach dem Upload noch einmal übertragen.
     const mediaRows = [];
     for (const store of ['photos', 'documents', 'settings']) for (const item of await all(store)) mediaRows.push(cloudRowFromRecord(store, item, userId));
+    const settingsAfterMedia = await getOne('settings', 'main');
+    if (settingsAfterMedia) mediaRows.push(...settingsFieldCloudRowsV610(settingsAfterMedia, userId));
     await upsertRows(mediaRows);
     for (const tombstone of pendingTombstones) await rawDel('syncTombstones', tombstone.id);
     const dirtyNow = await metaGet('dirty');
@@ -3882,22 +4322,69 @@ function renderWeatherSnapshot(snapshot, requestedIndex = null) {
   loadOfficialBsh(snapshot);
 }
 
+function reportPointByName(name) {
+  const normalized = normalizePlaceName(name);
+  if (!normalized) return null;
+
+  const storedPort = state.ports.find(port => normalizePlaceName(port.name) === normalized && parseCoordinates(port.coords));
+  if (storedPort) return parseCoordinates(storedPort.coords);
+
+  const fixed = Object.values(WEATHER_LOCATIONS).find(item => normalizePlaceName(item.name) === normalized);
+  if (fixed) return [fixed.latitude, fixed.longitude];
+
+  const direct = REPORT_PLACE_COORDS[normalized];
+  if (direct) return direct;
+
+  const compact = normalized
+    .replace(/yachthafen|marina|binnenhafen|aussenhafen|stadthafen|hafen|yachtclub|segelverein/g, '');
+  if (REPORT_PLACE_COORDS[compact]) return REPORT_PLACE_COORDS[compact];
+
+  const partial = Object.entries(REPORT_PLACE_COORDS)
+    .find(([key]) => key.length >= 4 && (normalized.includes(key) || key.includes(normalized)));
+  return partial?.[1] || null;
+}
+
+function reportPlannedRouteSegments() {
+  const segments = [];
+  const stages = [...state.route]
+    .filter(stage => stage.status !== 'skip')
+    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+
+  for (const stage of stages) {
+    const from = reportPointByName(stage.from);
+    const to = reportPointByName(stage.to);
+    if (!from && !to) continue;
+    segments.push({
+      id: stage.id,
+      label: `${stage.from || 'Start'} → ${stage.to || 'Ziel'}`,
+      from,
+      to,
+      date: stage.date,
+      nm: stage.nm
+    });
+  }
+  return segments;
+}
+
 function reportMapContentAvailable() {
-  const routes = state.gpx.filter(item => item.points?.length);
-  const ports = state.ports.map(port => ({ port, point: parseCoordinates(port.coords) })).filter(item => item.point);
-  return routes.length > 0 || ports.length > 0;
+  return true;
 }
 
 function reportRouteMapHtml() {
-  if (!reportMapContentAvailable()) {
-    return '<div class="empty-state">Noch keine GPX-Route oder Hafenkoordinaten für die Seekartenübersicht vorhanden.</div>';
-  }
+  const hasGpx = state.gpx.some(item => item.points?.length);
+  const hasPlan = reportPlannedRouteSegments().length > 0;
+  const routeCaption = hasGpx
+    ? '<span><i class="report-legend-line"></i> GPX-Route</span>'
+    : hasPlan
+      ? '<span><i class="report-legend-line planned"></i> geplanter Törn</span>'
+      : '<span><i class="report-legend-line planned"></i> Seekartenübersicht</span>';
+
   return `<div class="report-map-shell">
     <div id="reportRouteMap" class="report-map" role="img" aria-label="Seekarte des Törns">
-      <div id="reportMapLoading" class="report-map-loading"><span>⚓</span><strong>Seekarte wird geladen …</strong><small>Küstenkarte und Seezeichen werden eingeblendet.</small></div>
+      <div id="reportMapLoading" class="report-map-loading"><span>⚓</span><strong>Seekarte wird geladen …</strong><small>Küstenkarte, Seezeichen und der Verlauf des aktuellen Törns werden eingeblendet.</small></div>
     </div>
-    <div class="report-map-caption"><span><i class="report-legend-line"></i> GPX-Route</span><span>⚓ Start / Hafen</span><span>◆ Ziel</span><span>Seezeichen: OpenSeaMap</span></div>
-    <p class="report-map-warning">Planungs- und Dokumentationsansicht – keine zugelassene Navigationskarte.</p>
+    <div class="report-map-caption">${routeCaption}<span>⚓ Start / Hafen</span><span>◆ Ziel</span><span>Seezeichen: OpenSeaMap</span></div>
+    <p class="report-map-warning">Planungs- und Dokumentationsansicht – keine zugelassene Navigationskarte. Ohne GPX verbindet die App bekannte Etappenorte als gestrichelte Planungslinie.</p>
   </div>`;
 }
 
@@ -3929,6 +4416,20 @@ function reportRouteLabel(route, index) {
 function addReportRouteLayers(map) {
   const bounds = L.latLngBounds([]);
   const routes = state.gpx.filter(item => item.points?.length);
+  const marked = new Set();
+
+  const addNamedMarker = (point, kind, label, popupHtml) => {
+    if (!point) return;
+    const key = `${point[0].toFixed(5)}:${point[1].toFixed(5)}:${kind}`;
+    if (marked.has(key)) return;
+    marked.add(key);
+    bounds.extend(point);
+    const icon = kind === 'finish' ? routeMarker('finish', label) : kind === 'port' ? portMarkerIcon() : routeMarker('start', label);
+    L.marker(point, { icon, title: label || 'Position' })
+      .bindPopup(popupHtml || `<strong>${esc(label || 'Position')}</strong>`)
+      .addTo(map);
+  };
+
   routes.forEach((route, index) => {
     const latLngs = route.points
       .map(point => [num(point[0]), num(point[1])])
@@ -3939,20 +4440,39 @@ function addReportRouteLayers(map) {
     L.polyline(latLngs, { color: '#f2bd2e', weight: 4.5, opacity: 1, lineCap: 'round', lineJoin: 'round' })
       .bindPopup(`<strong>${reportRouteLabel(route, index)}</strong><br>${route.distanceNm ? `${dec(route.distanceNm)} sm` : `${latLngs.length} Punkte`}`)
       .addTo(map);
-    const start = latLngs[0];
-    const finish = latLngs.at(-1);
-    L.marker(start, { icon: routeMarker('start', index === 0 ? 'Start' : `Start ${index + 1}`), title: 'Start' }).addTo(map);
-    L.marker(finish, { icon: routeMarker('finish', index === routes.length - 1 ? 'Ziel' : `Ziel ${index + 1}`), title: 'Ziel' }).addTo(map);
+    addNamedMarker(latLngs[0], 'start', index === 0 ? 'Start' : `Start ${index + 1}`, `<strong>${reportRouteLabel(route, index)}</strong><br>Start`);
+    addNamedMarker(latLngs.at(-1), 'finish', index === routes.length - 1 ? 'Ziel' : `Ziel ${index + 1}`, `<strong>${reportRouteLabel(route, index)}</strong><br>Ziel`);
+  });
+
+  const planned = reportPlannedRouteSegments();
+  planned.forEach((segment, index) => {
+    if (segment.from && segment.to) {
+      bounds.extend(segment.from);
+      bounds.extend(segment.to);
+      L.polyline([segment.from, segment.to], {
+        color: '#b27a20',
+        weight: routes.length ? 2.5 : 4,
+        opacity: routes.length ? .65 : .9,
+        dashArray: '10 8',
+        lineCap: 'round',
+        lineJoin: 'round'
+      }).bindPopup(`<strong>${esc(segment.label)}</strong>${segment.date ? `<br>${fmtDate(segment.date)}` : ''}${segment.nm ? `<br>${dec(segment.nm)} sm` : ''}`)
+        .addTo(map);
+    }
+    if (segment.from) addNamedMarker(segment.from, index === 0 ? 'start' : 'port', segment.label.split(' → ')[0], `<strong>${esc(segment.label.split(' → ')[0])}</strong>${segment.date ? `<br>Etappe am ${fmtDate(segment.date)}` : ''}`);
+    if (segment.to) addNamedMarker(segment.to, index === planned.length - 1 ? 'finish' : 'port', segment.label.split(' → ')[1], `<strong>${esc(segment.label.split(' → ')[1])}</strong>${segment.date ? `<br>Etappe am ${fmtDate(segment.date)}` : ''}`);
   });
 
   state.ports.forEach(port => {
     const point = parseCoordinates(port.coords);
     if (!point) return;
-    bounds.extend(point);
     const rating = clamp(Math.round(num(port.rating)), 0, 5);
-    L.marker(point, { icon: portMarkerIcon(), title: port.name || 'Hafen' })
-      .bindPopup(`<div class="port-map-popup"><strong>${esc(port.name || 'Hafen')}</strong>${rating ? `<div>${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</div>` : ''}${port.berth ? `<span>Liegeplatz: ${esc(port.berth)}</span>` : ''}</div>`)
-      .addTo(map);
+    addNamedMarker(
+      point,
+      'port',
+      port.name || 'Hafen',
+      `<div class="port-map-popup"><strong>${esc(port.name || 'Hafen')}</strong>${rating ? `<div>${'★'.repeat(rating)}${'☆'.repeat(5 - rating)}</div>` : ''}${port.berth ? `<span>Liegeplatz: ${esc(port.berth)}</span>` : ''}</div>`
+    );
   });
   return bounds;
 }
@@ -3960,7 +4480,7 @@ function addReportRouteLayers(map) {
 function initReportRouteMap() {
   removeReportRouteMap();
   const element = $('#reportRouteMap');
-  if (!element || !reportMapContentAvailable()) return Promise.resolve();
+  if (!element) return Promise.resolve();
   if (!window.L) {
     element.innerHTML = '<div class="report-map-loading error"><span>⚠</span><strong>Seekarte konnte nicht gestartet werden.</strong><small>Bitte die Seite mit Internetverbindung neu laden.</small></div>';
     return Promise.resolve();
@@ -3991,13 +4511,13 @@ function initReportRouteMap() {
   L.control.scale({ metric: true, imperial: false, maxWidth: 140, position: 'bottomleft' }).addTo(reportRouteMap);
   const bounds = addReportRouteLayers(reportRouteMap);
   if (bounds.isValid()) reportRouteMap.fitBounds(bounds, { padding: [28, 28], maxZoom: 12 });
-  else reportRouteMap.setView([53.75, 8.35], 8);
+  else reportRouteMap.setView([54.05, 9.10], 7);
 
   const loading = $('#reportMapLoading');
   const tileState = Promise.all([waitForReportTileLayer(baseLayer), waitForReportTileLayer(seaMarkLayer)]).then(states => {
     reportRouteMap?.invalidateSize(false);
     if (!loading) return;
-    const baseLoaded = states[0] === 'loaded';
+    const baseLoaded = states[0] === 'loaded' || states[0] === 'partial';
     if (baseLoaded) loading.remove();
     else {
       loading.classList.add('warning');
@@ -4079,7 +4599,7 @@ async function seedGuestDemoData() {
     currentEngineHours: 954.0,
     defaultCrew: 'Demo-Crew',
     photoAutoSync: false,
-    preferredCruiseSpeed: 7.4
+    preferredCruiseSpeed: 6.5
   });
   await rawPut('settings', demoSettings);
 
@@ -4300,6 +4820,10 @@ window.addEventListener('load', () => {
   $('#exitGuestTopButton')?.addEventListener('click', exitGuestMode);
   $('#resetGuestButton')?.addEventListener('click', resetGuestDemo);
   $('#resetGuestTopButton')?.addEventListener('click', resetGuestDemo);
+  $('#cleanupChecks')?.addEventListener('click', async () => {
+    await cleanupChecklistsV69({ force: true, notify: true });
+    await refresh();
+  });
   applyGuestModeUI();
 });
 
@@ -4324,11 +4848,13 @@ if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=e
     else await connectDeviceAutomatically({ silent: true });
   }
   await defaults();
+  await repairLeefkeSettingsV610();
   const versionMeta = await metaGet('appVersion');
   if (versionMeta?.value && versionMeta.value !== APP_VERSION) {
     await createAutoBackup(`Update von ${versionMeta.value} auf ${APP_VERSION}`, true);
   }
   await setupV6Defaults();
+  await cleanupChecklistsV69();
   await metaSet('appVersion', { value: APP_VERSION, at: new Date().toISOString() });
   const daily = await metaGet('dailyBackup');
   if (!daily?.date || daily.date !== dateInputValue()) {

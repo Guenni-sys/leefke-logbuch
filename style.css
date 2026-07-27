@@ -634,3 +634,49 @@ main{padding:21px clamp(13px,2.4vw,32px) 58px;max-width:1440px}
   .stats,.stats.compact{grid-template-columns:1fr 1fr}
   .rating-buttons button{font-size:1.78rem;min-width:32px}
 }
+
+
+/* Version 6.8 – GPS-gestützte Hafenvorschläge */
+.port-gps-assistant{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 14px;align-items:center;padding:13px 14px;border:1px solid rgba(21,74,99,.2);border-radius:12px;background:linear-gradient(135deg,#f4faf9,#ece5d8);box-shadow:inset 0 1px rgba(255,255,255,.72)}
+.port-gps-copy{display:flex;align-items:center;gap:11px;min-width:0}.port-gps-copy>div{min-width:0}.port-gps-copy strong{display:block;color:var(--navy-900);font-family:Georgia,serif;font-size:.95rem}.port-gps-copy small{display:block;margin-top:2px;color:#63737a;font-size:.74rem;line-height:1.38}.port-gps-icon{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:var(--navy-700);color:#fff;font-size:1.15rem;box-shadow:0 5px 12px rgba(7,35,50,.17)}
+.port-gps-button{white-space:nowrap;min-height:38px;padding:8px 12px;border-color:rgba(21,74,99,.28);background:#fff;color:var(--navy-800);font-weight:800}.port-gps-button:disabled{opacity:.65;cursor:wait}
+.port-gps-status{grid-column:1/-1;padding:8px 10px;border-radius:8px;font-size:.77rem;line-height:1.4}.port-gps-status.info,.port-gps-status.loading{background:#e8f2f4;color:#28566a}.port-gps-status.success{background:#e7f3e9;color:#27613a}.port-gps-status.warning{background:#fff3d9;color:#79571a}.port-gps-status.error{background:#fae5e2;color:#8a3029}
+.port-gps-suggestions{grid-column:1/-1;display:grid;gap:7px}.port-gps-result-head{display:flex;justify-content:space-between;gap:12px;align-items:baseline;padding-top:2px}.port-gps-result-head strong{color:var(--navy-900);font-size:.82rem}.port-gps-result-head span{color:var(--muted);font-size:.7rem}
+.port-gps-suggestion{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:10px;width:100%;padding:9px 11px;border:1px solid rgba(21,74,99,.18);border-radius:9px;background:rgba(255,255,255,.82);text-align:left;color:var(--navy-900);box-shadow:none}.port-gps-suggestion:hover,.port-gps-suggestion:focus-visible{border-color:var(--brass);background:#fffaf0;transform:none}.port-gps-suggestion>span:nth-child(2){min-width:0}.port-gps-suggestion strong{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem}.port-gps-suggestion small{display:block;color:var(--muted);font-size:.7rem;margin-top:2px}.port-gps-marker{font-size:1.05rem}.port-gps-choose{color:#8a692e;font-size:.7rem;font-weight:850;text-transform:uppercase;letter-spacing:.04em}.port-gps-empty{display:grid;gap:3px;padding:10px;border-radius:9px;background:rgba(255,255,255,.74);color:var(--navy-900)}.port-gps-empty span{color:var(--muted);font-size:.74rem}.port-gps-source{grid-column:1/-1;color:#718086;font-size:.66rem;line-height:1.35}
+@media(max-width:700px){.port-gps-assistant{grid-template-columns:1fr}.port-gps-button{width:100%}.port-gps-result-head{align-items:flex-start;flex-direction:column;gap:2px}.port-gps-suggestion{grid-template-columns:auto minmax(0,1fr)}.port-gps-choose{grid-column:2}.port-gps-copy small{font-size:.72rem}}
+.port-gps-suggestions[hidden]{display:none}
+
+
+/* Version 6.9 · aufgeräumte Checklisten */
+.checklist-toolbar{align-items:end;grid-template-columns:minmax(155px,.8fr) minmax(240px,1.7fr) auto auto auto}
+.checklist-toolbar label{min-width:0;margin:0}
+.checklist-toolbar label>span{display:block;margin:0 0 .34rem;font-size:.74rem;font-weight:800;letter-spacing:.045em;color:var(--muted)}
+.checklist-toolbar select,.checklist-toolbar input{width:100%;min-width:0}
+.checklist-note{margin:.35rem .2rem 1rem;max-width:980px}
+#checks .card h3{margin-bottom:.7rem}
+#checks .check{align-items:flex-start;padding:.52rem .1rem;border-bottom:1px solid rgba(19,47,64,.09)}
+#checks .check:last-child{border-bottom:0}
+#checks .check>span{line-height:1.35;padding-top:.05rem}
+@media (max-width:1050px){.checklist-toolbar{grid-template-columns:1fr 1.35fr auto}.checklist-toolbar button{width:100%}}
+@media (max-width:720px){.checklist-toolbar{grid-template-columns:1fr}.checklist-toolbar button{width:100%}.checklist-note{font-size:.78rem}}
+
+
+/* Version 6.10 · Seekarte im Reisebericht und reparierte Schiffsdaten */
+.report-legend-line.planned{
+  height:0;
+  background:transparent;
+  box-shadow:none;
+  border-top:3px dashed #b27a20;
+  border-radius:0;
+}
+.report-map .leaflet-pane,
+.report-map .leaflet-tile,
+.report-map .leaflet-marker-icon,
+.report-map .leaflet-marker-shadow{
+  print-color-adjust:exact;
+  -webkit-print-color-adjust:exact;
+}
+@media print{
+  .report-map .leaflet-map-pane{transform-origin:top left!important}
+  .report-map img.leaflet-tile{max-width:none!important}
+}

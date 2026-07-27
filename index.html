@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=6.7">
+  <link rel="stylesheet" href="style.css?v=6.10">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -27,7 +27,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 6.7</small>
+        <small>BORDTAGEBUCH · VERSION 6.10</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -126,7 +126,7 @@
               <div><dt>Baujahr</dt><dd id="fBuildYear">1996</dd></div>
               <div><dt>Rumpf</dt><dd id="fHull">Stahl · Multiknickspant · Spitzgatt</dd></div>
               <div><dt>Heimathafen</dt><dd id="fHomePort">Weser Yacht Club Lemwerder</dd></div>
-              <div><dt>Marschfahrt</dt><dd id="fCruise">6–8 kn</dd></div>
+              <div><dt>Marschfahrt</dt><dd id="fCruise">6,5 kn</dd></div>
             </dl>
             <button data-open="settings" class="text-button">Schiffsdaten öffnen →</button>
           </article>
@@ -408,7 +408,17 @@
         <div class="title"><small>HAFENBUCH</small><h2>Häfen & Liegeplätze</h2><p>Persönliche Hafenerfahrungen der LEEFKE – jetzt mit echten Sternbewertungen.</p></div>
         <form id="portForm" class="card form port-form">
           <input type="hidden" name="id">
-          <label>Hafen<input required name="name"></label>
+          <div class="wide port-gps-assistant">
+            <div class="port-gps-copy">
+              <span class="port-gps-icon" aria-hidden="true">⌖</span>
+              <div><strong>Hafen per GPS vorschlagen</strong><small>Die App bestimmt deinen Standort und sucht passende Häfen, Marinas oder Segelvereine in der Nähe. Du entscheidest anschließend selbst, welcher Vorschlag übernommen wird.</small></div>
+            </div>
+            <button id="portGpsButton" type="button" class="port-gps-button">📍 Standort verwenden</button>
+            <div id="portGpsStatus" class="port-gps-status" aria-live="polite"></div>
+            <div id="portGpsSuggestions" class="port-gps-suggestions" hidden></div>
+            <small class="port-gps-source">Für die Hafensuche wird die aktuelle Position einmalig an den OpenStreetMap-Abfragedienst übermittelt. Es findet keine dauerhafte Ortung statt.</small>
+          </div>
+          <label>Hafen<input required name="name" placeholder="Hafen auswählen oder selbst eintragen"></label>
           <label>Datum<input type="date" name="date"></label>
           <label>Liegeplatz<input name="berth"></label>
           <label>Kosten (€)<input type="number" step="0.01" name="cost"></label>
@@ -502,7 +512,12 @@
 
       <section id="checklists" class="view">
         <div class="title"><small>KLAR SCHIFF</small><h2>Checklisten für die LEEFKE</h2><p>Vor dem Ablegen, nach dem Anlegen und für die Sicherheit an Bord.</p></div>
-        <form id="checkForm" class="card inline-form"><input name="group" placeholder="Gruppe"><input required name="item" placeholder="Neuer Prüfpunkt"><button class="primary">Hinzufügen</button><button type="button" id="resetChecks">Alle Haken löschen</button></form>
+        <form id="checkForm" class="card inline-form checklist-toolbar">
+          <label><span>Bereich</span><select name="group"><option>Vor dem Ablegen</option><option>Nach dem Anlegen</option><option>Regelmäßige Sicherheitskontrolle</option><option>Eigene Punkte</option></select></label>
+          <label class="checklist-new-item"><span>Neuer Prüfpunkt</span><input required name="item" placeholder="z. B. Ersatzschlüssel an Bord"></label>
+          <button class="primary">Hinzufügen</button><button type="button" id="resetChecks">Haken zurücksetzen</button><button type="button" id="cleanupChecks">Doppelte Punkte bereinigen</button>
+        </form>
+        <p class="meta checklist-note">Die Standardliste ist bewusst ohne Überschneidungen aufgebaut. Eigene Prüfpunkte bleiben bei der Bereinigung erhalten; nur identische Dopplungen und frühere Standardformulierungen werden zusammengeführt.</p>
         <div id="checks" class="grid2"></div>
       </section>
 
@@ -691,6 +706,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=6.7"></script>
+  <script src="app.js?v=6.10"></script>
 </body>
 </html>

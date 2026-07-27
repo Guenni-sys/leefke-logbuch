@@ -1,0 +1,14 @@
+LEEFKE BORDTAGEBUCH – VERSION 6.9
+
+CHECKLISTEN BEREINIGT
+- Überschneidende Standardpunkte wurden zusammengeführt.
+- Funk, AIS und Radar stehen nicht mehr doppelt unter „Vor dem Ablegen“ und „Sicherheit“.
+- Motorraum, Filter, Öl, Kühlwasser und Keilriemen bilden einen eindeutigen Motor-Check.
+- Motorstunden, Tankstand und Logbucheintrag sind zu einem Punkt zusammengefasst.
+- Die Sicherheitsliste enthält nur regelmäßige Prüfungen, keine täglichen Funktionskontrollen.
+- Exakt doppelte eigene Punkte werden zusammengeführt; eigene Inhalte bleiben erhalten.
+- Die Gruppe neuer Punkte wird über eine klare Auswahl festgelegt.
+- Mit „Doppelte Punkte bereinigen“ kann die Bereinigung jederzeit erneut gestartet werden.
+
+Beim ersten Start von Version 6.9 wird die vorhandene Liste automatisch aufgeräumt und anschließend über die Cloud synchronisiert.
+Supabase muss nicht geändert werden.

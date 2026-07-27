@@ -1,0 +1,20 @@
+LEEFKE BORDTAGEBUCH – VERSION 6.10
+
+1. SEEKARTE IM REISEBERICHT
+- Die Seekarte wird im Reisebericht jetzt immer aufgebaut.
+- Vorhandene GPX-Routen erscheinen weiterhin als gelbe Linie.
+- Wenn keine GPX-Route vorhanden ist, verbindet die App bekannte Orte des Törnplans als gestrichelte Planungslinie.
+- Berücksichtigt werden gespeicherte Hafenkoordinaten sowie häufige LEEFKE-Ziele wie Lemwerder, Bremerhaven, Cuxhaven, Helgoland, Brunsbüttel, Rendsburg, Laboe, Marstal, Ærøskøbing, Lyø, Faaborg, Svendborg und Bagenkop.
+- Tonnen und Seezeichen werden weiterhin über OpenSeaMap eingeblendet.
+
+2. SCHIFFSLÄNGE UND SCHIFFSDATEN
+- Die Länge der LEEFKE wird einmalig auf 11,50 m korrigiert und mit einem neuen Änderungszeitpunkt versehen.
+- Schiffsdaten werden zusätzlich als einzelne Cloud-Datensätze übertragen. Alte Feldstände können dadurch die aktuelle Länge nicht mehr zurücküberschreiben.
+- Zahlenfelder im Schiffspass werden einheitlich als Zahlen gespeichert, damit 11,5 und 11.50 nicht als unterschiedliche Werte behandelt werden.
+
+3. MARSCHFAHRT
+- Marschfahrt der LEEFKE: 6,5 kn.
+- Bevorzugte Marschfahrt für die Wetterauswertung entlang der Route: 6,5 kn.
+
+SUPABASE
+Für Version 6.10 ist keine neue SQL-Datei und keine Änderung in Supabase erforderlich.
