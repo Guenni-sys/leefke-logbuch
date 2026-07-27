@@ -1,0 +1,14 @@
+LEEFKE BORDTAGEBUCH – VERSION 6.6
+=================================
+
+NEU: LOKALER GASTMODUS
+- „Als Gast testen“ auf der Seite Konto & Sync
+- vorbereiteter Demo-Törn mit Tagestouren, Häfen, Tankbuch, Wartung und GPX-Route
+- vollständig getrennte IndexedDB-Datenbank
+- keine Anmeldung und keine Cloud-Synchronisierung
+- echte LEEFKE-Daten bleiben unsichtbar und unverändert
+- Demo jederzeit zurücksetzen
+- Gastmodus jederzeit verlassen; die normale App erscheint wieder
+- direkter Vorführlink mit ?guest=1
+
+Keine Supabase-Änderung erforderlich.

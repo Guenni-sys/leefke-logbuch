@@ -1,6 +1,11 @@
-const APP_VERSION = '6.4';
-const AUTO_SYNC_INTERVAL_MS = 20000;
-const DB_NAME = 'leefke-v2';
+const APP_VERSION = '6.6';
+const AUTO_SYNC_INTERVAL_MS = 60000;
+const GUEST_MODE_KEY = 'leefke-guest-mode';
+const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');
+if (MODE_QUERY === '1') localStorage.setItem(GUEST_MODE_KEY, '1');
+if (MODE_QUERY === '0') localStorage.removeItem(GUEST_MODE_KEY);
+const IS_GUEST_MODE = localStorage.getItem(GUEST_MODE_KEY) === '1';
+const DB_NAME = IS_GUEST_MODE ? 'leefke-v2-guest' : 'leefke-v2';
 const DB_VERSION = 7;
 const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'trips', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather', 'autoBackups'];
 const syncableStores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'trips', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather'];
@@ -95,6 +100,9 @@ let autoSyncTimer = null;
 let syncRequested = false;
 let suppressSyncTracking = false;
 let deviceConnectInProgress = false;
+let syncVisualInProgress = false;
+let syncUiRenderToken = 0;
+let syncUiTimer = null;
 
 const $ = selector => document.querySelector(selector);
 const $$ = selector => [...document.querySelectorAll(selector)];
@@ -341,6 +349,14 @@ function comparablePayload(store, payload) {
   delete cleaned._updatedAt;
   delete cleaned._updatedByLabel;
   delete cleaned._cloudState;
+  return JSON.stringify(stableComparableValue(cleaned));
+}
+
+function visibleComparablePayload(store, payload) {
+  const cleaned = cleanPayload(store, payload || {});
+  for (const key of Object.keys(cleaned)) {
+    if (key.startsWith('_')) delete cleaned[key];
+  }
   return JSON.stringify(stableComparableValue(cleaned));
 }
 
@@ -675,6 +691,13 @@ async function updateSyncUI() {
 }
 
 async function initializeSupabase() {
+  if (IS_GUEST_MODE) {
+    supabaseClient = null;
+    currentSession = null;
+    realtimeState = 'Gastmodus';
+    await updateSyncUI();
+    return;
+  }
   if (!window.supabase?.createClient) {
     setMessage('#authMessage', 'Die Cloud-Bibliothek konnte nicht geladen werden. Die lokale App funktioniert weiterhin.', 'error');
     await updateSyncUI();
@@ -949,11 +972,19 @@ async function syncNow(options = {}) {
   }
 }
 
-function scheduleSync(delay = 1400) {
+function scheduleSync(delay = 1400, options = {}) {
   window.clearTimeout(syncTimer);
+  const syncOptions = { silent: true, reason: 'scheduled', ...options };
   syncTimer = window.setTimeout(async () => {
-    if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow();
+    if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow(syncOptions);
     else await updateSyncUI();
+  }, delay);
+}
+
+function queueSyncUIUpdate(delay = 60) {
+  window.clearTimeout(syncUiTimer);
+  syncUiTimer = window.setTimeout(() => {
+    updateSyncUI().catch(error => console.warn('Synchronisierungsanzeige konnte nicht aktualisiert werden.', error));
   }, delay);
 }
 
@@ -3334,9 +3365,11 @@ async function syncNow(options = {}) {
   const linked = await isLinkedForCurrentUser();
   if (!linked && !options.force) { await connectDeviceAutomatically({ silent: options.silent }); return; }
   syncInProgress = true;
+  syncVisualInProgress = !options.silent;
   const dirtyAtStart = await metaGet('dirty');
-  await updateSyncUI();
+  if (syncVisualInProgress) await updateSyncUI();
   if (!options.silent) setMessage('#syncMessage', 'LEEFKE-Daten werden feldweise abgeglichen …');
+  let remoteChangedLocal = false;
   try {
     await createAutoBackup('Vor Synchronisierung');
     const userId = currentSession.user.id;
@@ -3355,12 +3388,24 @@ async function syncNow(options = {}) {
         const tombTs = Date.parse(tombMap.get(key)?.updatedAt || 0) || 0;
         const remoteTs = remoteTimestamp(row);
         if (row.deleted_at) {
-          if (remoteTs >= Math.max(localTs, tombTs)) { await rawDel(row.record_type, row.record_id); await rawDel('syncTombstones', key); }
+          if (remoteTs >= Math.max(localTs, tombTs)) {
+            if (local) remoteChangedLocal = true;
+            await rawDel(row.record_type, row.record_id);
+            await rawDel('syncTombstones', key);
+          }
           continue;
         }
         const remotePayload = normalizeRecord(row.record_type, { ...(row.payload || {}), id: row.record_id }, row.updated_at, row.payload?._updatedBy || 'cloud');
-        if (!local) await rawPut(row.record_type, remotePayload);
-        else await rawPut(row.record_type, await mergeRecordFieldwise(row.record_type, local, remotePayload, row.updated_at));
+        if (!local) {
+          await rawPut(row.record_type, remotePayload);
+          remoteChangedLocal = true;
+        } else {
+          const merged = await mergeRecordFieldwise(row.record_type, local, remotePayload, row.updated_at);
+          const recordChanged = comparablePayload(row.record_type, local) !== comparablePayload(row.record_type, merged);
+          const visibleChanged = visibleComparablePayload(row.record_type, local) !== visibleComparablePayload(row.record_type, merged);
+          if (recordChanged) await rawPut(row.record_type, merged);
+          if (visibleChanged) remoteChangedLocal = true;
+        }
         if (remoteTs > tombTs) await rawDel('syncTombstones', key);
       }
     } finally { suppressSyncTracking = false; }
@@ -3396,7 +3441,11 @@ async function syncNow(options = {}) {
     await metaSet('lastSync', { at: now });
     lastRemoteSummary = { records: remote.length, outgoing: outgoing.length, checkedAt: now };
     await registerDeviceHeartbeat();
-    await refresh();
+    // Ein stiller Hintergrundabgleich rendert die gesamte App nur neu, wenn
+    // wirklich Daten von einem anderen Gerät übernommen wurden. Dadurch
+    // bleibt die Oberfläche ruhig und flackert nicht im 60-Sekunden-Takt.
+    if (!options.silent || remoteChangedLocal) await refresh();
+    else await updateSyncUI();
     if (!options.silent) setMessage('#syncMessage', outgoing.length ? `${outgoing.length} Änderung(en) abgeglichen. Alle Felder wurden einzeln geprüft.` : 'Alle LEEFKE-Daten sind auf demselben Stand.', 'success');
   } catch (error) {
     suppressSyncTracking = false;
@@ -3405,8 +3454,10 @@ async function syncNow(options = {}) {
     const storageHint = /bucket|storage|row-level|policy|not found/i.test(String(error?.message || '')) ? ' Bitte die SQL-Datei „SUPABASE_SETUP_V6.sql“ einmal in Supabase ausführen.' : '';
     setMessage('#syncMessage', `Synchronisierung fehlgeschlagen: ${readableAuthError(error)}${storageHint}`, 'error');
   } finally {
-    syncInProgress = false; await updateSyncUI();
-    if (syncRequested) { syncRequested = false; scheduleSync(250); }
+    syncInProgress = false;
+    syncVisualInProgress = false;
+    await updateSyncUI();
+    if (syncRequested) { syncRequested = false; scheduleSync(250, { silent: true, reason: 'follow-up' }); }
   }
 }
 
@@ -3438,15 +3489,23 @@ function stopRealtimeSubscription() {
 function startRealtimeSubscription() {
   stopRealtimeSubscription();
   if (!supabaseClient || !currentSession?.user?.id || !navigator.onLine) return;
-  realtimeState = 'verbindet …'; updateSyncUI();
+  if (realtimeState !== 'verbindet …') {
+    realtimeState = 'verbindet …';
+    queueSyncUIUpdate();
+  }
   realtimeChannel = supabaseClient.channel(`leefke-records-${currentSession.user.id}`)
     .on('postgres_changes', { event: '*', schema: 'public', table: 'leefke_records', filter: `user_id=eq.${currentSession.user.id}` }, payload => {
       const sourceDevice = payload?.new?.payload?._updatedBy || payload?.old?.payload?._updatedBy;
-      getDeviceIdentity().then(device => { if (sourceDevice !== device.id) scheduleSync(120); });
+      getDeviceIdentity().then(device => {
+        if (sourceDevice !== device.id) scheduleSync(220, { silent: true, reason: 'realtime' });
+      });
     })
     .subscribe(status => {
-      realtimeState = status === 'SUBSCRIBED' ? 'verbunden' : status === 'CHANNEL_ERROR' ? 'Fehler' : status === 'TIMED_OUT' ? 'Zeitüberschreitung' : String(status || '').toLowerCase();
-      updateSyncUI();
+      const nextState = status === 'SUBSCRIBED' ? 'verbunden' : status === 'CHANNEL_ERROR' ? 'Fehler' : status === 'TIMED_OUT' ? 'Zeitüberschreitung' : String(status || '').toLowerCase();
+      if (nextState !== realtimeState) {
+        realtimeState = nextState;
+        queueSyncUIUpdate();
+      }
     });
 }
 
@@ -3468,33 +3527,101 @@ async function verifySyncState() {
 }
 
 async function updateSyncUI() {
+  const renderToken = ++syncUiRenderToken;
+  applyGuestModeUI();
+  if (IS_GUEST_MODE) {
+    const setText = (selector, value) => { const element = $(selector); if (element && element.textContent !== String(value)) element.textContent = String(value); };
+    const setHidden = (selector, value) => { const element = $(selector); if (element) element.hidden = Boolean(value); };
+    setHidden('#authLoggedOut', true);
+    setHidden('#authLoggedIn', true);
+    setHidden('#guestModePanel', false);
+    setHidden('#guestEntryCard', true);
+    setHidden('#syncExplainCard', true);
+    setHidden('#initialSyncPanel', true);
+    setText('#syncStatusButton', 'Gastmodus');
+    const statusButton = $('#syncStatusButton');
+    if (statusButton) statusButton.className = 'status sync-status guest';
+    setText('#syncStatusText', 'Lokale, getrennte Vorführversion');
+    return;
+  }
   const loggedIn = Boolean(currentSession?.user);
   const linked = loggedIn ? await isLinkedForCurrentUser() : false;
   const dirty = Boolean((await metaGet('dirty'))?.value);
   const lastSync = await metaGet('lastSync');
   const tombstones = await all('syncTombstones');
   const conflicts = (await all('conflicts')).filter(item => item.status === 'open');
-  const statusButton = $('#syncStatusButton'); const statusText = $('#syncStatusText');
-  if ($('#authLoggedOut')) $('#authLoggedOut').hidden = loggedIn;
-  if ($('#authLoggedIn')) $('#authLoggedIn').hidden = !loggedIn;
-  if ($('#initialSyncPanel')) $('#initialSyncPanel').hidden = !(loggedIn && !linked);
-  if ($('#accountEmail')) $('#accountEmail').textContent = currentSession?.user?.email || '—';
-  if ($('#lastSyncText')) $('#lastSyncText').textContent = lastSync?.at ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastSync.at)) : '—';
-  if ($('#deviceNameText')) $('#deviceNameText').textContent = (await getDeviceIdentity()).label;
-  if ($('#realtimeStatusText')) $('#realtimeStatusText').textContent = loggedIn ? realtimeState : 'Nicht angemeldet';
-  if ($('#pendingChangesText')) $('#pendingChangesText').textContent = dirty || tombstones.length ? `${tombstones.length} Löschung(en) / Änderungen warten` : 'Keine';
-  if ($('#syncConflictText')) $('#syncConflictText').textContent = String(conflicts.length);
-  if ($('#autoSyncText')) $('#autoSyncText').textContent = loggedIn && linked ? (navigator.onLine ? 'Echtzeit + Sicherheitsprüfung alle 20 Sekunden' : 'Wartet auf Internet') : 'Noch nicht aktiv';
-  let label = 'Nicht angemeldet', detail = 'Cloud-Synchronisierung ist nicht aktiv', className = 'sync-status logged-out';
-  if (loggedIn && !navigator.onLine) { label = 'Offline · lokal gespeichert'; detail = dirty ? 'Änderungen warten auf Internet' : 'Offline – letzter Stand bleibt verfügbar'; className = 'sync-status offline'; }
-  else if (loggedIn && !linked) { label = deviceConnectInProgress ? 'Gerät wird verbunden …' : 'Gerät verbinden'; detail = 'Lokale und gemeinsame Daten werden automatisch zusammengeführt'; className = 'sync-status attention'; }
-  else if (syncInProgress) { label = 'Synchronisiere …'; detail = 'Felder, Löschungen und Medien werden abgeglichen'; className = 'sync-status working'; }
-  else if (conflicts.length) { label = `${conflicts.length} Konflikt${conflicts.length === 1 ? '' : 'e'}`; detail = 'Bitte im Änderungsverlauf entscheiden'; className = 'sync-status attention'; }
-  else if (loggedIn && dirty) { label = 'Änderungen ausstehend'; detail = 'Lokale Änderungen werden gleich übertragen'; className = 'sync-status attention'; }
-  else if (loggedIn) { label = realtimeState === 'verbunden' ? 'Live synchronisiert' : 'Synchronisiert'; detail = 'Alle Geräte arbeiten gleichberechtigt'; className = 'sync-status synced'; }
-  if (statusButton) { statusButton.textContent = label; statusButton.className = `status ${className}`; }
-  if (statusText) statusText.textContent = detail;
-  const badge = $('#conflictNavBadge'); if (badge) { badge.hidden = conflicts.length === 0; badge.textContent = String(conflicts.length); }
+  const device = loggedIn ? await getDeviceIdentity() : null;
+
+  // Mehrere Realtime-/Timer-Ereignisse können fast gleichzeitig eintreffen.
+  // Nur der jüngste vollständige UI-Lauf darf die Anzeige aktualisieren.
+  if (renderToken !== syncUiRenderToken) return;
+
+  const setText = (selector, value) => {
+    const element = typeof selector === 'string' ? $(selector) : selector;
+    const text = String(value ?? '');
+    if (element && element.textContent !== text) element.textContent = text;
+  };
+  const setHidden = (selector, value) => {
+    const element = typeof selector === 'string' ? $(selector) : selector;
+    if (element && element.hidden !== Boolean(value)) element.hidden = Boolean(value);
+  };
+  const setClass = (element, value) => {
+    if (element && element.className !== value) element.className = value;
+  };
+
+  const statusButton = $('#syncStatusButton');
+  const statusText = $('#syncStatusText');
+  setHidden('#guestModePanel', true);
+  setHidden('#guestEntryCard', false);
+  setHidden('#syncExplainCard', false);
+  setHidden('#authLoggedOut', loggedIn);
+  setHidden('#authLoggedIn', !loggedIn);
+  setHidden('#initialSyncPanel', !(loggedIn && !linked));
+  setText('#accountEmail', currentSession?.user?.email || '—');
+  setText('#lastSyncText', lastSync?.at ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(lastSync.at)) : '—');
+  setText('#deviceNameText', device?.label || 'Dieses Gerät');
+  setText('#realtimeStatusText', loggedIn ? realtimeState : 'Nicht angemeldet');
+  setText('#pendingChangesText', dirty || tombstones.length ? `${tombstones.length} Löschung(en) / Änderungen warten` : 'Keine');
+  setText('#syncConflictText', String(conflicts.length));
+  setText('#autoSyncText', loggedIn && linked ? (navigator.onLine ? 'Echtzeit + ruhige Sicherheitsprüfung alle 60 Sekunden' : 'Wartet auf Internet') : 'Noch nicht aktiv');
+
+  let label = 'Nicht angemeldet';
+  let detail = 'Cloud-Synchronisierung ist nicht aktiv';
+  let className = 'sync-status logged-out';
+  if (loggedIn && !navigator.onLine) {
+    label = 'Offline';
+    detail = dirty ? 'Änderungen warten auf Internet' : 'Offline – letzter Stand bleibt verfügbar';
+    className = 'sync-status offline';
+  } else if (loggedIn && !linked) {
+    label = deviceConnectInProgress ? 'Verbinde Gerät …' : 'Gerät verbinden';
+    detail = 'Lokale und gemeinsame Daten werden automatisch zusammengeführt';
+    className = 'sync-status attention';
+  } else if (syncVisualInProgress) {
+    label = 'Abgleich läuft …';
+    detail = 'Felder, Löschungen und Medien werden abgeglichen';
+    className = 'sync-status working';
+  } else if (conflicts.length) {
+    label = `${conflicts.length} Konflikt${conflicts.length === 1 ? '' : 'e'}`;
+    detail = 'Bitte im Änderungsverlauf entscheiden';
+    className = 'sync-status attention';
+  } else if (loggedIn && dirty) {
+    label = 'Abgleich offen';
+    detail = 'Lokale Änderungen werden im Hintergrund übertragen';
+    className = 'sync-status attention';
+  } else if (loggedIn) {
+    label = realtimeState === 'verbunden' ? 'Live verbunden' : 'Synchronisiert';
+    detail = realtimeState === 'verbunden' ? 'Änderungen anderer Geräte kommen automatisch an' : 'Alle Geräte arbeiten gleichberechtigt';
+    className = 'sync-status synced';
+  }
+
+  setText(statusButton, label);
+  setClass(statusButton, `status ${className}`);
+  setText(statusText, detail);
+  const badge = $('#conflictNavBadge');
+  if (badge) {
+    setHidden(badge, conflicts.length === 0);
+    setText(badge, String(conflicts.length));
+  }
 }
 
 function formatChangeValue(value) {
@@ -3894,6 +4021,228 @@ function renderV6Extras() {
   const conflicts=(state.conflicts||[]).filter(item=>item.status==='open');const badge=$('#conflictNavBadge');if(badge){badge.hidden=!conflicts.length;badge.textContent=String(conflicts.length)}
 }
 
+
+function guestAppUrl(enabled) {
+  const url = new URL(window.location.href);
+  url.search = '';
+  url.searchParams.set('v', APP_VERSION);
+  url.searchParams.set('guest', enabled ? '1' : '0');
+  return url.toString();
+}
+
+function enterGuestMode() {
+  localStorage.setItem(GUEST_MODE_KEY, '1');
+  window.location.href = guestAppUrl(true);
+}
+
+function exitGuestMode() {
+  localStorage.removeItem(GUEST_MODE_KEY);
+  window.location.href = guestAppUrl(false);
+}
+
+async function resetGuestDemo() {
+  if (!IS_GUEST_MODE) return;
+  if (!window.confirm('Die gesamte lokale Demo wird auf den vorbereiteten Ausgangsstand zurückgesetzt. Fortfahren?')) return;
+  for (const store of [...stores, ...systemStores]) await rawClear(store);
+  cachedDeviceIdentity = null;
+  window.location.reload();
+}
+
+async function staticImageDataUrl(path) {
+  try {
+    const response = await fetch(path);
+    if (!response.ok) return '';
+    return await blobToDataUrl(await response.blob());
+  } catch {
+    return '';
+  }
+}
+
+async function seedGuestDemoData() {
+  if (!IS_GUEST_MODE) return;
+  const existingSeed = await metaGet('guestSeed');
+  const existingTrips = await all('trips');
+  if (existingSeed?.version === APP_VERSION && existingTrips.length) return;
+
+  const now = '2026-07-27T09:30:00.000Z';
+  const demoDevice = 'leefke-demo';
+  const tripId = 'guest-trip-helgoland-2026';
+  const autumnTripId = 'guest-trip-herbst-2026';
+  const gpxId = 'guest-gpx-bremerhaven-helgoland';
+  const record = (store, value, timestamp = now) => normalizeRecord(store, value, timestamp, demoDevice);
+
+  const photoData = await staticImageDataUrl('leefke-hero.jpg');
+  const demoSettings = record('settings', {
+    ...DEFAULT_SETTINGS,
+    id: 'main',
+    currentTankPercent: 76,
+    currentEngineHours: 954.0,
+    defaultCrew: 'Demo-Crew',
+    photoAutoSync: false,
+    preferredCruiseSpeed: 7.4
+  });
+  await rawPut('settings', demoSettings);
+
+  await rawPut('trips', record('trips', {
+    id: tripId,
+    title: 'Helgoland-Wochenende · Demo',
+    startDate: '2026-07-25',
+    endDate: '2026-07-26',
+    crew: 'Demo-Crew',
+    status: 'active',
+    notes: 'Vorbereiteter Gast-Törn zum gefahrlosen Testen der LEEFKE-App.',
+    createdAt: '2026-07-20T10:00:00.000Z'
+  }, '2026-07-20T10:00:00.000Z'));
+  await rawPut('trips', record('trips', {
+    id: autumnTripId,
+    title: 'Herbsturlaub · Demo',
+    startDate: '2026-10-03',
+    endDate: '2026-10-11',
+    crew: 'Demo-Crew',
+    status: 'planned',
+    notes: 'Leerer zweiter Demo-Törn zum Testen des Törnwechsels.',
+    createdAt: '2026-07-21T10:00:00.000Z'
+  }, '2026-07-21T10:00:00.000Z'));
+
+  const gpxPoints = [
+    [53.5505, 8.5795], [53.6170, 8.5200], [53.7040, 8.4100],
+    [53.8150, 8.2550], [53.9200, 8.1150], [54.0300, 7.9900],
+    [54.1150, 7.9150], [54.1825, 7.8854]
+  ];
+  await rawPut('gpx', record('gpx', {
+    id: gpxId,
+    tripId,
+    name: 'Bremerhaven – Helgoland · Demo',
+    points: gpxPoints,
+    distanceNm: 43.8,
+    created: Date.parse('2026-07-22T09:00:00.000Z')
+  }, '2026-07-22T09:00:00.000Z'));
+
+  const routes = [
+    {
+      id: 'guest-route-outbound', tripId, date: '2026-07-25', status: 'done',
+      from: 'Bremerhaven', to: 'Helgoland', departTime: '06:20', berth: 'Binnenhafen · Gastliegerbereich',
+      nm: 43.8, hours: 5.9, weather: 'Heiter, 18 °C', wind: 'NW 3 Bft, Böen 4 Bft',
+      wave: '0,5–0,8 m aus NW · 5 s', tide: 'Ablaufend, zunächst mitlaufender Strom', gpxId,
+      note: 'Früh ablegen, Verkehr auf der Außenweser aufmerksam beobachten.'
+    },
+    {
+      id: 'guest-route-return', tripId, date: '2026-07-26', status: 'done',
+      from: 'Helgoland', to: 'Cuxhaven', departTime: '08:10', berth: 'City Marina · Steg C',
+      nm: 36.5, hours: 4.9, weather: 'Wechselnd bewölkt, 17 °C', wind: 'W 3 Bft',
+      wave: '0,4–0,6 m aus W · 5 s', tide: 'Auflaufend Richtung Elbe', gpxId: '',
+      note: 'Vor Cuxhaven Berufsschifffahrt und Fahrwasserquerung beachten.'
+    }
+  ];
+  for (const route of routes) await rawPut('route', record('route', route, `${route.date}T18:00:00.000Z`));
+
+  const days = [
+    {
+      id: 'guest-day-1', tripId, date: '2026-07-25', dayNo: 1,
+      title: 'Von der Weser hinaus nach Helgoland', fromPort: 'Bremerhaven', toPort: 'Helgoland',
+      depart: '06:20', arrive: '12:15', distance: 43.8, engineStart: 943.2, engineEnd: 949.1,
+      weather: 'Heiter', wind: 'NW 3 Bft, Böen 4 Bft', wave: '0,5–0,8 m aus NW · 5 s',
+      tide: 'Ablaufend, zunächst mitlaufender Strom', crew: 'Demo-Crew',
+      summary: 'Ruhige Ausfahrt aus Bremerhaven. Ab Alte Weser etwas mehr Bewegung, aber eine lange und gutmütige Welle. Die Ansteuerung Helgoland war klar und gut sichtbar.',
+      moment: 'Der erste Blick auf die rote Felsküste in der Mittagssonne.'
+    },
+    {
+      id: 'guest-day-2', tripId, date: '2026-07-26', dayNo: 2,
+      title: 'Zurück über die Deutsche Bucht', fromPort: 'Helgoland', toPort: 'Cuxhaven',
+      depart: '08:10', arrive: '13:05', distance: 36.5, engineStart: 949.1, engineEnd: 954.0,
+      weather: 'Wechselnd bewölkt', wind: 'W 3 Bft', wave: '0,4–0,6 m aus W · 5 s',
+      tide: 'Auflaufend Richtung Elbe', crew: 'Demo-Crew',
+      summary: 'Entspannte Rückfahrt mit guter Sicht. Vor Cuxhaven war etwas mehr Verkehr, die Einfahrt in die Marina verlief problemlos.',
+      moment: 'Kaffee auf dem Achterdeck bei ruhiger See.'
+    }
+  ];
+  for (const day of days) await rawPut('days', record('days', day, `${day.date}T19:00:00.000Z`));
+
+  const ports = [
+    {
+      id: 'guest-port-helgoland', tripId, name: 'Helgoland', date: '2026-07-25', berth: 'Binnenhafen', cost: 34,
+      services: 'Strom am Steg, Wasser zentral', contact: 'Hafenmeister vor Ort', coords: '54.1825, 7.8854',
+      returnVisit: 'yes', rating: 5, ratingFriendly: 5, ratingSanitary: 4, ratingSupply: 4, ratingValue: 4,
+      approach: 'Ansteuerung eindeutig, Fähr- und Ausflugsverkehr beachten.',
+      note: 'Außergewöhnlicher Inselhafen und ein wunderschöner Abend auf dem Oberland.'
+    },
+    {
+      id: 'guest-port-cuxhaven', tripId, name: 'Cuxhaven', date: '2026-07-26', berth: 'City Marina · Steg C', cost: 29,
+      services: 'Strom und Wasser am Steg', contact: 'Hafenbüro', coords: '53.8688, 8.7064',
+      returnVisit: 'yes', rating: 4, ratingFriendly: 4, ratingSanitary: 4, ratingSupply: 5, ratingValue: 4,
+      approach: 'Starker Verkehr im Elbfahrwasser; Einfahrt und Querung sorgfältig planen.',
+      note: 'Gute Versorgung und praktischer Ausgangspunkt für die Elbe.'
+    }
+  ];
+  for (const port of ports) await rawPut('ports', record('ports', port, `${port.date}T18:30:00.000Z`));
+
+  await rawPut('fuel', record('fuel', {
+    id: 'guest-fuel-cuxhaven', tripId, date: '2026-07-26', place: 'Cuxhaven', liters: 120,
+    price: 1.82, engineHours: 954.0, tankPercent: 92, note: 'Nach dem Demo-Törn aufgefüllt.'
+  }, '2026-07-26T15:00:00.000Z'));
+
+  const maintenance = [
+    { id: 'guest-maint-oil', date: '2026-06-18', category: 'Motor · Perkins M135', title: 'Motoröl und Ölfilter gewechselt', engineHours: 930.0, done: 'true', dueDate: '', dueHours: 1080, cost: 148.50, note: 'Probebetrieb ohne Auffälligkeiten.' },
+    { id: 'guest-maint-impeller', date: '2026-07-20', category: 'Motor · Perkins M135', title: 'Impeller kontrollieren', engineHours: 954.0, done: 'false', dueDate: '2026-09-01', dueHours: 1000, cost: '', note: 'Ersatzimpeller liegt an Bord.' }
+  ];
+  for (const item of maintenance) await rawPut('maintenance', record('maintenance', item, `${item.date}T12:00:00.000Z`));
+
+  const inventory = [
+    { id: 'guest-inv-filter', name: 'Dieselfilter Vorfilter', category: 'Dieselanlage', quantity: 3, minimum: 1, unit: 'Stück', location: 'Motorraum · Backbordfach', note: '' },
+    { id: 'guest-inv-impeller', name: 'Impeller', category: 'Motor', quantity: 1, minimum: 1, unit: 'Stück', location: 'Ersatzteilfach', note: '' },
+    { id: 'guest-inv-oil', name: 'Motoröl', category: 'Motor', quantity: 4, minimum: 5, unit: 'Liter', location: 'Vorratsschrank', note: 'Ein Liter nachkaufen.' }
+  ];
+  for (const item of inventory) await rawPut('inventory', record('inventory', item));
+
+  const safety = [
+    { id: 'guest-safe-raft', name: 'Rettungsinsel', lastCheck: '2025-09-12', dueDate: '2028-09-12', status: 'ok', note: 'Plombe unbeschädigt.' },
+    { id: 'guest-safe-fire', name: 'Feuerlöscher', lastCheck: '2026-03-10', dueDate: '2028-03-10', status: 'ok', note: '' },
+    { id: 'guest-safe-firstaid', name: 'Erste-Hilfe-Ausrüstung', lastCheck: '2026-04-02', dueDate: '2027-04-02', status: 'ok', note: '' }
+  ];
+  for (const item of safety) await rawPut('safety', record('safety', item));
+
+  const checks = [
+    ['Vor dem Ablegen', 'Wetter, Wind, Wellen und Sicht geprüft', true],
+    ['Vor dem Ablegen', 'Tiden und Strömung geprüft', true],
+    ['Vor dem Ablegen', 'Motorraum und Dieselfilter kontrolliert', true],
+    ['Vor dem Ablegen', 'Navigation, AIS, Radar und UKW eingeschaltet', false],
+    ['Nach dem Anlegen', 'Motorstunden und Tankstand notiert', false],
+    ['Sicherheit', 'Rettungsmittel kontrolliert', true]
+  ];
+  for (let i = 0; i < checks.length; i += 1) {
+    const [group, item, done] = checks[i];
+    await rawPut('checklists', record('checklists', { id: `guest-check-${i + 1}`, group, item, done }));
+  }
+
+  if (photoData) {
+    await rawPut('photos', record('photos', {
+      id: 'guest-photo-leefke', tripId, date: '2026-07-25', caption: 'LEEFKE unterwegs – Demo-Titelbild',
+      relatedType: 'trip', relatedId: tripId, featured: true, data: photoData,
+      mimeType: 'image/jpeg', fileName: 'leefke-hero.jpg', size: 0, created: Date.parse('2026-07-25T12:00:00.000Z'),
+      _cloudState: 'local'
+    }, '2026-07-25T12:00:00.000Z'));
+  }
+
+  await metaSet('activeTrip', { tripId, changedAt: now });
+  await metaSet('guestSeed', { version: APP_VERSION, createdAt: now });
+  await metaSet('dirty', { value: false, changedAt: now });
+  await metaSet('lastSync', { at: '', guest: true });
+}
+
+function applyGuestModeUI() {
+  document.body.classList.toggle('guest-mode', IS_GUEST_MODE);
+  const banner = $('#guestModeBanner');
+  if (banner) banner.hidden = !IS_GUEST_MODE;
+  const cloudHint = $('#documentCloudHint');
+  if (cloudHint && IS_GUEST_MODE) cloudHint.textContent = 'Gastmodus: Dokumente bleiben ausschließlich lokal in der getrennten Demo und werden nicht in die Cloud übertragen.';
+  const photoStatus = $('#photoCloudStatus');
+  if (photoStatus && IS_GUEST_MODE) photoStatus.textContent = 'Gastmodus: Fotos bleiben ausschließlich lokal in der getrennten Demo.';
+  for (const selector of ['#syncPhotosButton', '#photoAutoSync']) {
+    const element = $(selector);
+    if (element) element.disabled = IS_GUEST_MODE;
+  }
+}
+
 async function setupV6Defaults() {
   if (!(await all('inventory')).length) {
     const defaults = [
@@ -3946,6 +4295,12 @@ window.addEventListener('load', () => {
   $('#photoForm')?.elements.relatedType?.addEventListener('change',photoRelationOptions);
   $('#applyUpdateButton')?.addEventListener('click',applyServiceWorkerUpdate);
   $('#dismissUpdateButton')?.addEventListener('click',()=>{$('#updateBanner').hidden=true});
+  $('#enterGuestModeButton')?.addEventListener('click', enterGuestMode);
+  $('#exitGuestButton')?.addEventListener('click', exitGuestMode);
+  $('#exitGuestTopButton')?.addEventListener('click', exitGuestMode);
+  $('#resetGuestButton')?.addEventListener('click', resetGuestDemo);
+  $('#resetGuestTopButton')?.addEventListener('click', resetGuestDemo);
+  applyGuestModeUI();
 });
 
 // Formulare für Bordbetrieb
@@ -3961,6 +4316,7 @@ if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=e
 
 (async () => {
   db = await openDB();
+  await seedGuestDemoData();
   await migrateLocalTimestamps();
   await initializeSupabase();
   if (currentSession && navigator.onLine) {

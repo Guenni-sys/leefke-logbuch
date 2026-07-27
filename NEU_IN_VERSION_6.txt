@@ -4,3 +4,20 @@ LEEFKE 6.4 – Startseiten-Anker
 - Er öffnet immer die Startseite „Übersicht“.
 - Die Navigation schließt sich dabei automatisch und die Seite springt nach oben.
 - Vollständig barrierearm als echte Schaltfläche mit Tastaturfokus umgesetzt.
+
+
+VERSION 6.5 – RUHIGE LIVE-SYNCHRONISIERUNG
+- Automatische und durch Realtime ausgelöste Abgleiche laufen still im Hintergrund.
+- Die Statusanzeige springt nicht mehr bei jedem Sicherheitsabgleich zwischen verschiedenen Texten.
+- Mehrere gleichzeitig eintreffende Statusmeldungen werden gebündelt; veraltete UI-Aktualisierungen werden verworfen.
+- Die App wird nur neu gerendert, wenn tatsächlich Daten eines anderen Geräts übernommen wurden.
+- Sicherheitsprüfung jetzt alle 60 Sekunden; Supabase Realtime bleibt für sofortige Änderungen aktiv.
+- Feste Breite der Statusanzeige verhindert Layoutspringen, besonders auf dem iPhone.
+
+VERSION 6.6 – LOKALER GASTMODUS
+- „Als Gast testen“ auf der Seite Konto & Sync.
+- Vorbereiteter Demo-Törn mit Tagestouren, Häfen, Tankbuch, Wartung und GPX-Route.
+- Vollständig getrennte lokale Datenbank; kein Zugriff auf echte LEEFKE-Daten.
+- Keine Anmeldung und keine Cloud-Synchronisierung im Gastmodus.
+- Demo jederzeit zurücksetzen oder Gastmodus verlassen.
+- Direkter Vorführlink mit ?guest=1.
