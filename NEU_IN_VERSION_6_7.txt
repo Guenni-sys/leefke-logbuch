@@ -1,0 +1,17 @@
+LEEFKE BORDTAGEBUCH – VERSION 6.7
+
+FEINERES UND KOMPAKTERES LAYOUT
+- geringere Schrift-, Karten- und Abstandsgrößen
+- schmalere Navigation und kompaktere Kopfzeile
+- kleinere, ruhigere Karten, Statistiken und Dialoge
+- auf dem iPhone bleiben Eingabefelder 16 px groß, damit Safari beim Antippen nicht hineinzoomt
+
+EINGABEFELDER KORRIGIERT
+- alle Formfelder können innerhalb ihrer Spalten sauber schrumpfen
+- lange Feldbezeichnungen brechen kontrolliert um
+- Hilfe-Knöpfe überdecken keine Beschriftungen mehr
+- Schaltflächen und Formularaktionen umbrechen auf kleinen Bildschirmen
+- der Einheitshinweis „kn“ in der Routenwetter-Auswertung liegt nicht mehr über dem Eingabefeld
+- Datei-, Auswahl- und Textfelder bleiben innerhalb der Kartenbreite
+
+Für Version 6.7 ist keine Änderung in Supabase erforderlich.

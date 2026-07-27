@@ -1,4 +1,4 @@
-const APP_VERSION = '6.6';
+const APP_VERSION = '6.7';
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
 const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');

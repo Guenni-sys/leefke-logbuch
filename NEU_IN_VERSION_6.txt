@@ -21,3 +21,9 @@ VERSION 6.6 – LOKALER GASTMODUS
 - Keine Anmeldung und keine Cloud-Synchronisierung im Gastmodus.
 - Demo jederzeit zurücksetzen oder Gastmodus verlassen.
 - Direkter Vorführlink mit ?guest=1.
+
+VERSION 6.7 – FEINERES BEDIENLAYOUT
+- kompaktere Darstellung auf Laptop, Tablet und Smartphone
+- überlappungsfreie Eingabefelder und Beschriftungen
+- korrigierte Einheiten- und Hilfetexte
+- touchfreundliche Größen auf dem iPhone ohne Safari-Autozoom

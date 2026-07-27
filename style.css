@@ -507,3 +507,130 @@ body.guest-mode .photo-cloud-controls button:disabled,body.guest-mode .photo-clo
 @media(max-width:850px){.guest-banner,.guest-entry-card{flex-direction:column;align-items:stretch}.guest-banner .actions,.guest-entry-card>button{width:100%}.guest-banner .actions{display:grid;grid-template-columns:1fr 1fr}.guest-entry-copy{align-items:flex-start}}
 @media(max-width:560px){.guest-banner .actions{grid-template-columns:1fr}.guest-entry-copy{flex-direction:column}.guest-entry-icon{width:48px;height:48px}}
 @media print{.guest-banner,.guest-entry-card{display:none!important}}
+
+/* Version 6.7 – feineres, kompakteres und überlappungsfreies Bedienlayout */
+:root{
+  --radius:14px;
+  --shadow:0 12px 28px rgba(2,19,29,.12);
+}
+html{font-size:15px}
+body{font-size:.96rem}
+
+/* Alle Grid- und Formelemente dürfen sauber schrumpfen, statt sich zu überlagern. */
+.form>*,.grid2>*,.weather-layout>*,.weather-detail-grid>*,.route-weather-form>*,
+.compact-form>*,.trip-dialog-inner>*,.settings-sections>*,.operations-grid>*,
+.day-form-guide>*,.day-route-copy>*,.photo-settings>*,.sync-grid>*{min-width:0}
+.form label,.weather-form label,.route-weather-form label,.day-route-copy label,
+.trip-dialog label,.auth-form label{min-width:0;overflow-wrap:anywhere}
+input,textarea,select{min-width:0;max-width:100%;min-height:38px;padding:8px 10px;border-radius:8px}
+textarea{line-height:1.42}
+select{padding-right:30px}
+input[type=file]{min-height:42px;padding:10px;white-space:normal;overflow:hidden}
+
+/* Insgesamt feiner: weniger Weißraum, kleinere Karten, Überschriften und Bedienelemente. */
+.topbar{gap:.75rem;padding-bottom:9px}
+.brand{gap:10px}.brand-mark{width:42px;height:42px;font-size:22px}
+.brand h1{font-size:1.43rem}.brand p{font-size:.76rem}.brand small{font-size:.66rem}
+.head-actions{gap:7px}.global-trip-switcher{min-width:205px;padding:4px 6px 4px 8px}
+.global-trip-switcher select{max-width:220px;min-height:34px;padding:6px 27px 6px 9px;font-size:.86rem}
+.sync-status{min-height:32px}
+.layout{grid-template-columns:218px minmax(0,1fr)}
+nav{padding:18px 11px 15px}nav button{gap:8px;padding:9px 10px;margin:2px 0;border-radius:8px;font-size:.89rem}
+nav button span{width:20px;font-size:1rem}.nav-title{padding-bottom:13px;margin-bottom:9px}
+main{padding:21px clamp(13px,2.4vw,32px) 58px;max-width:1440px}
+.title{margin:5px 0 16px;padding-left:14px}.title h2{font-size:clamp(1.65rem,3.25vw,2.45rem)}
+.title p{font-size:.9rem}
+.card,.item,.route{padding:17px;border-radius:14px}
+.card:before{left:17px;right:17px}.card h3,.item h3,.route h3{font-size:1.16rem;margin:4px 0 8px}
+.card p,.item p,.route p{line-height:1.48}.card-kicker{font-size:.62rem}
+.grid2{gap:14px}.stats{gap:10px;margin:17px 0}.stats article{padding:14px;border-radius:12px}
+.stats strong{font-size:1.42rem}.stats.compact{gap:10px}
+.form{gap:11px 13px;margin-bottom:16px}.form label{gap:5px;font-size:.84rem}
+.actions{gap:7px;margin-top:14px}button,.button{padding:8px 11px;border-radius:8px;font-size:.9rem}
+.toolbar{margin:14px 0}.stack{gap:11px}
+.section-heading{gap:9px;padding-bottom:8px}.section-heading>span{width:35px;height:35px;font-size:1.05rem}
+.section-heading h3{font-size:1.1rem}.ship-facts{gap:5px;margin:11px 0}.ship-facts div{padding:5px 0}
+
+/* Formularköpfe und Hilfen bleiben auch bei langen Bezeichnungen getrennt. */
+.label-row{align-items:flex-start;min-height:22px;line-height:1.25}
+.label-row>*:first-child{min-width:0}
+.field-help{flex-basis:22px;width:22px;height:22px;min-width:22px;font-size:.72rem}
+.day-form-guide{grid-template-columns:minmax(0,1.5fr) minmax(240px,.5fr);gap:17px;margin-bottom:14px}
+.day-form-guide p{font-size:.88rem}.day-route-copy{gap:8px}.day-route-copy label{font-size:.78rem}
+.form-status{padding:9px 11px;font-size:.86rem}
+
+/* Der bisher absolut positionierte „kn“-Zusatz konnte Eingabefelder überdecken. */
+.route-weather-form{gap:9px;margin:14px 0}
+.route-weather-form label{position:relative;gap:5px;font-size:.76rem}
+.route-weather-form label>span{position:static;display:block;margin-top:-2px;color:var(--muted);font-size:.7rem;font-weight:700}
+.route-weather-form input,.route-weather-form select{padding:8px 9px}
+.weather-form{gap:10px;margin-top:13px}.weather-form select,.weather-form input{padding:9px 10px}
+.weather-instruments{gap:10px}.weather-instruments article{min-height:126px;padding:14px 13px}
+.weather-instruments strong{font-size:1.3rem}.weather-icon{width:33px;height:33px;margin-bottom:8px}
+
+/* Sternbewertungen kompakter und klar voneinander getrennt. */
+.rating-field{padding:10px 12px}.rating-categories{gap:10px}
+.rating-buttons button{font-size:2.05rem;padding:1px}.rating-picker.compact .rating-buttons button{font-size:1.85rem}
+.rating-value{font-size:.78rem;padding:4px 7px}.rating-help{font-size:.84rem}
+
+/* Listenaktionen dürfen umbrechen und verdecken keinen Inhalt. */
+.item,.route{padding-right:145px}.item .edit,.item .delete,.route .edit,.route .delete{top:13px}
+.item .edit,.route .edit{right:77px}.item .delete,.route .delete{right:13px}
+.item .edit,.item .delete,.route .edit,.route .delete{font-size:.78rem;padding:7px 8px}
+.inline-form{gap:8px}.check{gap:8px;padding:7px 0}
+
+/* Dialoge und Auswahlfenster feiner. */
+.trip-dialog-inner{gap:11px;padding:22px}.trip-dialog .dialog-close{width:34px;height:34px}
+.field-help-dialog-inner{padding:21px}.field-help-dialog h3{font-size:1.28rem}
+
+/* Karten und große Bildbereiche etwas niedriger, ohne Nutzfläche zu verlieren. */
+.hero{min-height:410px}.hero-copy{padding-top:48px}.compass{width:96px;height:96px}
+#routeMap{height:clamp(340px,53vh,590px);min-height:340px}.report-map{height:clamp(320px,43vw,470px)}
+.photo img{height:220px}.photo-settings img{height:200px}
+
+/* Tablet und Smartphone: kompakt, aber weiterhin gut mit dem Finger bedienbar. */
+@media(max-width:1050px){
+  .layout{grid-template-columns:205px minmax(0,1fr)}
+  main{padding-left:14px;padding-right:14px}
+}
+@media(max-width:850px){
+  html{font-size:14.5px}
+  main{padding:14px 11px calc(50px + env(safe-area-inset-bottom,0px))}
+  .card,.item,.route{padding:15px}
+  .form{gap:10px}
+  .hero{min-height:430px}
+  .day-form-guide{grid-template-columns:1fr}
+  .item,.route{padding-right:15px;padding-top:56px}
+  .item .edit,.route .edit{left:15px}.item .delete,.route .delete{left:96px}
+}
+@media(max-width:680px){
+  .global-trip-switcher{left:58px;right:58px;top:calc(env(safe-area-inset-top) + 60px)}
+  .topbar{padding-bottom:55px}
+}
+@media(max-width:560px){
+  /* 16px verhindert das automatische Hineinzoomen von iOS beim Antippen. */
+  input,textarea,select{font-size:16px;min-height:42px;padding:9px 10px}
+  button,.button{min-height:40px}
+  .menu-button,.brand-mark{min-height:44px;min-width:44px}
+  .title h2{font-size:1.7rem}.title{margin-bottom:13px}
+  .card,.item,.route{padding:13px;border-radius:12px}
+  .form{gap:9px;margin-bottom:13px}.form label{font-size:.82rem}
+  .actions{display:grid;grid-template-columns:1fr;gap:7px}.actions button{width:100%}
+  .head-actions{gap:5px}.sync-status{width:112px;min-width:112px;max-width:112px;font-size:.64rem}
+  .brand h1{font-size:1.25rem}.brand p{display:none}.brand small{font-size:.58rem;letter-spacing:.1em}
+  .hero{min-height:350px;max-height:370px}.hero-nameplate h2{font-size:2.65rem}
+  .vessel-strip{grid-template-columns:repeat(2,1fr)}
+  .stats,.stats.compact{grid-template-columns:repeat(2,minmax(0,1fr))}.stats article{padding:12px}.stats strong{font-size:1.25rem}
+  .rating-buttons{gap:0}.rating-buttons button{font-size:1.95rem;min-width:36px;min-height:40px}
+  .rating-picker.compact .rating-buttons button{font-size:1.75rem}
+  .field-help{width:25px;height:25px;min-width:25px;min-height:25px}
+  .route-weather-form label>span{font-size:.74rem}
+  #routeMap{height:48vh;min-height:310px}.report-map{height:310px}
+  .photo img{height:190px}
+}
+@media(max-width:390px){
+  .sync-status{display:none}
+  .global-trip-switcher{right:54px}
+  .stats,.stats.compact{grid-template-columns:1fr 1fr}
+  .rating-buttons button{font-size:1.78rem;min-width:32px}
+}

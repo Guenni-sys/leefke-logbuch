@@ -1,20 +1,13 @@
-LEEFKE BORDTAGEBUCH – UPDATE AUF VERSION 6.6
+LEEFKE BORDTAGEBUCH – UPDATE AUF VERSION 6.7
 
 1. Die ZIP-Datei vollständig entpacken.
-2. Im GitHub-Repository Guenni-sys/leefke-logbuch „Add file“ → „Upload files“ öffnen.
-3. Alle entpackten Dateien hochladen und vorhandene Dateien ersetzen.
-4. Commit-Text: LEEFKE Version 6.6 Gastmodus
+2. Im GitHub-Repository Add file → Upload files öffnen.
+3. Alle Dateien aus dem entpackten Ordner hochladen und vorhandene Dateien ersetzen.
+4. Commit-Text: LEEFKE Version 6.7 feineres Layout
 5. Etwa zwei Minuten warten.
-6. Die normale App öffnen:
-   https://guenni-sys.github.io/leefke-logbuch/index.html?v=6.6
-7. Unter Windows einmal Strg+F5 drücken; auf iPhone/iPad die App vollständig schließen und neu öffnen.
+6. Danach öffnen:
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=6.7
 
-Für Version 6.6 muss in Supabase nichts geändert werden.
+Auf Windows einmal Strg + F5 drücken. Auf iPhone und iPad die installierte App vollständig schließen und erneut öffnen.
 
-GASTMODUS STARTEN
-- In der App „Konto & Sync“ öffnen.
-- „Als Gast testen“ drücken.
-- Alternativ den direkten Vorführlink verwenden:
-  https://guenni-sys.github.io/leefke-logbuch/index.html?v=6.6&guest=1
-
-Der Gastmodus nutzt eine eigene lokale Datenbank. Echte LEEFKE-Daten und die Cloud-Anmeldung bleiben unberührt. Über „Demo zurücksetzen“ wird nur die Demo gelöscht und neu aufgebaut. „Gastmodus verlassen“ öffnet wieder den normalen Datenbestand.
+Für Version 6.7 muss in Supabase nichts geändert werden. Daten und Gastmodus bleiben erhalten.
