@@ -1,4 +1,4 @@
-const APP_VERSION = '6.13';
+const APP_VERSION = '6.14';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1177,11 +1177,20 @@ async function syncOnForeground() {
   startAutoSync();
 }
 
+function restoreDocumentScrolling() {
+  document.body.classList.remove('mobile-menu-open');
+  document.documentElement.classList.remove('mobile-menu-open');
+  document.body.style.removeProperty('overflow');
+  document.body.style.removeProperty('touch-action');
+  document.documentElement.style.removeProperty('overflow');
+  document.documentElement.style.removeProperty('touch-action');
+}
+
 function closeMobileMenu() {
   const sideNav = $('#nav');
   const backdrop = $('#navBackdrop');
   sideNav?.classList.remove('open');
-  document.body.classList.remove('mobile-menu-open');
+  restoreDocumentScrolling();
   if (backdrop) backdrop.hidden = true;
   $('#menu')?.setAttribute('aria-expanded', 'false');
   $('#mobileMoreButton')?.setAttribute('aria-expanded', 'false');
@@ -1191,11 +1200,13 @@ function setMobileMenu(open) {
   const sideNav = $('#nav');
   const backdrop = $('#navBackdrop');
   if (!sideNav) return;
-  sideNav.classList.toggle('open', open);
-  document.body.classList.toggle('mobile-menu-open', open);
-  if (backdrop) backdrop.hidden = !open;
-  $('#menu')?.setAttribute('aria-expanded', String(open));
-  $('#mobileMoreButton')?.setAttribute('aria-expanded', String(open));
+  const shouldOpen = Boolean(open && window.innerWidth <= 850);
+  sideNav.classList.toggle('open', shouldOpen);
+  document.body.classList.toggle('mobile-menu-open', shouldOpen);
+  if (!shouldOpen) restoreDocumentScrolling();
+  if (backdrop) backdrop.hidden = !shouldOpen;
+  $('#menu')?.setAttribute('aria-expanded', String(shouldOpen));
+  $('#mobileMoreButton')?.setAttribute('aria-expanded', String(shouldOpen));
 }
 
 const MOBILE_SAVE_TARGETS = {
@@ -4958,6 +4969,18 @@ if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=e
     }
   }
 })();
+
+// Android/Standalone: eine eventuell hängen gebliebene Menüsperre sicher lösen.
+function verifyMobileScrollState() {
+  const navOpen = $('#nav')?.classList.contains('open');
+  if (!navOpen) restoreDocumentScrolling();
+}
+window.addEventListener('pageshow', verifyMobileScrollState);
+window.addEventListener('resize', verifyMobileScrollState);
+window.addEventListener('orientationchange', () => window.setTimeout(verifyMobileScrollState, 120));
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') verifyMobileScrollState();
+});
 
 // Mobile Bedienleiste nach dem Laden auf die aktuelle Ansicht abstimmen.
 window.addEventListener('DOMContentLoaded', () => {

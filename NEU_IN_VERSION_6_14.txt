@@ -1,0 +1,8 @@
+LEEFKE Version 6.14
+
+Korrektur für Android:
+- vertikales Scrollen in Browser und installierter PWA wieder freigegeben
+- problematische Overscroll-Sperre entfernt
+- hängen gebliebene Menüsperre wird beim Öffnen, Drehen und Zurückkehren automatisch gelöst
+- Seitenmenü sperrt den Hintergrund nur noch, solange es tatsächlich geöffnet ist
+- bestehende Törnauswahl und alle Daten bleiben unverändert

@@ -825,7 +825,7 @@ main{padding:21px clamp(13px,2.4vw,32px) 58px;max-width:1440px}
 
 
 /* ==========================================================================
-   Version 6.13 – dezente Törnauswahl und Android-Feinschliff
+   Version 6.14 – Android-Scrollkorrektur
    ========================================================================== */
 button,[role="button"],select{touch-action:manipulation}
 .home-trip-switcher{display:grid;grid-template-columns:auto minmax(130px,1fr);align-items:center;gap:8px;margin:9px 0 2px;padding-top:8px;border-top:1px solid rgba(231,205,145,.28)}
@@ -853,6 +853,55 @@ button,[role="button"],select{touch-action:manipulation}
   .android-device dialog{max-height:calc(100dvh - 18px)}
   .android-device .mobile-tabbar{padding-bottom:max(5px,env(safe-area-inset-bottom,0px))}
 }
+
+
+/* ==========================================================================
+   Version 6.14 – zuverlässiges vertikales Scrollen unter Android
+   ========================================================================== */
+html{
+  height:auto;
+  min-height:100%;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior-y:auto;
+  touch-action:pan-y pinch-zoom;
+}
+body{
+  height:auto;
+  min-height:100%;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior-y:auto;
+  touch-action:pan-y pinch-zoom;
+  -webkit-overflow-scrolling:touch;
+}
+.layout,main,.view.active{
+  height:auto;
+  overflow:visible;
+  touch-action:pan-y pinch-zoom;
+}
+@media(max-width:850px){
+  /* Nur das geöffnete Seitenmenü sperrt den Hintergrund. Nach dem Schließen
+     wird die Sperre durch JavaScript zuverlässig entfernt. */
+  body:not(.mobile-menu-open){
+    overflow-y:auto!important;
+    touch-action:pan-y pinch-zoom!important;
+  }
+  html:not(.mobile-menu-open){
+    overflow-y:auto!important;
+    touch-action:pan-y pinch-zoom!important;
+  }
+  .android-device body,
+  .android-device main,
+  .android-device .view.active{
+    overflow-y:visible;
+    touch-action:pan-y pinch-zoom;
+  }
+  .android-device .mobile-tabbar,
+  .android-device .mobile-action-dock{
+    touch-action:manipulation;
+  }
+}
 @media(display-mode:standalone){
-  body{overscroll-behavior-y:contain}
+  html,body{overscroll-behavior-y:auto}
 }
