@@ -680,3 +680,123 @@ main{padding:21px clamp(13px,2.4vw,32px) 58px;max-width:1440px}
   .report-map .leaflet-map-pane{transform-origin:top left!important}
   .report-map img.leaflet-tile{max-width:none!important}
 }
+
+
+/* ==========================================================================
+   Version 6.11 – gezielte mobile Endoptimierung
+   ========================================================================== */
+.mobile-tabbar,.mobile-action-dock,.nav-backdrop{display:none}
+.mobile-tabbar button,.mobile-action-dock button{font-family:inherit}
+
+@media (max-width:850px){
+  :root{--mobile-tab-height:64px;--mobile-action-height:58px}
+  body{padding-bottom:calc(var(--mobile-tab-height) + env(safe-area-inset-bottom,0px))}
+  body.mobile-menu-open{overflow:hidden;touch-action:none}
+  main{padding:13px 10px calc(var(--mobile-tab-height) + 28px + env(safe-area-inset-bottom,0px))}
+
+  /* Seitliches Menü mit ruhigem Hintergrund und sicherem Schließen. */
+  #nav{top:calc(64px + env(safe-area-inset-top,0px));bottom:calc(var(--mobile-tab-height) + env(safe-area-inset-bottom,0px));width:min(84vw,320px);padding:14px 11px;overscroll-behavior:contain;overflow-y:auto}
+  .nav-backdrop{display:block;position:fixed;z-index:35;inset:0;background:rgba(2,18,27,.48);backdrop-filter:blur(2px)}
+  .nav-backdrop[hidden]{display:none!important}
+
+  /* Feste, mit einer Hand erreichbare Hauptnavigation. */
+  .mobile-tabbar{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));position:fixed;z-index:70;left:0;right:0;bottom:0;min-height:var(--mobile-tab-height);padding:5px 7px calc(5px + env(safe-area-inset-bottom,0px));background:rgba(250,247,239,.97);border-top:1px solid rgba(8,31,48,.16);box-shadow:0 -8px 25px rgba(5,27,40,.13);backdrop-filter:blur(16px)}
+  .mobile-tabbar button{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;min-width:0;min-height:52px;padding:3px 2px;border:0;border-radius:11px;background:transparent;color:#52666f;box-shadow:none}
+  .mobile-tabbar button span{display:grid;place-items:center;width:27px;height:26px;font-size:1.16rem;line-height:1}
+  .mobile-tabbar button small{max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.66rem;font-weight:780;letter-spacing:.01em}
+  .mobile-tabbar button.active{background:rgba(21,74,99,.11);color:var(--navy-900)}
+  .mobile-tabbar button.active span{color:#9b7028}
+
+  /* Kontextabhängiges Speichern, ohne bis ans Formularende scrollen zu müssen. */
+  .mobile-action-dock{display:flex;position:fixed;z-index:68;left:10px;right:10px;bottom:calc(var(--mobile-tab-height) + 8px + env(safe-area-inset-bottom,0px));justify-content:flex-end;pointer-events:none}
+  .mobile-action-dock[hidden]{display:none!important}
+  .mobile-action-dock button{pointer-events:auto;display:flex;align-items:center;justify-content:center;gap:8px;min-height:46px;max-width:min(78vw,360px);padding:10px 16px;border-radius:15px;box-shadow:0 9px 24px rgba(5,31,44,.3);white-space:nowrap}
+  .mobile-action-dock button span{display:grid;place-items:center;width:24px;height:24px;border-radius:50%;background:rgba(255,255,255,.18)}
+
+  /* Kopfzeile bleibt kompakt und frei von Dynamic Island/Notch. */
+  .topbar{min-height:64px;padding:calc(7px + env(safe-area-inset-top,0px)) 10px 7px;align-items:center}
+  .brand{min-width:0}.brand>div{min-width:0}.brand-mark{width:42px;height:42px;flex:0 0 42px}
+  .brand h1{font-size:1.18rem;line-height:1.05}.brand small{font-size:.55rem}.head-actions{margin-left:auto}
+  .menu-button{width:44px;height:44px;padding:0}
+  .global-trip-switcher{left:58px;right:58px;top:calc(env(safe-area-inset-top,0px) + 56px);height:44px;padding:4px 7px;background:#0a2d40;border-radius:0 0 10px 10px}
+  .global-trip-switcher span{font-size:.54rem}.global-trip-switcher select{height:34px;min-height:34px}
+  .topbar{padding-bottom:50px}
+
+  /* Lesbarkeit und Dichte: weniger „Desktop-Zoom“, dennoch große Touch-Flächen. */
+  .title{margin:3px 0 12px;padding-left:10px}.title h2{font-size:clamp(1.45rem,6vw,1.85rem);line-height:1.08}.title p{font-size:.84rem;line-height:1.42}
+  .card,.item,.route{padding:13px;border-radius:12px}.card h3,.item h3,.route h3{font-size:1.05rem}
+  .card p,.item p,.route p,.meta{font-size:.82rem}
+  .grid2,.weather-layout,.weather-detail-grid,.operations-grid{gap:10px}
+  .stats{gap:7px;margin:12px 0}.stats article{padding:11px 9px}.stats span{font-size:.68rem}.stats strong{font-size:1.18rem}.stats small{font-size:.66rem}
+  .vessel-strip{gap:0}.vessel-strip>div{padding:10px 9px}.vessel-strip span{font-size:.67rem}.vessel-strip strong{font-size:.93rem}
+
+  /* Formulare: immer eine saubere Spalte, keine Überlagerungen. */
+  .form,.compact-form,.weather-form,.route-weather-form,.trip-dialog-inner{grid-template-columns:minmax(0,1fr)!important}
+  .form .wide,.compact-form .wide,.weather-form .wide,.route-weather-form .wide,.trip-dialog-inner .wide{grid-column:1!important}
+  .form label,.compact-form label,.weather-form label,.route-weather-form label{width:100%;font-size:.8rem;overflow:visible}
+  input,textarea,select{width:100%;box-sizing:border-box}
+  textarea{min-height:92px;resize:vertical}
+  input[type="checkbox"],input[type="radio"]{width:auto;min-height:0}
+  .label-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:6px}
+  .field-help{position:static!important;justify-self:end}
+  .actions{gap:6px}.actions button{white-space:normal}
+
+  /* Lange Listen, Tabellen und Karten bleiben in der Bildschirmbreite. */
+  .table-scroll,.weather-table-wrap{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain;-webkit-overflow-scrolling:touch;border-radius:10px}
+  table{min-width:650px}
+  .report-port-table{min-width:520px}
+  #routeMap{height:min(54vh,470px);min-height:300px;border-radius:11px}
+  .report-map{height:min(48vh,390px);min-height:280px}
+  .map-footer,.map-controls,.hourly-head{align-items:flex-start;flex-direction:column}
+  .map-controls,.map-controls select,.map-controls button{width:100%;max-width:none}
+  .map-legend{justify-content:flex-start}
+
+  /* Wetterwerte als kompakte Instrumentkarten. */
+  .weather-instruments{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .weather-instruments article{min-height:105px;padding:10px}
+  .weather-instruments strong{font-size:1.1rem}.weather-instruments em{font-size:.7rem}
+  .tide-chart{min-height:190px}
+
+  /* Dialoge passen in Hochformat und bleiben erreichbar. */
+  dialog{max-width:calc(100vw - 18px);max-height:calc(100dvh - 22px)}
+  .trip-dialog-inner,.field-help-dialog-inner{max-height:calc(100dvh - 26px);overflow:auto;padding:18px 13px calc(18px + env(safe-area-inset-bottom,0px))}
+  .dialog-actions{position:sticky;bottom:0;padding-top:9px;background:linear-gradient(transparent,#fffdf8 28%)}
+
+  /* Toast und Hinweise nicht hinter der Navigation verstecken. */
+  #toast{bottom:calc(var(--mobile-tab-height) + 70px + env(safe-area-inset-bottom,0px));max-width:calc(100vw - 24px);text-align:center}
+  .update-banner,.guest-banner{padding-left:12px;padding-right:12px}
+}
+
+@media (max-width:560px){
+  html{font-size:14px}
+  main{padding-left:8px;padding-right:8px}
+  .sync-status{display:none}
+  .brand small{max-width:170px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .hero{height:auto;min-height:0;max-height:none;aspect-ratio:4/3;border-radius:14px}
+  .hero-nameplate{left:15px;right:15px;bottom:15px}.hero-nameplate h2{font-size:2.15rem}.hero-nameplate p{font-size:.73rem}
+  .compass{width:66px;height:66px;right:10px;top:10px}
+  .leefke-intro{padding:14px 11px}.intro-copy h2{font-size:1.22rem}.intro-copy p{font-size:.8rem}
+  .voyage-panel{padding:11px}.voyage-panel .actions{grid-template-columns:1fr}
+  .stats,.stats.compact{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rating-field{padding:9px}.rating-buttons{justify-content:space-between;width:100%}.rating-buttons button{flex:1;min-width:0}
+  .item,.route{padding-top:50px}.item .edit,.route .edit{left:11px}.item .delete,.route .delete{left:92px}
+  .photo-settings img{height:190px}.gallery .photo img{height:210px}
+  .report-paper{padding:18px 12px}.report-cover{height:230px;margin:-8px -4px 22px}.report-cover h1{font-size:1.8rem}
+  .report-summary-grid,.report-costs{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+
+@media (max-width:390px){
+  .mobile-tabbar button small{font-size:.61rem}
+  .mobile-action-dock{left:7px;right:7px}.mobile-action-dock button{max-width:100%;width:100%}
+  .stats,.stats.compact,.report-summary-grid,.report-costs{grid-template-columns:1fr 1fr}
+  .weather-instruments{grid-template-columns:1fr 1fr}
+  .global-trip-switcher{left:54px;right:54px}
+}
+
+@media (orientation:landscape) and (max-height:520px) and (max-width:950px){
+  :root{--mobile-tab-height:56px}
+  .mobile-tabbar{grid-template-columns:repeat(5,1fr);padding-top:2px}.mobile-tabbar button{min-height:44px;flex-direction:row;gap:5px}.mobile-tabbar button span{width:22px;height:22px}.mobile-tabbar button small{font-size:.64rem}
+  .mobile-action-dock{bottom:calc(var(--mobile-tab-height) + 5px + env(safe-area-inset-bottom,0px))}.mobile-action-dock button{min-height:42px}
+  .topbar{padding-bottom:44px}.global-trip-switcher{top:calc(env(safe-area-inset-top,0px) + 51px)}
+  #routeMap,.report-map{height:68vh;min-height:250px}
+}

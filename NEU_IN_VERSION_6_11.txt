@@ -1,0 +1,15 @@
+LEEFKE Bordtagebuch – Version 6.11
+
+Mobile Endoptimierung
+
+- feste untere Schnellnavigation für Start, Logbuch, Törn, Wetter und weitere Bereiche
+- kontextabhängige Speichern-Schaltfläche über der unteren Navigation
+- seitliches Menü mit abgedunkeltem Hintergrund und sicherem Schließen
+- kompaktere Kopfzeile mit Berücksichtigung von Dynamic Island, Notch und Home-Balken
+- Formulare im Hochformat immer einspaltig und ohne Überschneidungen
+- Tabellen horizontal scrollbar, ohne die gesamte Seite zu verbreitern
+- kompaktere Statistik-, Wetter- und Schiffskarten
+- optimierte Seekartenhöhe im Hoch- und Querformat
+- Dialoge bleiben auf kleinen Displays vollständig erreichbar
+- bessere Darstellung des Reiseberichts auf dem Smartphone
+- keine Änderung an Supabase oder den gespeicherten Daten erforderlich

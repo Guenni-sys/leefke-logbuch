@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=6.10">
+  <link rel="stylesheet" href="style.css?v=6.11">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -27,7 +27,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 6.10</small>
+        <small>BORDTAGEBUCH · VERSION 6.11</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -677,6 +677,21 @@
     </main>
   </div>
 
+
+  <div id="navBackdrop" class="nav-backdrop no-print" hidden></div>
+
+  <div id="mobileActionDock" class="mobile-action-dock no-print" hidden>
+    <button id="mobileSaveButton" class="primary" type="button"><span aria-hidden="true">✓</span><strong>Speichern</strong></button>
+  </div>
+
+  <div class="mobile-tabbar no-print" role="navigation" aria-label="Schnellnavigation">
+    <button type="button" data-mobile-view="home" class="active" aria-label="Übersicht"><span>⌂</span><small>Start</small></button>
+    <button type="button" data-mobile-view="day" aria-label="Tageslogbuch"><span>✎</span><small>Logbuch</small></button>
+    <button type="button" data-mobile-view="route" aria-label="Törnzentrale"><span>↝</span><small>Törn</small></button>
+    <button type="button" data-mobile-view="weather" aria-label="Wetter und Gezeiten"><span>☀</span><small>Wetter</small></button>
+    <button id="mobileMoreButton" type="button" aria-label="Weitere Bereiche öffnen" aria-expanded="false"><span>☰</span><small>Mehr</small></button>
+  </div>
+
   <dialog id="tripDialog" class="trip-dialog" aria-labelledby="tripDialogTitle">
     <form id="tripForm" class="trip-dialog-inner form">
       <input type="hidden" name="id">
@@ -706,6 +721,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=6.10"></script>
+  <script src="app.js?v=6.11"></script>
 </body>
 </html>

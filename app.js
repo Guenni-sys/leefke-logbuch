@@ -1,4 +1,4 @@
-const APP_VERSION = '6.10';
+const APP_VERSION = '6.11';
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
 const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');
@@ -1176,10 +1176,71 @@ async function syncOnForeground() {
   startAutoSync();
 }
 
+function closeMobileMenu() {
+  const sideNav = $('#nav');
+  const backdrop = $('#navBackdrop');
+  sideNav?.classList.remove('open');
+  document.body.classList.remove('mobile-menu-open');
+  if (backdrop) backdrop.hidden = true;
+  $('#menu')?.setAttribute('aria-expanded', 'false');
+  $('#mobileMoreButton')?.setAttribute('aria-expanded', 'false');
+}
+
+function setMobileMenu(open) {
+  const sideNav = $('#nav');
+  const backdrop = $('#navBackdrop');
+  if (!sideNav) return;
+  sideNav.classList.toggle('open', open);
+  document.body.classList.toggle('mobile-menu-open', open);
+  if (backdrop) backdrop.hidden = !open;
+  $('#menu')?.setAttribute('aria-expanded', String(open));
+  $('#mobileMoreButton')?.setAttribute('aria-expanded', String(open));
+}
+
+const MOBILE_SAVE_TARGETS = {
+  day: ['dayForm', 'Tagestour speichern'],
+  route: ['routeForm', 'Etappe speichern'],
+  ports: ['portForm', 'Hafen speichern'],
+  fuel: ['fuelForm', 'Tankvorgang speichern'],
+  maintenance: ['maintenanceForm', 'Wartung speichern'],
+  photos: ['photoForm', 'Foto hinzufügen'],
+  settings: ['settingsForm', 'Schiffsdaten speichern']
+};
+
+function updateMobileChrome(id) {
+  const directViews = new Set(['home', 'day', 'route', 'weather']);
+  $$('[data-mobile-view]').forEach(button => {
+    const active = button.dataset.mobileView === id;
+    button.classList.toggle('active', active);
+    if (active) button.setAttribute('aria-current', 'page');
+    else button.removeAttribute('aria-current');
+  });
+  const more = $('#mobileMoreButton');
+  more?.classList.toggle('active', !directViews.has(id));
+  if (!directViews.has(id)) more?.setAttribute('aria-current', 'page');
+  else more?.removeAttribute('aria-current');
+
+  const dock = $('#mobileActionDock');
+  const saveButton = $('#mobileSaveButton');
+  const target = MOBILE_SAVE_TARGETS[id];
+  if (!dock || !saveButton) return;
+  if (!target) {
+    dock.hidden = true;
+    saveButton.dataset.form = '';
+    return;
+  }
+  const [formId, label] = target;
+  saveButton.dataset.form = formId;
+  const text = saveButton.querySelector('strong');
+  if (text) text.textContent = label;
+  dock.hidden = false;
+}
+
 function view(id) {
   $$('.view').forEach(section => section.classList.toggle('active', section.id === id));
   $$('nav button').forEach(button => button.classList.toggle('active', button.dataset.view === id));
-  $('#nav').classList.remove('open');
+  closeMobileMenu();
+  updateMobileChrome(id);
   if (id === 'report') buildReport();
   if (id === 'sync') updateSyncUI();
   if (id === 'day') prepareDayForm();
@@ -1196,7 +1257,7 @@ function view(id) {
       drawGpx($('#gpxSelect')?.value || selectedGpxId);
     }, 80);
   }
-  window.scrollTo(0, 0);
+  window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
 }
 
 function prepareDayForm() {
@@ -3123,9 +3184,25 @@ $('#portForm').addEventListener('reset', () => window.setTimeout(() => {
   resetPortGpsAssistant();
 }, 0));
 
-$('#menu').onclick = () => $('#nav').classList.toggle('open');
+$('#menu').onclick = () => setMobileMenu(!$('#nav').classList.contains('open'));
 $$('nav button').forEach(button => button.onclick = () => view(button.dataset.view));
 $$('[data-open]').forEach(button => button.onclick = () => view(button.dataset.open));
+$$('[data-mobile-view]').forEach(button => button.onclick = () => view(button.dataset.mobileView));
+$('#mobileMoreButton')?.addEventListener('click', () => setMobileMenu(!$('#nav').classList.contains('open')));
+$('#navBackdrop')?.addEventListener('click', closeMobileMenu);
+$('#mobileSaveButton')?.addEventListener('click', () => {
+  const formId = $('#mobileSaveButton')?.dataset.form;
+  const form = formId ? document.getElementById(formId) : null;
+  if (!form) return;
+  if (typeof form.requestSubmit === 'function') form.requestSubmit();
+  else form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+});
+window.addEventListener('resize', () => {
+  if (window.innerWidth > 850) closeMobileMenu();
+});
+document.addEventListener('keydown', event => {
+  if (event.key === 'Escape') closeMobileMenu();
+});
 
 $('#authForm').onsubmit = async event => {
   event.preventDefault();
@@ -4878,3 +4955,9 @@ if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=e
     }
   }
 })();
+
+// Mobile Bedienleiste nach dem Laden auf die aktuelle Ansicht abstimmen.
+window.addEventListener('DOMContentLoaded', () => {
+  const activeView = document.querySelector('.view.active')?.id || 'home';
+  updateMobileChrome(activeView);
+});
