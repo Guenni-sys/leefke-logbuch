@@ -10,7 +10,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=6.1">
+  <link rel="stylesheet" href="style.css?v=6.4">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -21,14 +21,15 @@
   </div>
   <header class="topbar">
     <div class="brand">
-      <div class="brand-mark" aria-hidden="true">⚓</div>
+      <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 6.1</small>
+        <small>BORDTAGEBUCH · VERSION 6.4</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
     </div>
     <div class="head-actions">
+      <label class="global-trip-switcher" aria-label="Aktuellen Törn auswählen"><span>TÖRN</span><select id="globalTripSelect"></select></label>
       <button id="syncStatusButton" class="status sync-status" data-open="sync" type="button">Nicht angemeldet</button>
       <button id="menu" class="menu-button" aria-label="Menü öffnen">☰</button>
     </div>
@@ -135,33 +136,75 @@
 
       <section id="day" class="view">
         <div class="title"><small>TAGESLOGBUCH</small><h2>Ein Tag an Bord der LEEFKE</h2><p>Route, Wetter, Seegang und die besonderen Momente des Tages.</p></div>
-        <form id="dayForm" class="card form">
+
+        <article class="card day-form-guide">
+          <div>
+            <div class="card-kicker">SO FUNKTIONIERT ES</div>
+            <h3>Tagestour erfassen</h3>
+            <p>Der Eintrag wird sofort <strong>lokal auf diesem Gerät</strong> gespeichert. Wenn du angemeldet bist, wird er zusätzlich mit der LEEFKE-Cloud und den anderen Geräten synchronisiert.</p>
+          </div>
+          <div class="day-route-copy">
+            <label>Geplante Etappe übernehmen
+              <select id="dayRouteSource"><option value="">Etappe auswählen …</option></select>
+            </label>
+            <button id="dayRouteApply" type="button">Etappe übernehmen</button>
+          </div>
+        </article>
+
+        <form id="dayForm" class="card form day-form">
           <input type="hidden" name="id">
-          <label>Datum<input required type="date" name="date"></label>
-          <label>Reisetag<input type="number" min="1" name="dayNo"></label>
-          <label class="wide">Überschrift<input name="title" placeholder="z. B. Von Bremerhaven hinaus auf die Nordsee"></label>
-          <label>Von<input name="fromPort"></label>
-          <label>Nach<input name="toPort"></label>
-          <label>Ablegen<input type="time" name="depart"></label>
-          <label>Anlegen<input type="time" name="arrive"></label>
-          <label>Strecke (sm)<input type="number" step="0.1" name="distance"></label>
-          <label>Motor Start<input type="number" step="0.1" name="engineStart"></label>
-          <label>Motor Ende<input type="number" step="0.1" name="engineEnd"></label>
-          <label>Wetter<input name="weather" placeholder="z. B. sonnig, 18 °C"></label>
-          <label>Wind<input name="wind" placeholder="z. B. NW 3 Bft"></label>
-          <label>Welle<input name="wave" placeholder="z. B. 0,5 m"></label>
-          <label>Tide / Strom<input name="tide"></label>
-          <label>Crew<input name="crew"></label>
-          <label class="wide">Tagesbericht<textarea rows="7" name="summary"></textarea></label>
-          <label class="wide">Moment des Tages<textarea rows="3" name="moment"></textarea></label>
-          <div class="wide actions"><button class="primary">Ins Bordbuch eintragen</button><button type="reset">Leeren</button></div>
+          <label><span class="label-row">Datum <button class="field-help" type="button" data-help="date" aria-label="Hinweis zum Feld Datum">?</button></span><input required type="date" name="date"></label>
+          <label><span class="label-row">Reisetag <button class="field-help" type="button" data-help="dayNo" aria-label="Hinweis zum Feld Reisetag">?</button></span><input type="number" min="1" step="1" inputmode="numeric" name="dayNo" placeholder="z. B. 3"></label>
+          <label class="wide"><span class="label-row">Überschrift <button class="field-help" type="button" data-help="title" aria-label="Hinweis zur Überschrift">?</button></span><input name="title" placeholder="z. B. Von Bremerhaven hinaus auf die Nordsee"></label>
+          <label><span class="label-row">Von <button class="field-help" type="button" data-help="fromPort" aria-label="Hinweis zum Startort">?</button></span><input name="fromPort" list="portNames" autocomplete="off" placeholder="Startort oder Hafen"></label>
+          <label><span class="label-row">Nach <button class="field-help" type="button" data-help="toPort" aria-label="Hinweis zum Zielort">?</button></span><input name="toPort" list="portNames" autocomplete="off" placeholder="Zielort oder Hafen"></label>
+          <label><span class="label-row">Ablegen <button class="field-help" type="button" data-help="depart" aria-label="Hinweis zur Ablegezeit">?</button></span><input type="time" name="depart"></label>
+          <label><span class="label-row">Anlegen <button class="field-help" type="button" data-help="arrive" aria-label="Hinweis zur Anlegezeit">?</button></span><input type="time" name="arrive"></label>
+          <label><span class="label-row">Strecke in sm <button class="field-help" type="button" data-help="distance" aria-label="Hinweis zur Strecke">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="distance" placeholder="z. B. 42,5"></label>
+          <label><span class="label-row">Motorstunden beim Start <button class="field-help" type="button" data-help="engineStart" aria-label="Hinweis zu Motorstunden beim Start">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="engineStart" placeholder="Zählerstand"></label>
+          <label><span class="label-row">Motorstunden beim Ende <button class="field-help" type="button" data-help="engineEnd" aria-label="Hinweis zu Motorstunden beim Ende">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="engineEnd" placeholder="Zählerstand"></label>
+          <label><span class="label-row">Wetter <button class="field-help" type="button" data-help="weather" aria-label="Hinweis zum Wetter">?</button></span><input name="weather" list="dayWeatherOptions" placeholder="Auswählen oder selbst eintragen"></label>
+          <label><span class="label-row">Wind <button class="field-help" type="button" data-help="wind" aria-label="Hinweis zum Wind">?</button></span><input name="wind" list="dayWindOptions" placeholder="z. B. NW 3 Bft, Böen 5 Bft"></label>
+          <label><span class="label-row">Welle <button class="field-help" type="button" data-help="wave" aria-label="Hinweis zur Welle">?</button></span><input name="wave" list="dayWaveOptions" placeholder="z. B. 0,5 m aus NW · 4 s"></label>
+          <label><span class="label-row">Tide / Strom <button class="field-help" type="button" data-help="tide" aria-label="Hinweis zu Tide und Strom">?</button></span><input name="tide" list="dayTideOptions" placeholder="z. B. ablaufend, mitlaufender Strom"></label>
+          <label><span class="label-row">Besatzung <button class="field-help" type="button" data-help="crew" aria-label="Hinweis zur Besatzung">?</button></span><input name="crew" placeholder="Namen, durch Komma getrennt"></label>
+          <label class="wide"><span class="label-row">Tagesbericht <button class="field-help" type="button" data-help="summary" aria-label="Hinweis zum Tagesbericht">?</button></span><textarea rows="7" name="summary" placeholder="Wie verlief die Fahrt? Besondere Beobachtungen, Manöver, Verkehr, Liegeplatz …"></textarea></label>
+          <label class="wide"><span class="label-row">Moment des Tages <button class="field-help" type="button" data-help="moment" aria-label="Hinweis zum Moment des Tages">?</button></span><textarea rows="3" name="moment" placeholder="Der schönste, spannendste oder ungewöhnlichste Augenblick"></textarea></label>
+
+          <div id="dayFormStatus" class="wide form-status" role="status" aria-live="polite" hidden></div>
+          <div class="wide actions"><button id="daySaveButton" class="primary" type="submit">Tagestour speichern</button><button type="reset">Formular leeren</button></div>
+          <p class="wide saved-location"><strong>Nach dem Speichern:</strong> Der Eintrag erscheint direkt unter diesem Formular unter „Gespeicherte Tagestouren“, auf dem Dashboard und im Reisebericht.</p>
         </form>
-        <div class="toolbar"><input id="daySearch" placeholder="Logbuch durchsuchen …"></div>
+
+        <datalist id="dayWeatherOptions">
+          <option value="Sonnig"></option><option value="Heiter"></option><option value="Wechselnd bewölkt"></option><option value="Bedeckt"></option><option value="Schauer"></option><option value="Regen"></option><option value="Nebel"></option><option value="Gewitter"></option>
+        </datalist>
+        <datalist id="dayWindOptions">
+          <option value="Windstill"></option><option value="N 2 Bft"></option><option value="NO 3 Bft"></option><option value="O 3 Bft"></option><option value="SO 3 Bft"></option><option value="S 3 Bft"></option><option value="SW 3 Bft"></option><option value="W 3 Bft"></option><option value="NW 3 Bft"></option><option value="NW 4 Bft, Böen 5 Bft"></option>
+        </datalist>
+        <datalist id="dayWaveOptions">
+          <option value="Glatt / unter 0,1 m"></option><option value="0,2 m"></option><option value="0,5 m"></option><option value="0,8 m"></option><option value="1,0 m"></option><option value="1,5 m"></option><option value="0,5 m aus NW · 4 s"></option><option value="1,0 m aus W · 6 s"></option>
+        </datalist>
+        <datalist id="dayTideOptions">
+          <option value="Auflaufend"></option><option value="Ablaufend"></option><option value="Stillwasser"></option><option value="Mitlaufender Strom"></option><option value="Gegenstrom"></option><option value="Auflaufend · mitlaufender Strom"></option><option value="Ablaufend · Gegenstrom"></option>
+        </datalist>
+
+        <div class="list-heading"><div><div class="card-kicker">BORDBUCH</div><h3>Gespeicherte Tagestouren</h3></div><span id="dayListCount" class="list-count">0 Einträge</span></div>
+        <div class="toolbar"><input id="daySearch" placeholder="Tagestouren durchsuchen …"></div>
         <div id="dayList" class="stack"></div>
       </section>
 
       <section id="route" class="view">
         <div class="title"><small>TÖRNZENTRALE</small><h2>Etappen, Häfen, Wetter & Seekarte</h2><p>Der komplette Törn der LEEFKE in einer gemeinsamen Übersicht – vom Ablegen bis zum nächsten Liegeplatz.</p></div>
+
+        <article class="card trip-manager">
+          <div class="trip-manager-head">
+            <div><div class="card-kicker">GEÖFFNETER TÖRN</div><h3 id="tripManagerTitle">Dänische Südsee 2026</h3><p id="tripManagerMeta" class="meta">01.–16. August 2026</p></div>
+            <div class="actions"><button id="newTripButton" class="primary" type="button">Neuen Törn anlegen</button><button id="editTripButton" type="button">Aktuellen Törn bearbeiten</button></div>
+          </div>
+          <p class="trip-manager-note"><strong>Jeder Törn hat seinen eigenen Törnplan, seine Tagestouren, GPX-Routen, Fotos, Hafenbesuche, Wetterdaten und Tankvorgänge.</strong> Schiffspass, Wartung, Vorräte und Sicherheitsausrüstung gelten dagegen für die LEEFKE insgesamt.</p>
+          <div id="tripList" class="trip-list"></div>
+        </article>
 
         <div class="trip-overview" aria-label="Törnübersicht">
           <article><span>Nächste Etappe</span><strong id="tripNext">Noch nicht geplant</strong><small id="tripNextMeta">—</small></article>
@@ -502,8 +545,10 @@
           </article>
 
           <article class="card form">
-            <div class="wide section-heading"><span>✦</span><div><small>AKTUELLER TÖRN</small><h3>Reisedaten</h3></div></div>
-            <label class="wide">Törnname<input name="tripTitle"></label><label>Startdatum<input type="date" name="tripStart"></label><label>Enddatum<input type="date" name="tripEnd"></label><label class="wide">Crew / Stammbesatzung<input name="defaultCrew"></label>
+            <div class="wide section-heading"><span>✦</span><div><small>STANDARD AN BORD</small><h3>Besatzung & Marschfahrt</h3></div></div>
+            <label class="wide">Standardbesatzung für neue Törns<input name="defaultCrew" placeholder="z. B. Günni, …"></label>
+            <label>Bevorzugte Marschfahrt (kn)<input type="number" min="1" step="0.1" name="preferredCruiseSpeed"></label>
+            <p class="wide meta">Törnname, Reisezeitraum und die Crew eines bestimmten Törns verwaltest du in der Törnzentrale. So bleiben Herbsturlaub, Sommerreise und Wochenendtörns sauber getrennt.</p>
             <div class="wide"><button class="primary">Schiffsdaten speichern</button></div>
           </article>
         </form>
@@ -578,7 +623,7 @@
         <div class="title"><small>NACHVOLLZIEHBAR</small><h2>Änderungsverlauf & Konflikte</h2><p>Welche Änderung kam von welchem Gerät – und wo müssen zwei widersprüchliche Eingaben entschieden werden?</p></div>
         <div class="stats compact history-stats"><article><span>Offene Konflikte</span><strong id="openConflictCount">0</strong></article><article><span>Änderungen heute</span><strong id="changesTodayCount">0</strong></article><article><span>Letztes Gerät</span><strong id="lastChangeDevice">—</strong></article><article><span>Letzte Änderung</span><strong id="lastChangeTime">—</strong></article></div>
         <article class="card"><div class="card-kicker">KONFLIKTE</div><h3>Widersprüchliche Änderungen entscheiden</h3><p class="meta">Die App übernimmt zunächst den zeitlich neueren Wert, bewahrt aber beide Fassungen. Hier kannst du bewusst auswählen.</p><div id="conflictList" class="conflict-list"></div></article>
-        <article class="card"><div class="history-toolbar"><div><div class="card-kicker">ÄNDERUNGSPROTOKOLL</div><h3>Die letzten Änderungen</h3></div><div><select id="historyStoreFilter"><option value="">Alle Bereiche</option><option value="settings">Schiffsdaten</option><option value="days">Tageslogbuch</option><option value="route">Törnplanung</option><option value="fuel">Tankbuch</option><option value="maintenance">Wartung</option><option value="ports">Häfen</option><option value="photos">Fotos</option></select><button id="undoLastChangeButton" type="button">Letzte eigene Änderung rückgängig</button></div></div><div id="changeLogList" class="change-log-list"></div></article>
+        <article class="card"><div class="history-toolbar"><div><div class="card-kicker">ÄNDERUNGSPROTOKOLL</div><h3>Die letzten Änderungen</h3></div><div><select id="historyStoreFilter"><option value="">Alle Bereiche</option><option value="settings">Schiffsdaten</option><option value="trips">Törne</option><option value="days">Tageslogbuch</option><option value="route">Törnplanung</option><option value="fuel">Tankbuch</option><option value="maintenance">Wartung</option><option value="ports">Häfen</option><option value="photos">Fotos</option></select><button id="undoLastChangeButton" type="button">Letzte eigene Änderung rückgängig</button></div></div><div id="changeLogList" class="change-log-list"></div></article>
       </section>
 
       <section id="backup" class="view">
@@ -591,9 +636,35 @@
     </main>
   </div>
 
+  <dialog id="tripDialog" class="trip-dialog" aria-labelledby="tripDialogTitle">
+    <form id="tripForm" class="trip-dialog-inner form">
+      <input type="hidden" name="id">
+      <button class="dialog-close" type="button" aria-label="Dialog schließen" onclick="document.getElementById('tripDialog').close()">×</button>
+      <div class="wide"><div class="card-kicker">TÖRNVERWALTUNG</div><h3 id="tripDialogTitle">Neuen Törn anlegen</h3><p class="meta">Alle Einträge werden anschließend automatisch diesem Törn zugeordnet.</p></div>
+      <label class="wide">Törnname<input required name="title" placeholder="z. B. Herbsturlaub 2026"></label>
+      <label>Startdatum<input type="date" name="startDate"></label>
+      <label>Enddatum<input type="date" name="endDate"></label>
+      <label>Status<select name="status"><option value="planned">geplant</option><option value="active">aktiv</option><option value="completed">abgeschlossen</option></select></label>
+      <label class="wide">Crew<input name="crew" placeholder="Besatzung dieses Törns"></label>
+      <label class="wide">Beschreibung / Ziel<textarea rows="4" name="notes" placeholder="z. B. Herbsturlaub an der deutschen Nordseeküste"></textarea></label>
+      <div class="wide dialog-actions"><button id="tripSubmitButton" class="primary" type="submit">Törn anlegen und öffnen</button><button type="button" onclick="document.getElementById('tripDialog').close()">Abbrechen</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="fieldHelpDialog" class="field-help-dialog" aria-labelledby="fieldHelpTitle">
+    <div class="field-help-dialog-inner">
+      <form method="dialog"><button class="dialog-close" value="cancel" aria-label="Hinweis schließen">×</button></form>
+      <div class="card-kicker">HILFE ZUM FELD</div>
+      <h3 id="fieldHelpTitle">Hinweis</h3>
+      <p id="fieldHelpText"></p>
+      <div id="fieldHelpExample" class="field-help-example" hidden></div>
+      <form method="dialog" class="dialog-actions"><button class="primary" value="ok">Verstanden</button></form>
+    </div>
+  </dialog>
+
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=6.1"></script>
+  <script src="app.js?v=6.4"></script>
 </body>
 </html>

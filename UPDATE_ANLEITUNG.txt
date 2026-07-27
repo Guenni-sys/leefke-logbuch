@@ -1,32 +1,21 @@
-LEEFKE Bordtagebuch – Version 6.1 Reisebericht mit Seekarte
+LEEFKE Bordtagebuch – Version 6.4 Startseiten-Anker
 
-WAS WURDE GEÄNDERT?
-- Im Reisebericht wird der Törn jetzt auf einer echten interaktiven Seekartenansicht dargestellt.
-- Grundlage: OpenStreetMap; Tonnen, Baken und Seezeichen: OpenSeaMap.
-- GPX-Routen, Start, Ziel und Häfen mit Koordinaten werden über der Karte angezeigt.
-- Beim Drucken / Speichern als PDF wartet die App kurz, bis die Kartenkacheln geladen sind.
-- Bereits geladene Kartenbereiche können über den App-Zwischenspeicher auch offline sichtbar bleiben.
-
-WICHTIG
-- Für noch nicht geladene Kartenbereiche ist Internet nötig.
-- Die Darstellung ist eine Planungs- und Dokumentationsansicht und keine zugelassene Navigationskarte.
-- In Supabase muss für dieses Update nichts geändert werden.
+NEU
+- Der Anker oben links ist jetzt eine Schaltfläche.
+- Ein Tippen oder Klicken führt jederzeit direkt zur Übersicht/Startseite.
+- Funktioniert mit Maus, Finger und Tastatur.
+- Alle Funktionen und Daten aus Version 6.3 bleiben erhalten.
 
 UPDATE
-1. In der LEEFKE-App vorsichtshalber eine Sicherung exportieren.
-2. ZIP-Datei unter Windows vollständig entpacken.
-3. GitHub-Repository Guenni-sys/leefke-logbuch öffnen.
+1. In der App vorsichtshalber unter „Sicherung“ eine Sicherung exportieren.
+2. Diese ZIP-Datei vollständig entpacken.
+3. GitHub öffnen: https://github.com/Guenni-sys/leefke-logbuch
 4. Add file → Upload files.
 5. Alle Dateien aus dem entpackten Ordner hochladen und vorhandene Dateien ersetzen.
-6. Commit-Text: LEEFKE Version 6.1 Reisebericht Seekarte
-7. Commit changes anklicken.
-8. Nach etwa zwei Minuten öffnen:
-   https://guenni-sys.github.io/leefke-logbuch/index.html?v=6.1
-9. Unter Windows einmal Strg + F5 drücken; auf iPhone/iPad die App vollständig schließen und neu öffnen.
-10. Oben muss „BORDTAGEBUCH · VERSION 6.1“ stehen.
+6. Commit-Text: LEEFKE Version 6.4 Startseiten-Anker
+7. Commit changes drücken.
+8. Etwa zwei Minuten warten.
+9. Öffnen: https://guenni-sys.github.io/leefke-logbuch/index.html?v=6.4
+10. Oben muss „BORDTAGEBUCH · VERSION 6.4“ stehen.
 
-TEST
-- Reisebericht öffnen.
-- Bericht aktualisieren anklicken.
-- Unter „Der Törn auf der Seekarte“ müssen Küstenkarte, Seezeichen und die GPX-Route sichtbar sein.
-- Erst danach „Drucken / als PDF speichern“ verwenden.
+Für dieses Update ist keine Änderung in Supabase nötig.

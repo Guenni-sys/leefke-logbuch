@@ -383,3 +383,77 @@ img{max-width:100%}
   .report-map-warning{font-size:7.5pt}
   .report-map .leaflet-tile{visibility:visible!important;opacity:1!important}
 }
+
+/* Version 6.2: verständliche und zuverlässige Tagestour-Erfassung */
+.day-form-guide{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,.65fr);gap:24px;align-items:center;margin-bottom:18px;border-left:5px solid var(--brass)}
+.day-form-guide h3{margin-bottom:6px}.day-form-guide p{margin:0;color:#425c68}
+.day-route-copy{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px;align-items:end;padding:14px;border-radius:12px;background:rgba(21,74,99,.065)}
+.day-route-copy label{display:grid;gap:6px;color:var(--navy-900);font-size:.82rem;font-weight:800}.day-route-copy select{width:100%}
+.day-route-copy button{white-space:nowrap}
+.day-route-copy button:disabled{opacity:.5;cursor:not-allowed;transform:none;box-shadow:none}
+.day-form{position:relative}
+.label-row{display:flex;align-items:center;justify-content:space-between;gap:8px;min-height:26px}
+.field-help{display:inline-grid;place-items:center;flex:0 0 25px;width:25px;height:25px;min-width:25px;padding:0;border-radius:50%;border:1px solid rgba(21,74,99,.32);background:#eef6f7;color:var(--navy-700);font-size:.78rem;font-weight:900;line-height:1;box-shadow:none}
+.field-help:hover,.field-help:focus-visible{background:var(--navy-700);color:#fff;transform:none;box-shadow:0 0 0 3px rgba(21,74,99,.14)}
+.saved-location{margin:3px 0 0;padding:11px 13px;border-radius:9px;background:rgba(201,164,93,.12);color:#5f5644;font-size:.84rem;line-height:1.45}
+.form-status{padding:12px 14px;border-radius:10px;border:1px solid transparent;font-weight:750;line-height:1.45}
+.form-status[hidden]{display:none}.form-status.info{background:#edf6f9;border-color:#b9d7e2;color:#21596e}.form-status.success{background:#e6f4e9;border-color:#afd3b8;color:#27623c}.form-status.error{background:#fae8e5;border-color:#dfb4ad;color:#8b342d}
+.list-heading{display:flex;align-items:end;justify-content:space-between;gap:14px;margin:30px 0 6px;padding:0 4px 10px;border-bottom:2px solid rgba(201,164,93,.45)}
+.list-heading h3{margin:3px 0 0;font-family:Georgia,serif;color:var(--navy-900);font-size:1.35rem}.list-count{padding:6px 10px;border-radius:999px;background:var(--navy-900);color:var(--brass-light);font-size:.78rem;font-weight:800;white-space:nowrap}
+.day-facts{display:flex;flex-wrap:wrap;gap:7px 14px;margin:10px 0;color:#49636e;font-size:.82rem;font-weight:700}.day-facts span{display:inline-flex;align-items:center;gap:4px}
+.item.just-saved{animation:daySavedPulse 2.5s ease;outline:4px solid rgba(201,164,93,.7);outline-offset:3px}
+@keyframes daySavedPulse{0%{transform:scale(.985);box-shadow:0 0 0 rgba(201,164,93,0)}25%{transform:scale(1);box-shadow:0 0 0 10px rgba(201,164,93,.18)}100%{box-shadow:0 10px 28px rgba(7,35,50,.08)}}
+.field-help-dialog{width:min(560px,calc(100vw - 28px));padding:0;border:0;border-radius:18px;background:transparent;box-shadow:0 24px 70px rgba(0,0,0,.38)}
+.field-help-dialog::backdrop{background:rgba(3,20,30,.68);backdrop-filter:blur(3px)}
+.field-help-dialog-inner{position:relative;padding:26px;background:linear-gradient(145deg,var(--paper-2),var(--paper));border:1px solid rgba(201,164,93,.55);border-top:5px solid var(--brass);border-radius:18px;color:var(--ink)}
+.field-help-dialog h3{margin:5px 38px 10px 0;font-family:Georgia,serif;color:var(--navy-900);font-size:1.45rem}.field-help-dialog p{line-height:1.6;color:#3e5864}
+.dialog-close{position:absolute;right:12px;top:11px;display:grid;place-items:center;width:36px;height:36px;padding:0;border-radius:50%;font-size:1.35rem;background:#fff;color:var(--navy-900)}
+.field-help-example{margin:15px 0 0;padding:12px 14px;border-left:4px solid var(--brass);border-radius:7px;background:rgba(201,164,93,.12);color:#5b513e;font-weight:750}
+.dialog-actions{display:flex;justify-content:flex-end;margin-top:20px}
+.day-form input:invalid:focus{border-color:#b54b42;box-shadow:0 0 0 3px rgba(181,75,66,.12)}
+
+@media(max-width:900px){.day-form-guide{grid-template-columns:1fr}.day-route-copy{grid-template-columns:1fr auto}}
+@media(max-width:560px){.day-route-copy{grid-template-columns:1fr}.day-route-copy button{width:100%}.list-heading{align-items:flex-start;flex-direction:column}.field-help{width:29px;height:29px;min-width:29px}.field-help-dialog-inner{padding:23px 20px}.saved-location{font-size:.8rem}}
+@media print{.day-form-guide,.field-help-dialog{display:none!important}}
+
+/* Version 6.3 – mehrere Törns sauber getrennt */
+.global-trip-switcher{display:flex;align-items:center;gap:7px;min-width:230px;padding:5px 7px 5px 10px;border:1px solid rgba(210,178,105,.38);border-radius:12px;background:rgba(255,255,255,.08);color:#fff}
+.global-trip-switcher span{font-size:.62rem;font-weight:900;letter-spacing:.12em;color:#d7bd77}
+.global-trip-switcher select{min-width:0;max-width:240px;border:0;background:#fff;color:#08283b;font-weight:800;padding:8px 30px 8px 10px;border-radius:8px}
+.trip-manager{margin-bottom:18px;background:linear-gradient(145deg,#fffdf8,#efe5d3)}
+.trip-manager-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}
+.trip-manager-head h3{margin:.2rem 0 .15rem;font-size:1.55rem}
+.trip-manager-note{margin:16px 0;padding:13px 15px;border-left:4px solid var(--brass);background:rgba(255,255,255,.64);border-radius:0 10px 10px 0;line-height:1.55}
+.trip-list{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px;margin-top:15px}
+.trip-card{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:14px;border:1px solid rgba(117,75,47,.2);border-radius:13px;background:rgba(255,255,255,.72)}
+.trip-card.active{border-color:#bb8d24;box-shadow:inset 0 0 0 2px rgba(219,177,72,.22);background:#fffaf0}
+.trip-card small{font-size:.65rem;font-weight:900;letter-spacing:.1em;color:#8d702c}
+.trip-card h4{margin:3px 0;font-family:Georgia,serif;font-size:1.12rem;color:#08283b}
+.trip-card p{margin:0;color:#66767d;font-size:.85rem}
+.trip-card .actions{flex-shrink:0}
+.trip-dialog{width:min(680px,calc(100vw - 24px));max-height:calc(100dvh - 30px);border:0;border-radius:18px;padding:0;background:#f7f1e5;color:#132f3d;box-shadow:0 25px 80px rgba(0,0,0,.35)}
+.trip-dialog::backdrop{background:rgba(4,22,33,.72);backdrop-filter:blur(3px)}
+.trip-dialog-inner{position:relative;display:grid;grid-template-columns:1fr 1fr;gap:14px;padding:26px;overflow:auto;max-height:calc(100dvh - 30px)}
+.trip-dialog .dialog-close{position:absolute;top:12px;right:12px;z-index:2;width:38px;height:38px;border-radius:50%;font-size:1.35rem}
+@media(max-width:900px){.global-trip-switcher{min-width:180px}.global-trip-switcher select{max-width:180px}.trip-manager-head{flex-direction:column}.trip-manager-head .actions{width:100%}.trip-manager-head .actions button{flex:1}}
+@media(max-width:680px){.global-trip-switcher{position:absolute;left:64px;right:66px;top:calc(env(safe-area-inset-top) + 66px);min-width:0;background:#0a2d40;z-index:4}.global-trip-switcher select{max-width:none;width:100%}.topbar{padding-bottom:62px}.trip-list{grid-template-columns:1fr}.trip-card{align-items:flex-start;flex-direction:column}.trip-card .actions{width:100%;display:grid;grid-template-columns:1fr 1fr}.trip-dialog-inner{grid-template-columns:1fr;padding:24px 18px}.trip-dialog-inner .wide{grid-column:1}.trip-manager-head .actions{display:grid;grid-template-columns:1fr}}
+
+
+/* Version 6.4 – Anker in der Kopfzeile führt zur Startseite */
+button.brand-mark{
+  flex:0 0 auto;
+  padding:0;
+  appearance:none;
+  -webkit-appearance:none;
+  cursor:pointer;
+  touch-action:manipulation;
+}
+button.brand-mark:hover{
+  transform:translateY(-1px) scale(1.03);
+  box-shadow:inset 0 0 0 4px rgba(255,255,255,.04),0 6px 16px rgba(0,0,0,.22);
+}
+button.brand-mark:active{transform:scale(.97)}
+button.brand-mark:focus-visible{
+  outline:3px solid rgba(231,205,145,.85);
+  outline-offset:3px;
+}

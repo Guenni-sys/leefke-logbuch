@@ -1,10 +1,6 @@
-LEEFKE 6.1 – Seekarte im Reisebericht
+LEEFKE 6.4 – Startseiten-Anker
 
-- Der bisherige graue Kartenhintergrund im Reisebericht wurde durch eine echte Leaflet-Karte ersetzt.
-- Küstenkarte: OpenStreetMap.
-- Nautische Ebene: OpenSeaMap mit Tonnen, Baken und Seezeichen.
-- Alle gespeicherten GPX-Routen werden als gelbe Route mit dunkler Kontur dargestellt.
-- Start- und Zielpunkte sowie Häfen mit hinterlegten Koordinaten erscheinen auf der Karte.
-- Die Karte lässt sich im Reisebericht verschieben und zoomen.
-- Beim PDF-Druck wartet die App auf das Laden der Kartenkacheln.
-- Keine Änderung an Supabase oder an den gespeicherten Bordbuchdaten erforderlich.
+- Der Anker oben links ist jetzt anklickbar.
+- Er öffnet immer die Startseite „Übersicht“.
+- Die Navigation schließt sich dabei automatisch und die Seite springt nach oben.
+- Vollständig barrierearm als echte Schaltfläche mit Tastaturfokus umgesetzt.

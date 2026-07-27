@@ -1,9 +1,11 @@
-const APP_VERSION = '6.1';
+const APP_VERSION = '6.4';
 const AUTO_SYNC_INTERVAL_MS = 20000;
 const DB_NAME = 'leefke-v2';
-const DB_VERSION = 6;
-const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather', 'autoBackups'];
-const syncableStores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather'];
+const DB_VERSION = 7;
+const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'trips', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather', 'autoBackups'];
+const syncableStores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'trips', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather'];
+const TRIP_SCOPED_STORES = new Set(['days', 'fuel', 'photos', 'route', 'ports', 'gpx', 'weather', 'routeWeather']);
+const INITIAL_TRIP_ID = 'trip-daenische-suedsee-2026';
 const SETTINGS_FIELD_RECORD_TYPE = 'settings_field';
 const systemStores = ['syncMeta', 'syncTombstones'];
 const SUPABASE_URL = 'https://fzaxoivuwpubwhgabahz.supabase.co';
@@ -67,6 +69,8 @@ const WEATHER_MAX_FORECAST_DAYS = 7;
 
 let db;
 let state = {};
+let allState = {};
+let activeTripId = '';
 let nauticalMap = null;
 let nauticalBaseLayer = null;
 let seamarkLayer = null;
@@ -189,6 +193,9 @@ async function markLinked(strategy) {
 
 async function put(store, value, options = {}) {
   let saved = { ...value };
+  if (TRIP_SCOPED_STORES.has(store) && !saved.tripId && activeTripId && !options.remote) {
+    saved.tripId = activeTripId;
+  }
   if (syncableStores.includes(store) && !suppressSyncTracking && !options.remote) {
     saved._updatedAt = new Date().toISOString();
   }
@@ -1002,11 +1009,152 @@ function view(id) {
 
 function prepareDayForm() {
   const form = $('#dayForm');
-  if (!form.elements.id.value && !form.elements.date.value) {
-    form.elements.date.value = new Date().toISOString().slice(0, 10);
-    const settings = getSettings();
-    if (!form.elements.crew.value) form.elements.crew.value = settings.defaultCrew || '';
+  if (!form) return;
+  const editing = Boolean(form.elements.id.value);
+  if (!editing && !form.elements.date.value) form.elements.date.value = new Date().toISOString().slice(0, 10);
+  if (!editing && !form.elements.dayNo.value) {
+    const highestDay = Math.max(0, ...(state.days || []).map(item => num(item.dayNo)));
+    form.elements.dayNo.value = highestDay + 1;
   }
+  const settings = getSettings();
+  if (!editing && !form.elements.crew.value) form.elements.crew.value = getActiveTrip()?.crew || settings.defaultCrew || '';
+  updateDayFormMode();
+}
+
+
+function tripDateLabel(trip) {
+  if (!trip) return '';
+  return [fmtDate(trip.startDate), fmtDate(trip.endDate)].filter(Boolean).join(' – ');
+}
+
+function tripStatusLabel(status) {
+  if (status === 'completed') return 'abgeschlossen';
+  if (status === 'planned') return 'geplant';
+  return 'aktiv';
+}
+
+function getActiveTrip() {
+  return state.trips?.find(item => item.id === activeTripId) || allState.trips?.find(item => item.id === activeTripId) || null;
+}
+
+async function ensureTripsAndMigrate() {
+  const settingsRows = await all('settings');
+  const base = { ...DEFAULT_SETTINGS, ...(settingsRows.find(item => item.id === 'main') || settingsRows[0] || {}) };
+  let trips = await all('trips');
+  if (!trips.length) {
+    const now = new Date().toISOString();
+    await put('trips', {
+      id: INITIAL_TRIP_ID,
+      title: base.tripTitle || 'Dänische Südsee 2026',
+      startDate: base.tripStart || '2026-08-01',
+      endDate: base.tripEnd || '2026-08-16',
+      crew: base.defaultCrew || '',
+      status: 'active',
+      notes: 'Aus dem bisherigen aktuellen Törn übernommen.',
+      createdAt: now
+    });
+    trips = await all('trips');
+  }
+
+  const activeMeta = await metaGet('activeTrip');
+  const preferred = activeMeta?.tripId;
+  const selected = trips.find(item => item.id === preferred)
+    || trips.find(item => item.status === 'active')
+    || [...trips].sort((a, b) => String(b.startDate || '').localeCompare(String(a.startDate || '')))[0];
+  activeTripId = selected?.id || INITIAL_TRIP_ID;
+  await metaSet('activeTrip', { tripId: activeTripId, changedAt: new Date().toISOString() });
+
+  // Alle Daten aus älteren Versionen gehören zum bisherigen Törn.
+  for (const store of TRIP_SCOPED_STORES) {
+    const rows = await all(store);
+    for (const row of rows) {
+      if (!row.tripId) await put(store, { ...row, tripId: activeTripId });
+    }
+  }
+}
+
+async function setActiveTrip(id, options = {}) {
+  const trips = await all('trips');
+  const trip = trips.find(item => item.id === id);
+  if (!trip) return;
+  activeTripId = trip.id;
+  selectedGpxId = '';
+  activeWeatherSnapshot = null;
+  activeWeatherRouteId = '';
+  await metaSet('activeTrip', { tripId: activeTripId, changedAt: new Date().toISOString() });
+  await refresh();
+  if (!options.silent) toast(`Törn geöffnet: ${trip.title}`);
+}
+window.setActiveTrip = setActiveTrip;
+
+function renderTripManager() {
+  const trips = [...(state.trips || [])].sort((a, b) => String(b.startDate || '').localeCompare(String(a.startDate || '')) || String(a.title || '').localeCompare(String(b.title || ''), 'de'));
+  const current = getActiveTrip();
+  const select = $('#globalTripSelect');
+  if (select) {
+    select.innerHTML = trips.map(trip => `<option value="${esc(trip.id)}">${esc(trip.title || 'Unbenannter Törn')}</option>`).join('');
+    select.value = activeTripId;
+    select.title = current ? `Aktueller Törn: ${current.title}` : 'Törn auswählen';
+  }
+  const title = $('#tripManagerTitle');
+  const meta = $('#tripManagerMeta');
+  if (title) title.textContent = current?.title || 'Noch kein Törn ausgewählt';
+  if (meta) meta.textContent = current ? `${tripDateLabel(current) || 'Zeitraum noch offen'} · ${tripStatusLabel(current.status)}${current.crew ? ` · Crew: ${current.crew}` : ''}` : '';
+  const list = $('#tripList');
+  if (list) list.innerHTML = trips.map(trip => {
+    const active = trip.id === activeTripId;
+    return `<article class="trip-card ${active ? 'active' : ''}">
+      <div><small>${tripStatusLabel(trip.status).toUpperCase()}</small><h4>${esc(trip.title || 'Unbenannter Törn')}</h4><p>${tripDateLabel(trip) || 'Zeitraum noch offen'}${trip.crew ? ` · ${esc(trip.crew)}` : ''}</p></div>
+      <div class="actions"><button type="button" class="${active ? 'primary' : ''}" onclick="setActiveTrip('${trip.id}')">${active ? 'Geöffnet' : 'Öffnen'}</button><button type="button" onclick="openTripDialog('edit','${trip.id}')">Bearbeiten</button></div>
+    </article>`;
+  }).join('') || '<div class="muted">Noch kein Törn angelegt.</div>';
+}
+
+function openTripDialog(mode = 'new', id = '') {
+  const dialog = $('#tripDialog');
+  const form = $('#tripForm');
+  if (!dialog || !form) return;
+  form.reset();
+  form.elements.id.value = '';
+  if (mode === 'edit') {
+    const trip = (state.trips || []).find(item => item.id === id) || getActiveTrip();
+    if (!trip) return;
+    for (const [key, value] of Object.entries(trip)) if (form.elements[key]) form.elements[key].value = value ?? '';
+    $('#tripDialogTitle').textContent = 'Törn bearbeiten';
+    $('#tripSubmitButton').textContent = 'Änderungen speichern';
+  } else {
+    form.elements.startDate.value = dateInputValue();
+    form.elements.status.value = 'planned';
+    form.elements.crew.value = getActiveTrip()?.crew || getSettings().defaultCrew || '';
+    $('#tripDialogTitle').textContent = 'Neuen Törn anlegen';
+    $('#tripSubmitButton').textContent = 'Törn anlegen und öffnen';
+  }
+  if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+}
+window.openTripDialog = openTripDialog;
+
+async function saveTripForm(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = formObject(form);
+  const existing = values.id ? await getOne('trips', values.id) : null;
+  const trip = {
+    ...(existing || {}),
+    ...values,
+    id: values.id || uid(),
+    title: String(values.title || '').trim(),
+    status: values.status || 'planned',
+    createdAt: existing?.createdAt || new Date().toISOString()
+  };
+  if (!trip.title) return;
+  if (trip.startDate && trip.endDate && trip.endDate < trip.startDate) {
+    alert('Das Enddatum darf nicht vor dem Startdatum liegen.');
+    return;
+  }
+  await put('trips', trip);
+  await setActiveTrip(trip.id, { silent: true });
+  $('#tripDialog')?.close();
+  toast(existing ? 'Törn aktualisiert' : 'Neuer Törn angelegt und geöffnet');
 }
 
 async function defaults() {
@@ -1072,14 +1220,32 @@ async function defaults() {
     if (!migrated.model) migrated.model = 'Finse';
     await rawPut('settings', migrated);
   }
+  await ensureTripsAndMigrate();
 }
 
 function getSettings() {
-  return { ...DEFAULT_SETTINGS, ...(state.settings?.find(item => item.id === 'main') || {}) };
+  const base = { ...DEFAULT_SETTINGS, ...(state.settings?.find(item => item.id === 'main') || allState.settings?.find(item => item.id === 'main') || {}) };
+  const trip = getActiveTrip();
+  if (!trip) return base;
+  return { ...base, tripTitle: trip.title || 'Aktueller Törn', tripStart: trip.startDate || '', tripEnd: trip.endDate || '' };
 }
 
 async function refresh() {
-  for (const store of stores) state[store] = await all(store);
+  allState = {};
+  for (const store of stores) allState[store] = await all(store);
+  if (!activeTripId || !(allState.trips || []).some(item => item.id === activeTripId)) {
+    const activeMeta = await metaGet('activeTrip');
+    const candidate = (allState.trips || []).find(item => item.id === activeMeta?.tripId)
+      || (allState.trips || []).find(item => item.status === 'active')
+      || (allState.trips || [])[0];
+    activeTripId = candidate?.id || '';
+    if (activeTripId) await metaSet('activeTrip', { tripId: activeTripId, changedAt: new Date().toISOString() });
+  }
+  state = {};
+  for (const store of stores) {
+    const rows = allState[store] || [];
+    state[store] = TRIP_SCOPED_STORES.has(store) ? rows.filter(item => item.tripId === activeTripId) : rows;
+  }
   state.days.sort((a, b) => String(b.date).localeCompare(String(a.date)));
   state.fuel.sort((a, b) => String(b.date).localeCompare(String(a.date)));
   state.maintenance.sort((a, b) => String(b.date).localeCompare(String(a.date)));
@@ -1092,7 +1258,7 @@ function actionButtons(kind, id) {
 }
 
 function card(item, kind, body, className = '') {
-  return `<article class="item ${className}">${actionButtons(kind, item.id)}${body}</article>`;
+  return `<article class="item ${className}" data-store="${esc(kind)}" data-record-id="${esc(item.id)}">${actionButtons(kind, item.id)}${body}</article>`;
 }
 
 function ratingLabel(value) {
@@ -1228,6 +1394,7 @@ function render() {
   renderSettings(settings);
   renderGpxSelect();
   renderPortDatalist();
+  renderDayRouteOptions();
   renderWeatherLocationOptions();
   if (activeWeatherSnapshot?.id) {
     activeWeatherSnapshot = state.weather?.find(item => item.id === activeWeatherSnapshot.id) || activeWeatherSnapshot;
@@ -1236,6 +1403,7 @@ function render() {
   }
   if (activeWeatherSnapshot) renderWeatherSnapshot(activeWeatherSnapshot, activeWeatherHourIndex);
   if (nauticalMap) refreshPortLayer();
+  renderTripManager();
   renderV6Extras();
 }
 
@@ -1261,12 +1429,15 @@ function renderTank(settings) {
 function renderDays() {
   const query = ($('#daySearch')?.value || '').toLowerCase();
   const filtered = state.days.filter(item => JSON.stringify(item).toLowerCase().includes(query));
+  const count = $('#dayListCount');
+  if (count) count.textContent = query ? `${filtered.length} von ${state.days.length} Einträgen` : `${state.days.length} ${state.days.length === 1 ? 'Eintrag' : 'Einträge'}`;
   $('#dayList').innerHTML = filtered.map(item => card(item, 'days', `
     <div class="meta">${fmtDate(item.date)}${item.dayNo ? ` · Reisetag ${esc(item.dayNo)}` : ''}</div>
-    <h3>${esc(item.title || `${item.fromPort || ''} → ${item.toPort || ''}`)}</h3>
-    <div class="meta">${esc(item.depart || '—')} – ${esc(item.arrive || '—')} · ${dec(item.distance)} sm · ${esc(item.wind || 'Wind —')} · ${esc(item.wave || 'Welle —')}</div>
+    <h3>${esc(item.title || ((item.fromPort || item.toPort) ? `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}` : `Tagestour vom ${fmtDate(item.date)}`))}</h3>
+    <div class="meta">${esc(item.depart || '—')} – ${esc(item.arrive || '—')} · ${item.distance ? `${dec(item.distance)} sm` : 'Strecke —'} · ${esc(item.wind || 'Wind —')} · ${esc(item.wave || 'Welle —')}</div>
+    ${item.weather || item.tide || item.crew ? `<div class="day-facts">${item.weather ? `<span>☀ ${esc(item.weather)}</span>` : ''}${item.tide ? `<span>↕ ${esc(item.tide)}</span>` : ''}${item.crew ? `<span>⚓ ${esc(item.crew)}</span>` : ''}</div>` : ''}
     <p>${esc(item.summary || '').replace(/\n/g, '<br>')}</p>
-    ${item.moment ? `<blockquote>„${esc(item.moment)}“</blockquote>` : ''}`)).join('') || '<div class="card muted">Keine passenden Einträge.</div>';
+    ${item.moment ? `<blockquote>„${esc(item.moment)}“</blockquote>` : ''}`)).join('') || '<div class="card muted">Keine passenden Tagestouren gefunden.</div>';
 }
 
 function renderFuel(totalHours) {
@@ -1448,11 +1619,143 @@ function renderPortDatalist() {
   list.innerHTML = [...names].filter(Boolean).sort((a, b) => a.localeCompare(b, 'de')).map(name => `<option value="${esc(name)}"></option>`).join('');
 }
 
+function renderDayRouteOptions() {
+  const select = $('#dayRouteSource');
+  const button = $('#dayRouteApply');
+  if (!select) return;
+  const current = select.value;
+  const routes = [...(state.route || [])].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  select.innerHTML = '<option value="">Etappe auswählen …</option>' + routes.map((item, index) => `<option value="${esc(item.id)}">${index + 1}. ${fmtDate(item.date) || 'Datum offen'} · ${esc(item.from || 'Start')} → ${esc(item.to || 'Ziel')}</option>`).join('');
+  if (routes.some(item => item.id === current)) select.value = current;
+  if (button) button.disabled = !routes.length || !select.value;
+}
+
+const DAY_FIELD_HELP = {
+  date: ['Datum', 'Der Kalendertag, an dem die Fahrt stattgefunden hat. Das Datum ist das einzige Pflichtfeld.', 'Beispiel: 31.07.2026'],
+  dayNo: ['Reisetag', 'Die laufende Nummer innerhalb des aktuellen Törns. Die App schlägt automatisch die nächste Nummer vor; du kannst sie ändern.', 'Beispiel: 3 für den dritten Tag des Urlaubs'],
+  title: ['Überschrift', 'Eine kurze, persönliche Überschrift. Bleibt das Feld leer, erzeugt die App automatisch eine Überschrift aus Start und Ziel.', 'Beispiel: Ruhige Überfahrt nach Helgoland'],
+  fromPort: ['Von', 'Startort oder Hafen der Tagestour. Bereits bekannte Häfen und geplante Etappen werden als Vorschläge angeboten.', 'Beispiel: Bremerhaven'],
+  toPort: ['Nach', 'Zielort oder Hafen der Tagestour.', 'Beispiel: Helgoland'],
+  depart: ['Ablegen', 'Die tatsächliche Ortszeit, zu der die LEEFKE abgelegt hat.', 'Beispiel: 06:30 Uhr'],
+  arrive: ['Anlegen', 'Die tatsächliche Ortszeit, zu der die LEEFKE festgemacht hat.', 'Beispiel: 11:45 Uhr'],
+  distance: ['Strecke in Seemeilen', 'Die tatsächlich gefahrene Strecke in Seemeilen. 1 sm entspricht 1,852 km.', 'Beispiel: 42,5 sm'],
+  engineStart: ['Motorstunden beim Start', 'Der Stand des Betriebsstundenzählers unmittelbar vor dem Ablegen. Nicht die geplante Fahrtdauer eintragen.', 'Beispiel: 917,4 h'],
+  engineEnd: ['Motorstunden beim Ende', 'Der Stand des Betriebsstundenzählers nach dem Anlegen. Daraus berechnet die App die Motorlaufzeit.', 'Beispiel: 923,1 h'],
+  weather: ['Wetter', 'Kurze Beschreibung der Wetterlage. Du kannst einen Vorschlag auswählen oder frei schreiben.', 'Beispiel: Heiter, 18 °C, gute Sicht'],
+  wind: ['Wind', 'Windrichtung und Stärke, möglichst in Beaufort; Böen können ergänzt werden.', 'Beispiel: NW 3 Bft, Böen 5 Bft'],
+  wave: ['Welle', 'Möglichst Wellenhöhe, Richtung und Periode notieren. Die Periode beschreibt den zeitlichen Abstand zwischen den Wellen.', 'Beispiel: 0,7 m aus NW · 4,5 s'],
+  tide: ['Tide / Strom', 'Hier kommt die beobachtete oder geplante Tide- und Stromsituation hinein.', 'Beispiel: ablaufend · etwa 1 kn mitlaufender Strom'],
+  crew: ['Besatzung', 'Alle Personen an Bord, durch Komma getrennt. Die Standardbesatzung kann im Schiffspass hinterlegt werden.', 'Beispiel: Günni, …'],
+  summary: ['Tagesbericht', 'Der eigentliche Logbucheintrag: Verlauf der Fahrt, Verkehr, Manöver, Vorkommnisse, Ansteuerung und Liegeplatz.', 'Beispiel: Um 08:15 Alte Weser passiert, mäßiger Schiffsverkehr …'],
+  moment: ['Moment des Tages', 'Der persönliche Höhepunkt oder eine besondere Erinnerung. Dieser Text wird im Reisebericht hervorgehoben.', 'Beispiel: Die ersten Basstölpel kurz vor Helgoland.']
+};
+
+function openDayFieldHelp(key) {
+  const data = DAY_FIELD_HELP[key];
+  const dialog = $('#fieldHelpDialog');
+  if (!data || !dialog) return;
+  $('#fieldHelpTitle').textContent = data[0];
+  $('#fieldHelpText').textContent = data[1];
+  const example = $('#fieldHelpExample');
+  example.textContent = data[2] || '';
+  example.hidden = !data[2];
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else alert(`${data[0]}
+
+${data[1]}${data[2] ? `
+
+${data[2]}` : ''}`);
+}
+
+function setDayFormStatus(message = '', kind = 'info') {
+  const status = $('#dayFormStatus');
+  if (!status) return;
+  status.hidden = !message;
+  status.className = `wide form-status ${kind}`;
+  status.textContent = message;
+}
+
+function updateDayFormMode() {
+  const form = $('#dayForm');
+  const button = $('#daySaveButton');
+  if (!form || !button) return;
+  button.textContent = form.elements.id.value ? 'Änderungen speichern' : 'Tagestour speichern';
+}
+
+function meaningfulDayEntry(item) {
+  return ['title', 'fromPort', 'toPort', 'depart', 'arrive', 'distance', 'engineStart', 'engineEnd', 'weather', 'wind', 'wave', 'tide', 'crew', 'summary', 'moment']
+    .some(field => String(item[field] ?? '').trim() !== '');
+}
+
 function formObject(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
-for (const id of ['day', 'fuel', 'maintenance', 'route', 'port']) {
+const dayForm = $('#dayForm');
+if (dayForm) {
+  dayForm.onsubmit = async event => {
+    event.preventDefault();
+    setDayFormStatus();
+    const saveButton = $('#daySaveButton');
+    try {
+      if (!dayForm.reportValidity()) {
+        setDayFormStatus('Bitte prüfe die rot markierten Pflichtfelder. Das Datum muss eingetragen sein.', 'error');
+        return;
+      }
+      const item = formObject(dayForm);
+      if (!meaningfulDayEntry(item)) {
+        setDayFormStatus('Bitte trage außer dem Datum mindestens eine Information zur Tagestour ein, zum Beispiel Start, Ziel oder Tagesbericht.', 'error');
+        dayForm.elements.fromPort.focus();
+        return;
+      }
+      if (item.engineStart !== '' && item.engineEnd !== '' && num(item.engineEnd) < num(item.engineStart)) {
+        setDayFormStatus('Die Motorstunden am Ende dürfen nicht kleiner sein als beim Start. Bitte prüfe die beiden Zählerstände.', 'error');
+        dayForm.elements.engineEnd.focus();
+        return;
+      }
+      saveButton.disabled = true;
+      saveButton.textContent = 'Wird gespeichert …';
+      const existing = item.id ? await getOne('days', item.id) : null;
+      item.id = item.id || uid();
+      item.created = existing?.created || Date.now();
+      if (!String(item.title || '').trim()) {
+        item.title = item.fromPort || item.toPort
+          ? `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}`
+          : `Tagestour vom ${fmtDate(item.date)}`;
+      }
+      const saved = await put('days', item);
+      await refresh();
+      dayForm.reset();
+      prepareDayForm();
+      await new Promise(resolve => window.setTimeout(resolve, 0));
+      const cloudNote = currentSession
+        ? (navigator.onLine ? 'Cloud-Abgleich läuft automatisch.' : 'Offline gespeichert; der Cloud-Abgleich folgt bei Internetverbindung.')
+        : 'Lokal gespeichert; für den Abgleich mit anderen Geräten bitte anmelden.';
+      setDayFormStatus(`Tagestour gespeichert. Sie steht unten bei den gespeicherten Tagestouren. ${cloudNote}`, 'success');
+      toast('Tagestour gespeichert');
+      window.setTimeout(() => {
+        const savedCard = document.querySelector(`[data-store="days"][data-record-id="${saved.id}"]`);
+        if (!savedCard) return;
+        savedCard.classList.add('just-saved');
+        savedCard.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        window.setTimeout(() => savedCard.classList.remove('just-saved'), 2600);
+      }, 180);
+    } catch (error) {
+      console.error('Tagestour konnte nicht gespeichert werden.', error);
+      setDayFormStatus(`Speichern fehlgeschlagen: ${error?.message || 'Unbekannter Fehler'}. Die eingegebenen Daten bleiben im Formular stehen.`, 'error');
+      toast('Tagestour konnte nicht gespeichert werden');
+    } finally {
+      saveButton.disabled = false;
+      updateDayFormMode();
+    }
+  };
+  dayForm.addEventListener('reset', () => window.setTimeout(() => {
+    setDayFormStatus();
+    prepareDayForm();
+  }, 0));
+}
+
+for (const id of ['fuel', 'maintenance', 'route', 'port']) {
   const form = $(`#${id}Form`);
   form.onsubmit = async event => {
     event.preventDefault();
@@ -1460,7 +1763,7 @@ for (const id of ['day', 'fuel', 'maintenance', 'route', 'port']) {
     item.id = item.id || uid();
     item.created = item.created || Date.now();
     if (id === 'maintenance') item.done = item.done === 'true';
-    const store = id === 'port' ? 'ports' : id === 'day' ? 'days' : id;
+    const store = id === 'port' ? 'ports' : id;
     await put(store, item);
     if (id === 'route' && item.gpxId) selectedGpxId = item.gpxId;
     form.reset();
@@ -1570,6 +1873,10 @@ function editItem(kind, id) {
   if (!item || !map[kind]) return;
   const form = $(`#${map[kind]}Form`);
   fillForm(form, item);
+  if (kind === 'days') {
+    updateDayFormMode();
+    setDayFormStatus('Du bearbeitest einen vorhandenen Tagestour-Eintrag. Nach dem Speichern wird derselbe Eintrag aktualisiert.', 'info');
+  }
   view(map[kind] === 'port' ? 'ports' : map[kind]);
   form.scrollIntoView({ behavior: 'smooth' });
   toast('Eintrag zum Bearbeiten geöffnet');
@@ -1606,8 +1913,9 @@ function routeToDay(routeId) {
   form.elements.crew.value = getSettings().defaultCrew || '';
   form.elements.summary.value = [stage.berth ? `Geplanter Liegeplatz: ${stage.berth}` : '', stage.note || ''].filter(Boolean).join('\n\n');
   view('day');
+  setDayFormStatus('Die geplante Etappe wurde in das Formular übernommen. Ergänze die tatsächlichen Werte und tippe anschließend auf „Tagestour speichern“.', 'info');
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  toast('Etappe ins Tageslog übernommen');
+  toast('Etappe in die Tagestour übernommen');
 }
 
 window.showRouteGpx = showRouteGpx;
@@ -1618,6 +1926,16 @@ window.editItem = editItem;
 
 $('#daySearch').oninput = renderDays;
 $('#portSearch').oninput = renderPorts;
+$$('.field-help').forEach(button => button.addEventListener('click', () => openDayFieldHelp(button.dataset.help)));
+$('#dayRouteApply')?.addEventListener('click', () => {
+  const routeId = $('#dayRouteSource')?.value;
+  if (!routeId) return toast('Bitte zuerst eine geplante Etappe auswählen');
+  routeToDay(routeId);
+});
+$('#dayRouteSource')?.addEventListener('change', event => {
+  const button = $('#dayRouteApply');
+  if (button) button.disabled = !event.target.value;
+});
 
 function haversine(a, b) {
   const radius = 3440.065;
@@ -2522,7 +2840,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* =========================
-   LEEFKE VERSION 6.1
+   LEEFKE VERSION 6.4
    Feldweise Synchronisierung, Realtime, Medien-Cloud, Sicherungen,
    Konfliktauflösung, Bordbetrieb und Routenwetter
    ========================= */
@@ -2539,17 +2857,17 @@ const STORE_LABELS = {
   settings: 'Schiffsdaten', days: 'Tageslogbuch', route: 'Törnplanung', ports: 'Hafenbuch',
   fuel: 'Tankbuch', maintenance: 'Wartung', checklists: 'Checklisten', photos: 'Fotos',
   gpx: 'GPX-Routen', weather: 'Wetter', inventory: 'Vorräte', safety: 'Sicherheit',
-  documents: 'Dokumente', routeWeather: 'Routenwetter'
+  documents: 'Dokumente', routeWeather: 'Routenwetter', trips: 'Törne'
 };
 const FIELD_LABELS = {
   boatName: 'Schiffsname', homePort: 'Heimathafen', boatType: 'Bootstyp', model: 'Baureihe', buildYear: 'Baujahr',
   length: 'Länge', beam: 'Breite', draft: 'Tiefgang', navigationDraft: 'Planungstiefgang', airDraft: 'Durchfahrtshöhe', displacement: 'Verdrängung',
   engine: 'Motor', enginePower: 'Motorleistung', engineYear: 'Motoreinbaujahr', cruiseSpeed: 'Marschfahrt', tankCapacity: 'Tankinhalt', currentTankPercent: 'Tankstand', currentEngineHours: 'Motorstunden',
-  tripTitle: 'Törnname', tripStart: 'Törnstart', tripEnd: 'Törnende', defaultCrew: 'Crew',
+  tripTitle: 'Törnname', tripStart: 'Törnstart', tripEnd: 'Törnende', defaultCrew: 'Crew', title: 'Titel', startDate: 'Törnstart', endDate: 'Törnende', crew: 'Crew', notes: 'Beschreibung',
   title: 'Titel', date: 'Datum', from: 'Start', to: 'Ziel', fromPort: 'Start', toPort: 'Ziel', nm: 'Seemeilen', distance: 'Strecke',
   wind: 'Wind', wave: 'Welle', tide: 'Tide', weather: 'Wetter', note: 'Notiz', summary: 'Tagesbericht', moment: 'Moment des Tages',
   liters: 'Liter', price: 'Preis', tankPercent: 'Tankstand danach', engineHours: 'Motorstunden', dueDate: 'Fälligkeitsdatum', dueHours: 'Fällig bei Motorstunden',
-  rating: 'Gesamtbewertung', ratingFriendly: 'Freundlichkeit', ratingSanitary: 'Sanitär', ratingSupply: 'Versorgung', ratingValue: 'Preis-Leistung',
+  tripId: 'Törnzuordnung', rating: 'Gesamtbewertung', ratingFriendly: 'Freundlichkeit', ratingSanitary: 'Sanitär', ratingSupply: 'Versorgung', ratingValue: 'Preis-Leistung',
   quantity: 'Menge', minimum: 'Mindestbestand', status: 'Status', caption: 'Bildunterschrift', featured: 'Titelbild'
 };
 const BSH_STATIONS = {
@@ -3613,6 +3931,10 @@ function setupServiceWorkerUpdates(registration) {
 
 // Zusätzliche UI-Ereignisse. Sie werden nach dem vorhandenen v5-Code gesetzt und ersetzen dessen Medienhandler.
 window.addEventListener('load', () => {
+  $('#globalTripSelect')?.addEventListener('change', event => setActiveTrip(event.target.value));
+  $('#newTripButton')?.addEventListener('click', () => openTripDialog('new'));
+  $('#editTripButton')?.addEventListener('click', () => openTripDialog('edit', activeTripId));
+  $('#tripForm')?.addEventListener('submit', saveTripForm);
   $('#routeWeatherForm')?.addEventListener('submit', analyzeRouteWeather);
   $('#historyStoreFilter')?.addEventListener('change', renderHistory);
   $('#undoLastChangeButton')?.addEventListener('click', undoLastOwnChange);

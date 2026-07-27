@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v6-1-20260726';
-const RUNTIME_CACHE = 'leefke-runtime-v6-1';
+const APP_CACHE = 'leefke-v6-4-20260727';
+const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=6.1',
+  './index.html?v=6.4',
   './style.css',
-  './style.css?v=6.1',
+  './style.css?v=6.4',
   './app.js',
-  './app.js?v=6.1',
+  './app.js?v=6.4',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
