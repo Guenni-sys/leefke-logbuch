@@ -1,7 +1,8 @@
-const APP_VERSION = '6.14';
+const APP_VERSION = '7.0';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
+const HOLIDAY_MODE_KEY = 'leefke-holiday-mode';
 const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');
 if (MODE_QUERY === '1') localStorage.setItem(GUEST_MODE_KEY, '1');
 if (MODE_QUERY === '0') localStorage.removeItem(GUEST_MODE_KEY);
@@ -1209,6 +1210,55 @@ function setMobileMenu(open) {
   $('#mobileMoreButton')?.setAttribute('aria-expanded', String(shouldOpen));
 }
 
+
+function holidayModeEnabled() {
+  return localStorage.getItem(HOLIDAY_MODE_KEY) !== '0';
+}
+
+function applyHolidayMode(enabled = holidayModeEnabled()) {
+  const active = Boolean(enabled);
+  const changed = document.body.classList.contains('holiday-mode') !== active;
+  localStorage.setItem(HOLIDAY_MODE_KEY, active ? '1' : '0');
+  document.body.classList.toggle('holiday-mode', active);
+  const toggle = $('#holidayModeToggle');
+  if (toggle && toggle.checked !== active) toggle.checked = active;
+  const label = $('#holidayModeText');
+  if (label) label.textContent = active ? 'Aktiv' : 'Aus';
+  const group = $('#navMoreGroup');
+  if (group && changed) group.open = !active;
+}
+
+function updateConnectionBanner() {
+  const banner = $('#connectionBanner');
+  if (!banner) return;
+  banner.hidden = navigator.onLine;
+}
+
+async function updateVacationUi(context = {}) {
+  const lastSync = context.lastSync || await metaGet('lastSync');
+  const lastVacationBackup = await metaGet('lastVacationBackup');
+  const autoBackups = (state.autoBackups || []).slice().sort((a,b) => Date.parse(b.createdAt)-Date.parse(a.createdAt));
+  const latestBackupAt = lastVacationBackup?.at || autoBackups[0]?.createdAt || '';
+  const dirty = context.dirty ?? Boolean((await metaGet('dirty'))?.value);
+  const loggedIn = context.loggedIn ?? Boolean(currentSession?.user);
+  let syncText = 'Nur lokal gespeichert';
+  if (IS_GUEST_MODE) syncText = 'Gastmodus · nur auf diesem Gerät';
+  else if (!navigator.onLine) syncText = dirty ? 'Offline · Änderungen warten' : 'Offline · lokaler Stand verfügbar';
+  else if (loggedIn && dirty) syncText = 'Änderungen werden abgeglichen';
+  else if (loggedIn && lastSync?.at) syncText = `Synchronisiert · ${new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSync.at))}`;
+  else if (loggedIn) syncText = 'Cloud verbunden';
+  const syncElement = $('#holidaySyncText');
+  if (syncElement && syncElement.textContent !== syncText) syncElement.textContent = syncText;
+  const backupText = latestBackupAt
+    ? new Intl.DateTimeFormat('de-DE', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(latestBackupAt))
+    : 'Noch kein Export';
+  for (const selector of ['#holidayBackupText', '#backupPageStatus']) {
+    const element = $(selector);
+    if (element) element.textContent = selector === '#backupPageStatus' && latestBackupAt ? `Letzte Sicherung: ${backupText}` : backupText;
+  }
+  applyHolidayMode();
+}
+
 const MOBILE_SAVE_TARGETS = {
   day: ['dayForm', 'Tagestour speichern'],
   route: ['routeForm', 'Etappe speichern'],
@@ -1489,6 +1539,7 @@ async function refresh() {
   state.maintenance.sort((a, b) => String(b.date).localeCompare(String(a.date)));
   state.ports.sort((a, b) => String(b.date).localeCompare(String(a.date)));
   render();
+  await updateVacationUi();
 }
 
 function actionButtons(kind, id) {
@@ -3151,15 +3202,26 @@ $('#printReport').onclick = async () => {
   window.print();
 };
 
-$('#export').onclick = async () => {
-  const backup = { app: 'LEEFKE Bordbuch', version: APP_VERSION, exported: new Date().toISOString() };
+async function downloadFullBackup({ vacation = false } = {}) {
+  const now = new Date();
+  const reason = vacation ? 'Urlaubssicherung' : 'Manueller Export';
+  await createAutoBackup(reason, true);
+  const backup = { app: 'LEEFKE Bordbuch', version: APP_VERSION, exported: now.toISOString(), reason };
   for (const store of stores) backup[store] = await all(store);
   const link = document.createElement('a');
-  link.href = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: 'application/json' }));
-  link.download = `LEEFKE_Sicherung_${new Date().toISOString().slice(0, 10)}.json`;
+  const url = URL.createObjectURL(new Blob([JSON.stringify(backup)], { type: 'application/json' }));
+  link.href = url;
+  link.download = `${vacation ? 'LEEFKE_Urlaubssicherung' : 'LEEFKE_Sicherung'}_${now.toISOString().slice(0, 10)}.json`;
+  document.body.appendChild(link);
   link.click();
-  URL.revokeObjectURL(link.href);
-};
+  link.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  if (vacation) await metaSet('lastVacationBackup', { at: now.toISOString(), version: APP_VERSION });
+  await updateVacationUi();
+  toast(vacation ? 'Urlaubssicherung erstellt' : 'Sicherung exportiert');
+}
+
+$('#export').onclick = () => downloadFullBackup({ vacation: false });
 
 $('#import').onchange = async event => {
   const file = event.target.files[0];
@@ -3276,7 +3338,9 @@ $('#syncNowButton').onclick = async () => {
 $('#connectDeviceButton').onclick = () => connectDeviceAutomatically();
 
 async function onlineState() {
+  updateConnectionBanner();
   await updateSyncUI();
+  await updateVacationUi();
   if (navigator.onLine && currentSession) {
     if (await isLinkedForCurrentUser()) await syncNow({ silent: true, reason: 'online' });
     else await connectDeviceAutomatically({ silent: true });
@@ -3295,7 +3359,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* =========================
-   LEEFKE VERSION 6.4
+   LEEFKE VERSION 7.0
    Feldweise Synchronisierung, Realtime, Medien-Cloud, Sicherungen,
    Konfliktauflösung, Bordbetrieb und Routenwetter
    ========================= */
@@ -4138,8 +4202,9 @@ async function updateSyncUI() {
     detail = 'Lokale Änderungen werden im Hintergrund übertragen';
     className = 'sync-status attention';
   } else if (loggedIn) {
-    label = realtimeState === 'verbunden' ? 'Live verbunden' : 'Synchronisiert';
-    detail = realtimeState === 'verbunden' ? 'Änderungen anderer Geräte kommen automatisch an' : 'Alle Geräte arbeiten gleichberechtigt';
+    const lastSyncClock = lastSync?.at ? new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSync.at)) : '';
+    label = `Synchronisiert${lastSyncClock ? ` · ${lastSyncClock}` : ''}`;
+    detail = realtimeState === 'verbunden' ? 'Live verbunden · Änderungen anderer Geräte kommen automatisch an' : 'Alle Geräte arbeiten gleichberechtigt';
     className = 'sync-status synced';
   }
 
@@ -4151,6 +4216,7 @@ async function updateSyncUI() {
     setHidden(badge, conflicts.length === 0);
     setText(badge, String(conflicts.length));
   }
+  await updateVacationUi({ loggedIn, linked, dirty, lastSync, conflicts, tombstones });
 }
 
 function formatChangeValue(value) {
@@ -4915,6 +4981,11 @@ window.addEventListener('load', () => {
     await cleanupChecklistsV69({ force: true, notify: true });
     await refresh();
   });
+  $('#holidayModeToggle')?.addEventListener('change', event => applyHolidayMode(event.target.checked));
+  $('#holidayBackupButton')?.addEventListener('click', () => downloadFullBackup({ vacation: true }));
+  $('#holidayBackupButtonBackupPage')?.addEventListener('click', () => downloadFullBackup({ vacation: true }));
+  applyHolidayMode();
+  updateConnectionBanner();
   applyGuestModeUI();
 });
 

@@ -905,3 +905,35 @@ body{
 @media(display-mode:standalone){
   html,body{overscroll-behavior-y:auto}
 }
+
+/* ==========================================================================
+   LEEFKE 7.0 – stabile Urlaubsedition
+   ========================================================================== */
+.connection-banner{display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 14px;background:#fff4d6;color:#5d481f;border-bottom:1px solid rgba(154,111,35,.28);font-size:.84rem}
+.connection-banner[hidden]{display:none!important}.connection-banner>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#9a6f23;color:#fff;flex:0 0 auto}.connection-banner div{display:grid;gap:1px}.connection-banner small{color:#725d32}
+
+.nav-more-group{margin-top:6px;border-top:1px solid rgba(255,255,255,.12);padding-top:7px}
+.nav-more-group summary{cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;padding:9px 11px;color:rgba(255,255,255,.72);font-size:.7rem;font-weight:850;letter-spacing:.08em;text-transform:uppercase;border-radius:9px}
+.nav-more-group summary::-webkit-details-marker{display:none}.nav-more-group summary::after{content:'▾';transition:transform .18s ease}.nav-more-group[open] summary::after{transform:rotate(180deg)}
+.nav-more-group>div{display:grid;gap:3px;padding-top:3px}.nav-more-group button{width:100%}
+body.holiday-mode .nav-more-group:not([open]) summary{background:rgba(231,205,145,.1);color:#f0d99f}
+
+.holiday-console{margin:16px 0 18px;padding:17px}
+.holiday-console-head{display:flex;align-items:flex-start;justify-content:space-between;gap:18px}.holiday-console-head h3{margin:2px 0 5px}.holiday-console-head p{margin:0;color:var(--muted)}
+.holiday-mode-switch{display:flex;align-items:center;gap:9px;min-width:170px;padding:9px 11px;border:1px solid var(--line);border-radius:12px;background:#f8f4e9;cursor:pointer}.holiday-mode-switch input{width:20px;height:20px;margin:0}.holiday-mode-switch span{display:grid}.holiday-mode-switch strong{color:var(--navy-900)}.holiday-mode-switch small{color:var(--muted)}
+.holiday-quick-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;margin-top:15px}.holiday-quick-actions button{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto;column-gap:9px;align-items:center;text-align:left;min-height:68px;padding:11px 12px;border-radius:13px}.holiday-quick-actions button>span{grid-row:1/3;display:grid;place-items:center;width:34px;height:34px;border-radius:50%;background:rgba(8,31,48,.08);font-size:1.08rem}.holiday-quick-actions button.primary>span{background:rgba(255,255,255,.16)}.holiday-quick-actions strong{font-size:.9rem}.holiday-quick-actions small{font-size:.7rem;opacity:.75}
+.holiday-health{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;gap:9px;align-items:center;margin-top:10px;padding-top:10px;border-top:1px solid var(--line)}.holiday-health>div{display:grid;gap:2px}.holiday-health span{font-size:.65rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}.holiday-health strong{font-size:.82rem;color:var(--navy-900)}.holiday-health button{white-space:nowrap}
+body.holiday-mode .holiday-console{border-color:rgba(154,111,35,.38);box-shadow:0 11px 30px rgba(5,31,44,.12)}
+body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,111,35,.4)}
+
+@media(max-width:1050px){.holiday-quick-actions{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:850px){
+  .connection-banner{justify-content:flex-start;padding:8px 11px}.connection-banner small{font-size:.72rem}
+  .holiday-console{padding:13px;margin:11px 0 14px}.holiday-console-head{align-items:stretch;flex-direction:column}.holiday-mode-switch{min-width:0;width:100%;box-sizing:border-box}.holiday-quick-actions{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-top:11px}.holiday-quick-actions button{min-height:62px;padding:9px}.holiday-health{grid-template-columns:1fr 1fr}.holiday-health button{grid-column:1/-1;width:100%}
+  #nav .nav-more-group summary{min-height:42px}
+}
+@media(max-width:430px){
+  .holiday-quick-actions{grid-template-columns:1fr}.holiday-quick-actions button{min-height:58px}.holiday-health{grid-template-columns:1fr}.holiday-health button{grid-column:1}.holiday-console-head p{font-size:.78rem}
+}
+@media(min-width:651px){.sync-status{width:180px;min-width:180px}}
+@media(min-width:561px) and (max-width:650px){.sync-status{width:148px;min-width:148px;max-width:148px}}

@@ -1,0 +1,45 @@
+LEEFKE 7.0 – TEST VOR DEM URLAUB
+
+Diesen Test auf iPhone, Android, iPad und Windows durchführen.
+
+1. START UND BEDIENUNG
+[ ] App öffnet ohne Fehlermeldung
+[ ] Anker oben links führt zur Startseite
+[ ] Seite lässt sich vollständig scrollen
+[ ] Menü und untere Navigation funktionieren
+[ ] Urlaubsmodus lässt sich ein- und ausschalten
+
+2. TAGESSLOGBUCH
+[ ] Test-Tagestour mit Datum, Start und Ziel speichern
+[ ] Gespeicherter Eintrag erscheint sofort unter den Tagestouren
+[ ] Eintrag kann bearbeitet und wieder gelöscht werden
+
+3. SYNCHRONISIERUNG
+[ ] Eintrag auf Gerät A erscheint auf Gerät B
+[ ] Änderung auf Gerät B erscheint auf Gerät A
+[ ] Offline einen Testeintrag anlegen
+[ ] Internet wieder einschalten; Eintrag wird später übertragen
+[ ] Oben bzw. auf der Startseite steht „Synchronisiert“ mit Uhrzeit
+
+4. WETTER UND KARTE
+[ ] Wetter für Bremerhaven laden
+[ ] Wetter bei fehlender Verbindung blockiert die übrige App nicht
+[ ] GPX-Route und Seekarte öffnen
+[ ] Karte lässt sich verschieben und zoomen
+
+5. HAFEN UND GPS
+[ ] Hafen manuell speichern
+[ ] GPS-Hafenvorschlag testen und Standortfreigabe prüfen
+[ ] Sternebewertung speichern
+
+6. SICHERUNG
+[ ] „Urlaubssicherung erstellen“ drücken
+[ ] JSON-Datei wird heruntergeladen bzw. gespeichert
+[ ] Letztes Sicherungsdatum wird angezeigt
+[ ] Datei zusätzlich auf Laptop oder USB-Stick ablegen
+
+7. ABSCHLUSS
+[ ] Auf allen Geräten Version 7.0 sichtbar
+[ ] Keine offenen Konflikte im Änderungsverlauf
+[ ] Aktueller Urlaubstörn ist ausgewählt
+[ ] Richtige Bootsdaten: 11,50 m, 400 l, bevorzugt 6,5 kn

@@ -1,0 +1,13 @@
+LEEFKE Version 7.0 – Urlaubsedition
+
+- Funktionsstopp: keine neue Datenbankstruktur
+- vier große Schnellzugriffe für Tagestour, Wetter, Seekarte und Hafen
+- optionaler Urlaubsmodus mit kompakter Navigation
+- technische Bereiche bleiben unter „Weitere Bereiche“ erreichbar
+- klare Synchronisierungsanzeige mit Uhrzeit des letzten Abgleichs
+- deutlicher Offline-Hinweis; Eingaben bleiben lokal möglich
+- „Urlaubssicherung erstellen“ auf Startseite und Sicherungsseite
+- zusätzlicher lokaler Wiederherstellungspunkt vor dem Sicherungsdownload
+- tägliche automatische Sicherung bleibt aktiv
+- mobile Navigation zeigt „Karte“ statt des technischeren Begriffs „Törn“
+- bestehende Android-Scrollkorrektur bleibt erhalten

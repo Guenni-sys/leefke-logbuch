@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=6.14">
+  <link rel="stylesheet" href="style.css?v=7.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -24,11 +24,15 @@
     <div><span class="guest-banner-icon">⚓</span><div><strong>LEEFKE-Gastmodus</strong><span>Du arbeitest in einer getrennten Demo. Echte Bordbuchdaten und die Cloud bleiben unberührt.</span></div></div>
     <div class="actions"><button id="resetGuestTopButton" type="button">Demo zurücksetzen</button><button id="exitGuestTopButton" class="primary" type="button">Gastmodus verlassen</button></div>
   </div>
+  <div id="connectionBanner" class="connection-banner no-print" hidden>
+    <span aria-hidden="true">⌁</span>
+    <div><strong>Offlinebetrieb</strong><small>Einträge werden sicher auf diesem Gerät gespeichert. Der Cloud-Abgleich folgt automatisch, sobald wieder Internet vorhanden ist.</small></div>
+  </div>
   <header class="topbar">
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 6.14</small>
+        <small>BORDTAGEBUCH · URLAUBSEDITION 7.0</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -44,19 +48,24 @@
       <div class="nav-title">LEEFKE</div>
       <button data-view="home" class="active"><span>⌂</span> Übersicht</button>
       <button data-view="day"><span>✎</span> Tageslogbuch</button>
-      <button data-view="route"><span>↝</span> Törnzentrale</button>
       <button data-view="weather"><span>☀</span> Wetter & Gezeiten</button>
+      <button data-view="route"><span>↝</span> Törn & Seekarte</button>
       <button data-view="ports"><span>⚓</span> Hafenbuch</button>
       <button data-view="fuel"><span>⛽</span> Tank & Verbrauch</button>
-      <button data-view="maintenance"><span>⚙</span> Wartung</button>
-      <button data-view="operations"><span>🧰</span> Bordbetrieb</button>
-      <button data-view="checklists"><span>✓</span> Checklisten</button>
-      <button data-view="photos"><span>▦</span> Galerie</button>
-      <button data-view="report"><span>▤</span> Reisebericht</button>
-      <button data-view="settings"><span>♜</span> Schiffspass</button>
-      <button data-view="sync"><span>☁</span> Konto & Sync</button>
-      <button data-view="history"><span>⟲</span> Verlauf & Konflikte <b id="conflictNavBadge" class="nav-badge" hidden>0</b></button>
-      <button data-view="backup"><span>⇩</span> Sicherung</button>
+      <details id="navMoreGroup" class="nav-more-group" open>
+        <summary>Weitere Bereiche</summary>
+        <div>
+          <button data-view="maintenance"><span>⚙</span> Wartung</button>
+          <button data-view="operations"><span>🧰</span> Bordbetrieb</button>
+          <button data-view="checklists"><span>✓</span> Checklisten</button>
+          <button data-view="photos"><span>▦</span> Galerie</button>
+          <button data-view="report"><span>▤</span> Reisebericht</button>
+          <button data-view="settings"><span>♜</span> Schiffspass</button>
+          <button data-view="sync"><span>☁</span> Konto & Sync</button>
+          <button data-view="history"><span>⟲</span> Verlauf & Konflikte <b id="conflictNavBadge" class="nav-badge" hidden>0</b></button>
+          <button data-view="backup"><span>⇩</span> Sicherung</button>
+        </div>
+      </details>
       <div class="nav-footer">Stahl · Spitzgatt · 1996</div>
     </nav>
 
@@ -89,6 +98,28 @@
               <button class="primary" data-open="day">Neuen Tag eintragen</button>
               <button data-open="route">Etappe planen</button>
             </div>
+          </div>
+        </section>
+
+        <section class="holiday-console card no-print" aria-label="Urlaubsmodus und Schnellzugriff">
+          <div class="holiday-console-head">
+            <div>
+              <div class="card-kicker">URLAUBSEDITION</div>
+              <h3>Schnell an Bord erfassen</h3>
+              <p>Die vier wichtigsten Bereiche für unterwegs – alles Weitere bleibt über „Mehr“ erreichbar.</p>
+            </div>
+            <label class="holiday-mode-switch"><input id="holidayModeToggle" type="checkbox"><span><strong>Urlaubsmodus</strong><small id="holidayModeText">Aus</small></span></label>
+          </div>
+          <div class="holiday-quick-actions">
+            <button class="primary" data-open="day"><span>✎</span><strong>Tagestour</strong><small>Fahrt eintragen</small></button>
+            <button data-open="weather"><span>☀</span><strong>Wetter & Gezeiten</strong><small>Vorhersage prüfen</small></button>
+            <button data-open="route"><span>↝</span><strong>Törn & Seekarte</strong><small>Route ansehen</small></button>
+            <button data-open="ports"><span>⚓</span><strong>Hafen</strong><small>Liegeplatz erfassen</small></button>
+          </div>
+          <div class="holiday-health">
+            <div><span>Cloud</span><strong id="holidaySyncText">Status wird geprüft …</strong></div>
+            <div><span>Letzte Sicherung</span><strong id="holidayBackupText">Noch kein Export</strong></div>
+            <button id="holidayBackupButton" type="button">Urlaubssicherung erstellen</button>
           </div>
         </section>
 
@@ -670,7 +701,7 @@
 
       <section id="backup" class="view">
         <div class="title"><small>DATENSICHERUNG</small><h2>Das Bordbuch zusätzlich sichern</h2><p>Die Cloud-Synchronisierung ersetzt keine eigene Sicherungsdatei. Ein Export ist vor größeren Änderungen weiterhin sinnvoll.</p></div>
-        <article class="card"><h3>Vollständige Sicherung</h3><p>Alle Einträge, Schiffsdaten, GPX-Routen, Bewertungen und Fotos werden in einer Datei gesichert.</p><button id="export" class="primary">Sicherung exportieren</button></article>
+        <article class="card"><div class="card-kicker">URLAUBSSICHERUNG</div><h3>Vollständige Sicherung</h3><p>Alle Einträge, Schiffsdaten, GPX-Routen, Bewertungen und Fotos werden in einer Datei gesichert. Vor dem Download entsteht zusätzlich ein lokaler Wiederherstellungspunkt.</p><div class="actions"><button id="holidayBackupButtonBackupPage" class="primary" type="button">Urlaubssicherung erstellen</button><button id="export" type="button">Normale Sicherung exportieren</button></div><p id="backupPageStatus" class="meta">Noch keine Urlaubssicherung erstellt.</p></article>
         <article class="card"><h3>Wiederherstellen</h3><input id="import" type="file" accept="application/json,.json"></article>
         <article class="card"><div class="backup-heading"><div><div class="card-kicker">AUTOMATISCHE SICHERUNGSPUNKTE</div><h3>Vor Abgleich und Updates</h3><p class="meta">Die App legt täglich sowie vor größeren Synchronisierungen und Aktualisierungen lokale Sicherungspunkte an. Die neuesten fünf bleiben erhalten.</p></div><button id="createAutoBackupButton" type="button">Jetzt Sicherungspunkt anlegen</button></div><div id="autoBackupList" class="backup-list"></div></article>
         <article class="card warning"><strong>Wichtig:</strong> Cloud-Synchronisierung und automatische Sicherungspunkte ergänzen sich, ersetzen aber keinen gelegentlichen JSON-Export auf einen unabhängigen Datenträger.</article>
@@ -688,7 +719,7 @@
   <div class="mobile-tabbar no-print" role="navigation" aria-label="Schnellnavigation">
     <button type="button" data-mobile-view="home" class="active" aria-label="Übersicht"><span>⌂</span><small>Start</small></button>
     <button type="button" data-mobile-view="day" aria-label="Tageslogbuch"><span>✎</span><small>Logbuch</small></button>
-    <button type="button" data-mobile-view="route" aria-label="Törnzentrale"><span>↝</span><small>Törn</small></button>
+    <button type="button" data-mobile-view="route" aria-label="Törn und Seekarte"><span>↝</span><small>Karte</small></button>
     <button type="button" data-mobile-view="weather" aria-label="Wetter und Gezeiten"><span>☀</span><small>Wetter</small></button>
     <button id="mobileMoreButton" type="button" aria-label="Weitere Bereiche öffnen" aria-expanded="false"><span>☰</span><small>Mehr</small></button>
   </div>
@@ -722,6 +753,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=6.14"></script>
+  <script src="app.js?v=7.0"></script>
 </body>
 </html>
