@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=7.2">
+  <link rel="stylesheet" href="style.css?v=7.3">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -32,7 +32,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · URLAUBSEDITION 7.2</small>
+        <small>BORDTAGEBUCH · URLAUBSEDITION 7.3</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -504,10 +504,22 @@
       <section id="fuel" class="view">
         <div class="title"><small>TANKBUCH</small><h2>Diesel & Verbrauch</h2><p>Tankvorgänge und Verbrauchswerte der LEEFKE mit 400-Liter-Tank.</p></div>
         <div class="stats compact"><article><span>Getankt</span><strong id="fuelLiters">0 l</strong></article><article><span>Kosten</span><strong id="fuelCost">0 €</strong></article><article><span>Ø Preis</span><strong id="fuelPrice">—</strong></article><article><span>Liter/Motorstunde</span><strong id="fuelPerHour">—</strong></article></div>
-        <form id="fuelForm" class="card form">
-          <input type="hidden" name="id"><label>Datum<input required type="date" name="date"></label><label>Ort<input name="place"></label><label>Liter<input type="number" step="0.1" name="liters"></label><label>Preis/Liter (€)<input type="number" step="0.001" name="price"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Tankstand danach (%)<input type="number" min="0" max="100" name="tankPercent"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Ins Tankbuch eintragen</button><button type="reset">Leeren</button></div>
+        <form id="fuelForm" class="card form fuel-form" novalidate>
+          <input type="hidden" name="id">
+          <div class="wide section-heading"><span>⛽</span><div><small>TANKVORGANG</small><h3 id="fuelFormTitle">Tanken dokumentieren</h3></div></div>
+          <label>Datum<input required type="date" name="date"></label>
+          <label>Uhrzeit<input type="time" name="time"></label>
+          <label class="wide">Ort / Tankstelle<input name="place" autocomplete="off" placeholder="z. B. Bootstankstelle Bremerhaven"></label>
+          <label>Getankte Liter<input type="text" inputmode="decimal" name="liters" autocomplete="off" placeholder="z. B. 120,5"><small>Komma oder Punkt möglich</small></label>
+          <label>Preis je Liter (€)<input type="text" inputmode="decimal" name="price" autocomplete="off" placeholder="z. B. 1,699"><small>Der Gesamtpreis wird automatisch berechnet</small></label>
+          <label>Motorstunden beim Tanken<input type="text" inputmode="decimal" name="engineHours" autocomplete="off" placeholder="z. B. 954,3"></label>
+          <label>Tankstand danach (%)<input type="text" inputmode="decimal" name="tankPercent" autocomplete="off" placeholder="0 bis 100"></label>
+          <label class="wide">Notiz<textarea rows="3" name="note" placeholder="z. B. vollgetankt, Additiv ergänzt …"></textarea></label>
+          <div id="fuelFormStatus" class="form-status wide" hidden></div>
+          <div class="wide actions fuel-form-actions"><button id="fuelSaveButton" class="primary">Tankvorgang speichern</button><button id="fuelCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="reset">Leeren</button></div>
         </form>
-        <div id="fuelList" class="stack"></div>
+        <article class="card fuel-saved-heading"><div><div class="card-kicker">GESPEICHERT</div><h3>Tankvorgänge</h3><p class="meta">Hier siehst du Datum, Uhrzeit, Liter, Preis, Motorstunden und Tankstand. Jeder Eintrag kann später wieder bearbeitet werden.</p></div></article>
+        <div id="fuelList" class="stack fuel-list"></div>
       </section>
 
       <section id="maintenance" class="view">
@@ -765,6 +777,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=7.2"></script>
+  <script src="app.js?v=7.3"></script>
 </body>
 </html>

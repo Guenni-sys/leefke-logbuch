@@ -907,7 +907,7 @@ body{
 }
 
 /* ==========================================================================
-   LEEFKE 7.2 – Tagestouren sauber ansehen, bearbeiten und ausrichten
+   LEEFKE 7.3 – Tankbuch zuverlässig speichern und klar darstellen
    ========================================================================== */
 .connection-banner{display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 14px;background:#fff4d6;color:#5d481f;border-bottom:1px solid rgba(154,111,35,.28);font-size:.84rem}
 .connection-banner[hidden]{display:none!important}.connection-banner>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#9a6f23;color:#fff;flex:0 0 auto}.connection-banner div{display:grid;gap:1px}.connection-banner small{color:#725d32}
@@ -1033,4 +1033,33 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
   .day-view-facts>div{min-height:0}
   .day-view-dialog .dialog-actions{grid-template-columns:1fr}
   .day-view-dialog .dialog-actions>form{width:100%}
+}
+
+
+/* LEEFKE 7.3 – Tankbuch: locale-sichere Eingaben und saubere Darstellung */
+.fuel-form label small{display:block;margin-top:5px;color:var(--muted);font-size:.72rem;font-weight:600}
+.fuel-form-actions{align-items:center}
+.fuel-saved-heading{margin-top:18px;margin-bottom:10px;padding-top:15px;padding-bottom:15px}
+.fuel-saved-heading h3{margin:2px 0 4px}
+.fuel-entry{position:relative;padding:18px;display:grid;gap:14px}
+.fuel-entry-head{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.fuel-entry-head h3{margin:3px 0 4px;overflow-wrap:anywhere}
+.fuel-entry-head p{margin:0;color:var(--muted);font-size:.86rem}
+.fuel-entry-kicker{font-size:.65rem;font-weight:850;letter-spacing:.14em;color:var(--brass-dark)}
+.fuel-entry-total{white-space:nowrap;background:var(--navy-900);color:var(--brass-light);border-radius:999px;padding:8px 12px;font-size:.9rem}
+.fuel-entry-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.fuel-entry-grid>div{min-width:0;padding:11px;border-radius:11px;background:#f4f1e9;border:1px solid rgba(117,75,47,.12)}
+.fuel-entry-grid span{display:block;color:var(--muted);font-size:.72rem;margin-bottom:4px}
+.fuel-entry-grid strong{display:block;color:var(--navy-900);overflow-wrap:anywhere}
+.fuel-entry-note{margin:0;padding:11px 13px;border-left:3px solid var(--brass);background:#fbfaf7;border-radius:0 10px 10px 0}
+.fuel-entry-actions{display:flex;justify-content:flex-end;gap:8px;padding-top:2px}
+.fuel-entry-actions .delete{position:static;inset:auto}
+@media(max-width:850px){.fuel-entry-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:560px){
+  .fuel-entry{padding:14px}
+  .fuel-entry-head{flex-direction:column;gap:9px}
+  .fuel-entry-total{align-self:flex-start}
+  .fuel-entry-grid{grid-template-columns:1fr 1fr}
+  .fuel-entry-actions{display:grid;grid-template-columns:1fr 1fr}
+  .fuel-entry-actions button{width:100%}
 }

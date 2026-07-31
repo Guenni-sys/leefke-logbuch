@@ -1,0 +1,8 @@
+LEEFKE Urlaubsedition 7.3 – Tankbuch-Korrektur
+
+- Zahlen mit deutschem Komma werden auf Android, iPhone, iPad und Windows zuverlässig gespeichert.
+- Datum und optionale Uhrzeit des Tankvorgangs sind klar sichtbar.
+- Liter, Literpreis, Gesamtkosten, Motorstunden und Tankstand werden vollständig angezeigt.
+- eigener, abgesicherter Speichervorgang mit verständlicher Bestätigung oder Fehlermeldung.
+- Bearbeiten lädt den vollständigen Datensatz aus der lokalen Datenbank.
+- bestehende Tankbucheinträge bleiben erhalten.

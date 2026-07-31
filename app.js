@@ -1,4 +1,4 @@
-const APP_VERSION = '7.2';
+const APP_VERSION = '7.3';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1753,6 +1753,11 @@ function renderDays() {
   }).join('') || '<div class="card muted">Keine passenden Tagestouren gefunden.</div>';
 }
 
+function formatFuelDecimal(value, digits = 1) {
+  if (value === '' || value === null || value === undefined || !Number.isFinite(Number(value))) return '—';
+  return Number(value).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: digits });
+}
+
 function renderFuel(totalHours) {
   const liters = state.fuel.reduce((sum, item) => sum + num(item.liters), 0);
   const cost = state.fuel.reduce((sum, item) => sum + num(item.liters) * num(item.price), 0);
@@ -1760,10 +1765,26 @@ function renderFuel(totalHours) {
   $('#fuelCost').textContent = eur(cost);
   $('#fuelPrice').textContent = liters ? `${eur(cost / liters)}/l` : '—';
   $('#fuelPerHour').textContent = totalHours ? `${dec(liters / totalHours)} l/h` : '—';
-  $('#fuelList').innerHTML = state.fuel.map(item => card(item, 'fuel', `
-    <h3>${esc(item.place || 'Tankvorgang')}</h3>
-    <div class="meta">${fmtDate(item.date)} · ${dec(item.liters)} l · ${eur(num(item.price))}/l · ${eur(num(item.liters) * num(item.price))}${item.tankPercent !== '' && item.tankPercent !== undefined ? ` · Tank ${esc(item.tankPercent)} %` : ''}</div>
-    <p>${esc(item.note || '')}</p>`)).join('') || '<div class="card muted">Noch keine Tankvorgänge eingetragen.</div>';
+  $('#fuelList').innerHTML = state.fuel.map(item => {
+    const itemLiters = num(item.liters);
+    const itemPrice = num(item.price);
+    const total = itemLiters * itemPrice;
+    const when = `${fmtDate(item.date)}${item.time ? ` · ${esc(item.time)} Uhr` : ''}`;
+    return `<article class="item fuel-entry" data-store="fuel" data-record-id="${esc(item.id)}">
+      <header class="fuel-entry-head">
+        <div><span class="fuel-entry-kicker">TANKVORGANG</span><h3>${esc(item.place || 'Ort nicht eingetragen')}</h3><p>${when}</p></div>
+        <strong class="fuel-entry-total">${itemLiters && itemPrice ? eur(total) : '—'}</strong>
+      </header>
+      <div class="fuel-entry-grid">
+        <div><span>Getankt</span><strong>${item.liters !== '' && item.liters !== undefined ? `${formatFuelDecimal(item.liters)} l` : '—'}</strong></div>
+        <div><span>Preis je Liter</span><strong>${item.price !== '' && item.price !== undefined ? `${formatFuelDecimal(item.price, 3)} €` : '—'}</strong></div>
+        <div><span>Motorstunden</span><strong>${item.engineHours !== '' && item.engineHours !== undefined ? `${formatFuelDecimal(item.engineHours)} h` : '—'}</strong></div>
+        <div><span>Tankstand danach</span><strong>${item.tankPercent !== '' && item.tankPercent !== undefined ? `${formatFuelDecimal(item.tankPercent)} %` : '—'}</strong></div>
+      </div>
+      ${item.note ? `<p class="fuel-entry-note">${esc(item.note).replace(/\n/g, '<br>')}</p>` : ''}
+      <div class="fuel-entry-actions"><button type="button" onclick="editItem('fuel','${item.id}')">Bearbeiten</button><button class="delete" type="button" onclick="removeItem('fuel','${item.id}')">Löschen</button></div>
+    </article>`;
+  }).join('') || '<div class="card muted">Noch keine Tankvorgänge eingetragen.</div>';
 }
 
 function renderMaintenance() {
@@ -2272,7 +2293,117 @@ if (dayForm) {
   });
 }
 
-for (const id of ['fuel', 'maintenance', 'route', 'port']) {
+
+function parseFuelDecimal(value) {
+  const raw = String(value ?? '').trim();
+  if (!raw) return '';
+  const normalized = raw.replace(/\s/g, '').replace(',', '.');
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : NaN;
+}
+
+function setFuelFormStatus(message = '', type = 'info') {
+  const box = $('#fuelFormStatus');
+  if (!box) return;
+  box.hidden = !message;
+  box.className = `form-status wide ${type}`;
+  box.textContent = message;
+}
+
+function updateFuelFormMode(editing = false) {
+  const title = $('#fuelFormTitle');
+  const save = $('#fuelSaveButton');
+  const cancel = $('#fuelCancelEditButton');
+  if (title) title.textContent = editing ? 'Tankvorgang bearbeiten' : 'Tanken dokumentieren';
+  if (save) save.textContent = editing ? 'Änderungen speichern' : 'Tankvorgang speichern';
+  if (cancel) cancel.hidden = !editing;
+}
+
+const fuelForm = $('#fuelForm');
+if (fuelForm) {
+  fuelForm.onsubmit = async event => {
+    event.preventDefault();
+    setFuelFormStatus();
+    const saveButton = $('#fuelSaveButton');
+    if (!fuelForm.elements.date.value) {
+      setFuelFormStatus('Bitte trage das Datum des Tankvorgangs ein.', 'error');
+      fuelForm.elements.date.focus();
+      return;
+    }
+    const raw = formObject(fuelForm);
+    const liters = parseFuelDecimal(raw.liters);
+    const price = parseFuelDecimal(raw.price);
+    const engineHours = parseFuelDecimal(raw.engineHours);
+    const tankPercent = parseFuelDecimal(raw.tankPercent);
+    if ([liters, price, engineHours, tankPercent].some(value => Number.isNaN(value))) {
+      setFuelFormStatus('Eine Zahl konnte nicht gelesen werden. Du kannst Komma oder Punkt verwenden, zum Beispiel 120,5 oder 1,699.', 'error');
+      return;
+    }
+    if (liters !== '' && liters <= 0) {
+      setFuelFormStatus('Die getankte Literzahl muss größer als 0 sein.', 'error');
+      fuelForm.elements.liters.focus();
+      return;
+    }
+    if (price !== '' && price < 0) {
+      setFuelFormStatus('Der Preis je Liter darf nicht negativ sein.', 'error');
+      fuelForm.elements.price.focus();
+      return;
+    }
+    if (tankPercent !== '' && (tankPercent < 0 || tankPercent > 100)) {
+      setFuelFormStatus('Der Tankstand muss zwischen 0 und 100 Prozent liegen.', 'error');
+      fuelForm.elements.tankPercent.focus();
+      return;
+    }
+    saveButton.disabled = true;
+    saveButton.textContent = 'Wird gespeichert …';
+    try {
+      const existing = raw.id ? await getOne('fuel', raw.id) : null;
+      const saved = await put('fuel', {
+        ...(existing || {}),
+        id: raw.id || uid(),
+        date: raw.date,
+        time: raw.time || '',
+        place: String(raw.place || '').trim(),
+        liters,
+        price,
+        engineHours,
+        tankPercent,
+        note: String(raw.note || '').trim(),
+        created: existing?.created || Date.now()
+      });
+      fuelForm.reset();
+      updateFuelFormMode(false);
+      await refresh();
+      setFuelFormStatus(`Tankvorgang vom ${fmtDate(saved.date)}${saved.time ? ` um ${saved.time} Uhr` : ''} wurde vollständig gespeichert.`, 'success');
+      toast('Tankvorgang gespeichert');
+      window.setTimeout(() => {
+        const card = document.querySelector(`[data-store="fuel"][data-record-id="${saved.id}"]`);
+        card?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        card?.classList.add('just-saved');
+        window.setTimeout(() => card?.classList.remove('just-saved'), 2500);
+      }, 150);
+    } catch (error) {
+      console.error('Tankvorgang konnte nicht gespeichert werden.', error);
+      setFuelFormStatus(`Speichern fehlgeschlagen: ${error?.message || 'Unbekannter Fehler'}. Die Eingaben bleiben erhalten.`, 'error');
+      toast('Tankvorgang konnte nicht gespeichert werden');
+    } finally {
+      saveButton.disabled = false;
+      const editing = Boolean(fuelForm.elements.id.value);
+      updateFuelFormMode(editing);
+    }
+  };
+  fuelForm.addEventListener('reset', () => window.setTimeout(() => {
+    updateFuelFormMode(false);
+    setFuelFormStatus();
+  }, 0));
+  $('#fuelCancelEditButton')?.addEventListener('click', () => {
+    fuelForm.reset();
+    updateFuelFormMode(false);
+    setFuelFormStatus('Bearbeiten beendet. Der gespeicherte Tankvorgang wurde nicht verändert.', 'info');
+  });
+}
+
+for (const id of ['maintenance', 'route', 'port']) {
   const form = $(`#${id}Form`);
   form.onsubmit = async event => {
     event.preventDefault();
@@ -2458,15 +2589,20 @@ async function openSavedDay(id) {
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else alert(content.textContent);
 }
-function editItem(kind, id) {
+async function editItem(kind, id) {
   if (kind === 'days') { editDayItem(id); return; }
-  const item = state[kind].find(entry => entry.id === id);
   const map = { ports: 'port', fuel: 'fuel', maintenance: 'maintenance', route: 'route' };
-  if (!item || !map[kind]) return;
+  if (!map[kind]) return;
+  const item = await getOne(kind, id) || state[kind]?.find(entry => entry.id === id);
+  if (!item) return toast('Der Eintrag konnte nicht geladen werden');
   const form = $(`#${map[kind]}Form`);
   view(map[kind] === 'port' ? 'ports' : map[kind]);
   fillForm(form, item);
-  form.scrollIntoView({ behavior: 'smooth' });
+  if (kind === 'fuel') {
+    updateFuelFormMode(true);
+    setFuelFormStatus('Der Tankvorgang ist vollständig geladen. Änderungen werden erst mit „Änderungen speichern“ übernommen.', 'info');
+  }
+  form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   toast('Eintrag zum Bearbeiten geöffnet');
 }
 
@@ -3480,7 +3616,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* =========================
-   LEEFKE VERSION 7.2
+   LEEFKE VERSION 7.3
    Feldweise Synchronisierung, Realtime, Medien-Cloud, Sicherungen,
    Konfliktauflösung, Bordbetrieb und Routenwetter
    ========================= */
