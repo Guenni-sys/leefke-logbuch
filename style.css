@@ -907,7 +907,7 @@ body{
 }
 
 /* ==========================================================================
-   LEEFKE 7.1 – Tagestouren sicher öffnen und bearbeiten
+   LEEFKE 7.2 – Tagestouren sauber ansehen, bearbeiten und ausrichten
    ========================================================================== */
 .connection-banner{display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 14px;background:#fff4d6;color:#5d481f;border-bottom:1px solid rgba(154,111,35,.28);font-size:.84rem}
 .connection-banner[hidden]{display:none!important}.connection-banner>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#9a6f23;color:#fff;flex:0 0 auto}.connection-banner div{display:grid;gap:1px}.connection-banner small{color:#725d32}
@@ -938,7 +938,7 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
 @media(min-width:651px){.sync-status{width:180px;min-width:180px}}
 @media(min-width:561px) and (max-width:650px){.sync-status{width:148px;min-width:148px;max-width:148px}}
 
-/* LEEFKE 7.1 – gespeicherte Tagestouren klar öffnen und verlustfrei bearbeiten */
+/* LEEFKE 7.2 – gespeicherte Tagestouren klar öffnen und verlustfrei bearbeiten */
 .day-card-open{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
 .day-card-open button{background:#f4f8f8;border-color:#b9cbd1;color:var(--navy-800)}
 .day-view-dialog{width:min(760px,calc(100% - 24px));max-height:min(88vh,820px);padding:0;border:0;border-radius:18px;box-shadow:0 28px 80px rgba(0,0,0,.32);color:var(--ink)}
@@ -952,3 +952,85 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
 .day-view-facts strong{display:block;color:var(--navy-900);overflow-wrap:anywhere}
 #savedDaysSection,#dayForm{scroll-margin-top:92px}
 @media(max-width:560px){.day-view-dialog-inner{padding:18px 15px}.day-view-facts{grid-template-columns:1fr}.day-view-dialog h3{font-size:1.4rem}.day-route-copy #showSavedDaysButton{width:100%}}
+
+
+/* ==========================================================================
+   LEEFKE 7.2 – Monk-Modus für Tagestouren: sauber ausgerichtete Felder
+   ========================================================================== */
+.day-route-copy{grid-template-columns:minmax(0,1fr)!important;align-items:stretch}
+.day-route-select{min-width:0}
+.day-route-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+.day-route-actions button{width:100%;min-width:0;white-space:normal;line-height:1.25}
+
+#dayForm.day-form{align-items:start}
+#dayForm.day-form label{min-width:0}
+#dayForm.day-form input,
+#dayForm.day-form select,
+#dayForm.day-form textarea{width:100%;min-width:0;max-width:100%;box-sizing:border-box}
+#dayForm.day-form .actions{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+#dayForm.day-form .actions button{min-width:170px}
+#daySearch{width:100%;max-width:none}
+
+.day-entry-card{padding:17px!important;display:grid;gap:12px;min-width:0}
+.day-entry-card>.edit,.day-entry-card>.delete{position:static!important}
+.day-entry-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;min-width:0}
+.day-entry-heading>div{min-width:0}
+.day-entry-heading h3{overflow-wrap:anywhere;margin-bottom:0}
+.day-distance{flex:0 0 auto;padding:6px 9px;border-radius:999px;background:var(--navy-900);color:var(--brass-light);font-size:.8rem;white-space:nowrap}
+.day-entry-overview{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+.day-entry-overview>div{min-width:0;padding:9px 10px;border:1px solid var(--line);border-radius:10px;background:#fbfaf6}
+.day-entry-overview span{display:block;margin-bottom:3px;color:var(--muted);font-size:.67rem;font-weight:800;letter-spacing:.055em;text-transform:uppercase}
+.day-entry-overview strong{display:block;color:var(--navy-900);font-size:.84rem;line-height:1.35;overflow-wrap:anywhere}
+.day-summary-preview{margin:0;overflow-wrap:anywhere}
+.day-entry-actions{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(110px,.7fr) minmax(95px,.55fr);gap:8px;padding-top:11px;border-top:1px solid var(--line)}
+.day-entry-actions button{position:static!important;width:100%;min-width:0;margin:0;white-space:normal}
+.day-open-button{background:#f4f8f8;border-color:#b9cbd1;color:var(--navy-800)}
+
+.day-view-dialog{width:min(880px,calc(100% - 24px))}
+.day-view-dialog-inner{padding:25px;overflow-x:hidden}
+.day-view-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;padding-right:36px}
+.day-view-header>div{min-width:0}
+.day-view-header h3{margin-right:0;overflow-wrap:anywhere}
+.day-view-distance{flex:0 0 auto;margin-top:6px;padding:7px 11px;border-radius:999px;background:var(--navy-900);color:var(--brass-light);font-size:.82rem;white-space:nowrap}
+.day-view-section{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.day-view-section-title{display:flex;align-items:center;gap:10px;margin-bottom:10px}
+.day-view-section-title>span{display:grid;place-items:center;flex:0 0 34px;width:34px;height:34px;border-radius:50%;background:var(--navy-900);color:var(--brass-light)}
+.day-view-section-title small{display:block;color:var(--muted);font-size:.62rem;font-weight:850;letter-spacing:.09em}
+.day-view-section-title h4{margin:1px 0 0;font-size:1rem}
+.day-view-facts{grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:0}
+.day-view-facts-route{grid-template-columns:repeat(3,minmax(0,1fr))}
+.day-view-facts-weather{grid-template-columns:repeat(2,minmax(0,1fr))}
+.day-view-facts>div{min-width:0;display:grid;align-content:start;min-height:70px;padding:10px 12px}
+.day-view-facts span{line-height:1.25;overflow-wrap:anywhere}
+.day-view-facts strong{line-height:1.4;overflow-wrap:anywhere;word-break:normal}
+.day-view-text{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.day-view-text h4{margin:0 0 8px}
+.day-view-text p{margin:0;line-height:1.62;overflow-wrap:anywhere}
+.day-view-text blockquote{margin-bottom:0}
+.day-view-dialog .dialog-actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+.day-view-dialog .dialog-actions>form{margin:0}
+.day-view-dialog .dialog-actions button{width:100%;min-width:0}
+
+@media(max-width:900px){
+  .day-entry-overview{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .day-view-facts-route{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:650px){
+  .day-route-actions{grid-template-columns:1fr}
+  #dayForm.day-form .actions{display:grid;grid-template-columns:1fr}
+  #dayForm.day-form .actions button{width:100%;min-width:0}
+  .day-entry-card{padding:13px!important}
+  .day-entry-heading{align-items:flex-start}
+  .day-entry-overview{grid-template-columns:1fr}
+  .day-entry-actions{grid-template-columns:1fr}
+  .day-view-dialog{width:calc(100% - 14px);max-height:calc(100dvh - 14px)}
+  .day-view-dialog-inner{padding:18px 13px calc(18px + env(safe-area-inset-bottom,0px));max-height:calc(100dvh - 14px)}
+  .day-view-header{padding-right:30px;flex-direction:column;gap:5px}
+  .day-view-distance{margin-top:0}
+  .day-view-facts,
+  .day-view-facts-route,
+  .day-view-facts-weather{grid-template-columns:1fr}
+  .day-view-facts>div{min-height:0}
+  .day-view-dialog .dialog-actions{grid-template-columns:1fr}
+  .day-view-dialog .dialog-actions>form{width:100%}
+}

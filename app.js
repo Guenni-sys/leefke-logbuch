@@ -1,4 +1,4 @@
-const APP_VERSION = '7.1';
+const APP_VERSION = '7.2';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1723,14 +1723,34 @@ function renderDays() {
   const filtered = state.days.filter(item => JSON.stringify(item).toLowerCase().includes(query));
   const count = $('#dayListCount');
   if (count) count.textContent = query ? `${filtered.length} von ${state.days.length} Einträgen` : `${state.days.length} ${state.days.length === 1 ? 'Eintrag' : 'Einträge'}`;
-  $('#dayList').innerHTML = filtered.map(item => card(item, 'days', `
-    <div class="meta">${fmtDate(item.date)}${item.dayNo ? ` · Reisetag ${esc(item.dayNo)}` : ''}</div>
-    <h3>${esc(item.title || ((item.fromPort || item.toPort) ? `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}` : `Tagestour vom ${fmtDate(item.date)}`))}</h3>
-    <div class="meta">${esc(item.depart || '—')} – ${esc(item.arrive || '—')} · ${item.distance ? `${dec(item.distance)} sm` : 'Strecke —'} · ${esc(item.wind || 'Wind —')} · ${esc(item.wave || 'Welle —')}</div>
-    ${item.weather || item.tide || item.crew ? `<div class="day-facts">${item.weather ? `<span>☀ ${esc(item.weather)}</span>` : ''}${item.tide ? `<span>↕ ${esc(item.tide)}</span>` : ''}${item.crew ? `<span>⚓ ${esc(item.crew)}</span>` : ''}</div>` : ''}
-    <p>${esc(item.summary || '').replace(/\n/g, '<br>')}</p>
-    ${item.moment ? `<blockquote>„${esc(item.moment)}“</blockquote>` : ''}
-    <div class="day-card-open"><button type="button" onclick="openSavedDay('${item.id}')">Eintrag ansehen</button></div>`)).join('') || '<div class="card muted">Keine passenden Tagestouren gefunden.</div>';
+  $('#dayList').innerHTML = filtered.map(item => {
+    const title = item.title || ((item.fromPort || item.toPort) ? `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}` : `Tagestour vom ${fmtDate(item.date)}`);
+    const summary = String(item.summary || '').trim();
+    const summaryPreview = summary.length > 280 ? `${summary.slice(0, 280).trim()} …` : summary;
+    return `<article class="item day-entry-card" data-store="days" data-record-id="${esc(item.id)}">
+      <div class="day-entry-heading">
+        <div>
+          <div class="meta">${fmtDate(item.date)}${item.dayNo ? ` · Reisetag ${esc(item.dayNo)}` : ''}</div>
+          <h3>${esc(title)}</h3>
+        </div>
+        ${item.distance ? `<strong class="day-distance">${dec(item.distance)} sm</strong>` : ''}
+      </div>
+      <div class="day-entry-overview">
+        <div><span>Route</span><strong>${esc(item.fromPort || '—')} → ${esc(item.toPort || '—')}</strong></div>
+        <div><span>Zeit</span><strong>${esc(item.depart || '—')} – ${esc(item.arrive || '—')}</strong></div>
+        <div><span>Wetter</span><strong>${esc(item.weather || '—')}</strong></div>
+        <div><span>Wind / Welle</span><strong>${esc(item.wind || '—')}${item.wave ? ` · ${esc(item.wave)}` : ''}</strong></div>
+      </div>
+      ${item.tide || item.crew ? `<div class="day-facts">${item.tide ? `<span>↕ ${esc(item.tide)}</span>` : ''}${item.crew ? `<span>⚓ ${esc(item.crew)}</span>` : ''}</div>` : ''}
+      ${summaryPreview ? `<p class="day-summary-preview">${esc(summaryPreview).replace(/\n/g, '<br>')}</p>` : ''}
+      ${item.moment ? `<blockquote>„${esc(item.moment)}“</blockquote>` : ''}
+      <div class="day-entry-actions">
+        <button class="day-open-button" type="button" onclick="openSavedDay('${item.id}')">Eintrag ansehen</button>
+        <button class="edit" type="button" onclick="editDayItem('${item.id}')">Bearbeiten</button>
+        <button class="delete" type="button" onclick="removeItem('days','${item.id}')">Löschen</button>
+      </div>
+    </article>`;
+  }).join('') || '<div class="card muted">Keine passenden Tagestouren gefunden.</div>';
 }
 
 function renderFuel(totalHours) {
@@ -2388,25 +2408,56 @@ async function openSavedDay(id) {
   const content = $('#dayViewContent');
   if (!item || !dialog || !content) return toast('Tagestour wurde nicht gefunden');
   dayViewRecordId = id;
+  const title = item.title || `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}`;
+  const engineHours = (item.engineStart !== '' && item.engineStart !== undefined && item.engineEnd !== '' && item.engineEnd !== undefined)
+    ? Math.max(0, num(item.engineEnd) - num(item.engineStart))
+    : null;
   content.innerHTML = `
-    <h3 id="dayViewTitle">${esc(item.title || `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}`)}</h3>
-    <p class="meta">${fmtDate(item.date)}${item.dayNo ? ` · Reisetag ${esc(item.dayNo)}` : ''}</p>
-    <div class="day-view-facts">
-      <div><span>Route</span><strong>${esc(item.fromPort || '—')} → ${esc(item.toPort || '—')}</strong></div>
-      <div><span>Zeit</span><strong>${esc(item.depart || '—')} – ${esc(item.arrive || '—')}</strong></div>
-      <div><span>Strecke</span><strong>${item.distance ? `${dec(item.distance)} sm` : '—'}</strong></div>
-      <div><span>Motorstunden</span><strong>${item.engineStart || item.engineEnd ? `${esc(item.engineStart || '—')} – ${esc(item.engineEnd || '—')}` : '—'}</strong></div>
-      <div><span>Wetter</span><strong>${esc(item.weather || '—')}</strong></div>
-      <div><span>Wind / Welle</span><strong>${esc(item.wind || '—')} · ${esc(item.wave || '—')}</strong></div>
-      <div><span>Tide / Strom</span><strong>${esc(item.tide || '—')}</strong></div>
-      <div><span>Besatzung</span><strong>${esc(item.crew || '—')}</strong></div>
-    </div>
-    ${item.summary ? `<section><h4>Tagesbericht</h4><p>${esc(item.summary).replace(/\n/g, '<br>')}</p></section>` : ''}
-    ${item.moment ? `<blockquote>„${esc(item.moment)}“</blockquote>` : ''}`;
+    <header class="day-view-header">
+      <div>
+        <h3 id="dayViewTitle">${esc(title)}</h3>
+        <p class="meta">${fmtDate(item.date)}${item.dayNo ? ` · Reisetag ${esc(item.dayNo)}` : ''}</p>
+      </div>
+      ${item.distance ? `<strong class="day-view-distance">${dec(item.distance)} sm</strong>` : ''}
+    </header>
+
+    <section class="day-view-section">
+      <div class="day-view-section-title"><span>↝</span><div><small>FAHRT</small><h4>Route & Zeiten</h4></div></div>
+      <div class="day-view-facts day-view-facts-route">
+        <div><span>Von</span><strong>${esc(item.fromPort || '—')}</strong></div>
+        <div><span>Nach</span><strong>${esc(item.toPort || '—')}</strong></div>
+        <div><span>Ablegen</span><strong>${esc(item.depart || '—')}</strong></div>
+        <div><span>Anlegen</span><strong>${esc(item.arrive || '—')}</strong></div>
+        <div><span>Strecke</span><strong>${item.distance ? `${dec(item.distance)} sm` : '—'}</strong></div>
+        <div><span>Reisetag</span><strong>${esc(item.dayNo || '—')}</strong></div>
+      </div>
+    </section>
+
+    <section class="day-view-section">
+      <div class="day-view-section-title"><span>⚙</span><div><small>AN BORD</small><h4>Maschine & Besatzung</h4></div></div>
+      <div class="day-view-facts">
+        <div><span>Motorstunden Start</span><strong>${esc(item.engineStart ?? '—') || '—'}</strong></div>
+        <div><span>Motorstunden Ende</span><strong>${esc(item.engineEnd ?? '—') || '—'}</strong></div>
+        <div><span>Fahrzeit Motor</span><strong>${engineHours === null ? '—' : `${dec(engineHours)} h`}</strong></div>
+        <div><span>Besatzung</span><strong>${esc(item.crew || '—')}</strong></div>
+      </div>
+    </section>
+
+    <section class="day-view-section">
+      <div class="day-view-section-title"><span>≈</span><div><small>BEDINGUNGEN</small><h4>Wetter, Wind & Wasser</h4></div></div>
+      <div class="day-view-facts day-view-facts-weather">
+        <div><span>Wetter</span><strong>${esc(item.weather || '—')}</strong></div>
+        <div><span>Wind</span><strong>${esc(item.wind || '—')}</strong></div>
+        <div><span>Welle</span><strong>${esc(item.wave || '—')}</strong></div>
+        <div><span>Tide / Strom</span><strong>${esc(item.tide || '—')}</strong></div>
+      </div>
+    </section>
+
+    ${item.summary ? `<section class="day-view-text"><h4>Tagesbericht</h4><p>${esc(item.summary).replace(/\n/g, '<br>')}</p></section>` : ''}
+    ${item.moment ? `<section class="day-view-text"><h4>Moment des Tages</h4><blockquote>„${esc(item.moment)}“</blockquote></section>` : ''}`;
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else alert(content.textContent);
 }
-
 function editItem(kind, id) {
   if (kind === 'days') { editDayItem(id); return; }
   const item = state[kind].find(entry => entry.id === id);
@@ -3429,7 +3480,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* =========================
-   LEEFKE VERSION 7.1
+   LEEFKE VERSION 7.2
    Feldweise Synchronisierung, Realtime, Medien-Cloud, Sicherungen,
    Konfliktauflösung, Bordbetrieb und Routenwetter
    ========================= */

@@ -1,0 +1,10 @@
+LEEFKE Version 7.2 – Tagestouren sauber formatiert
+
+- „Gespeicherte Tagestouren ansehen“ sauber in den Bedienblock eingeordnet
+- gespeicherte Tagestouren als klare Karten ohne überlagerte Schaltflächen
+- Ansehen, Bearbeiten und Löschen einheitlich am Kartenende
+- Detailansicht neu gruppiert: Fahrt, Maschine/Besatzung, Wetter/Wasser
+- Wind und Welle stehen jetzt in getrennten Feldern
+- Desktop, Tablet, iPhone und Android jeweils passend ein- oder mehrspaltig
+- lange Texte und Hafennamen brechen sauber um
+- alle Formularfelder und Schaltflächen bleiben innerhalb ihrer Spalten
