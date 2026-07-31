@@ -1,4 +1,4 @@
-const APP_VERSION = '7.3';
+const APP_VERSION = '7.4';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1615,10 +1615,38 @@ function lines(value) {
   return String(value || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean);
 }
 
+function setStableBoatImage(element, source) {
+  if (!element || !source) return;
+  if (element.dataset.currentSource === source && element.classList.contains('boat-image-ready')) return;
+  if (element.dataset.loadingSource === source) return;
+
+  element.dataset.loadingSource = source;
+  element.classList.remove('boat-image-ready');
+  element.classList.add('boat-image-pending');
+
+  const loader = new Image();
+  loader.onload = () => {
+    // Nur das zuletzt angeforderte Bild übernehmen.
+    if (element.dataset.loadingSource !== source) return;
+    element.src = source;
+    element.dataset.currentSource = source;
+    delete element.dataset.loadingSource;
+    requestAnimationFrame(() => {
+      element.classList.remove('boat-image-pending');
+      element.classList.add('boat-image-ready');
+    });
+  };
+  loader.onerror = () => {
+    delete element.dataset.loadingSource;
+    if (source !== defaultHero) setStableBoatImage(element, defaultHero);
+  };
+  loader.src = source;
+}
+
 function setBoatImage(settings) {
   const image = settings.boatPhoto || defaultHero;
-  $('#heroBoatImage').src = image;
-  $('#boatPhotoPreview').src = image;
+  setStableBoatImage($('#heroBoatImage'), image);
+  setStableBoatImage($('#boatPhotoPreview'), image);
 }
 
 function render() {
@@ -4945,7 +4973,7 @@ function initReportRouteMap() {
 
 function buildReport() {
   const settings=getSettings();const days=[...state.days].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const photos=[...state.photos];const ports=[...state.ports].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const totalNm=days.reduce((s,i)=>s+num(i.distance),0);const hours=days.reduce((s,i)=>s+Math.max(0,num(i.engineEnd)-num(i.engineStart)),0);const fuelLiters=state.fuel.reduce((s,i)=>s+num(i.liters),0);const fuelCost=state.fuel.reduce((s,i)=>s+num(i.liters)*num(i.price),0);const portCost=ports.reduce((s,i)=>s+num(i.cost),0);const cover=settings.boatPhoto||photos.find(p=>p.featured)?.data||defaultHero;const includeWeather=$('#reportIncludeWeather')?.checked!==false,includePorts=$('#reportIncludePorts')?.checked!==false,includeCosts=$('#reportIncludeCosts')?.checked!==false,includeMaintenance=$('#reportIncludeMaintenance')?.checked===true;
-  $('#reportContent').innerHTML=`<div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle||'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div><div class="report-summary-grid"><div><span>Reisetage</span><strong>${days.length}</strong></div><div><span>Seemeilen</span><strong>${dec(totalNm)} sm</strong></div><div><span>Motorstunden</span><strong>${dec(hours)} h</strong></div><div><span>Häfen</span><strong>${ports.length}</strong></div></div><p class="meta">${esc(settings.boatName)} · Baujahr ${esc(settings.buildYear)} · ${dec2(settings.length)} × ${dec2(settings.beam)} m · ${esc(settings.engine)} · Heimathafen ${esc(settings.homePort)}</p><section class="report-map-section"><h2>Der Törn auf der Seekarte</h2>${reportRouteMapHtml()}</section>${state.route.length?`<section class="report-plan"><h2>Törnplan</h2>${[...state.route].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((stage,index)=>`<div><b>${index+1}. ${fmtDate(stage.date)} · ${esc(stage.from||'—')} → ${esc(stage.to||'—')}</b><span>${dec(stage.nm)} sm${stage.departTime?` · Ablegen ${esc(stage.departTime)} Uhr`:''}${includeWeather&&stage.wind?` · ${esc(stage.wind)}`:''}${includeWeather&&stage.wave?` · Welle ${esc(stage.wave)}`:''}${includeWeather&&stage.tide?` · ${esc(stage.tide)}`:''}</span></div>`).join('')}</section>`:''}${days.map(day=>{const dayPhotos=photos.filter(photo=>photo.relatedId===day.id||(!photo.relatedId&&photo.date===day.date)).sort((a,b)=>Number(b.featured===true||b.featured==='true')-Number(a.featured===true||a.featured==='true'));return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title||`${day.fromPort||''} → ${day.toPort||''}`)}</h2><p class="meta">${esc(day.fromPort||'')} → ${esc(day.toPort||'')} · ${dec(day.distance)} sm${includeWeather?` · ${esc(day.wind||'')} · ${esc(day.wave||'')}`:''}</p><p>${esc(day.summary||'').replace(/\n/g,'<br>')}</p>${day.moment?`<blockquote>„${esc(day.moment)}“</blockquote>`:''}${dayPhotos.map(photo=>photo.data?`<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption||'')}"><figcaption>${esc(photo.caption||'')}</figcaption></figure>`:'').join('')}</section>`;}).join('')||'<p>Noch keine Tagesberichte vorhanden.</p>'}${includePorts&&ports.length?`<section><h2>Hafenbuch</h2><table class="report-port-table"><thead><tr><th>Hafen</th><th>Bewertung</th><th>Liegeplatz</th><th>Kosten</th></tr></thead><tbody>${ports.map(port=>`<tr><td>${esc(port.name)}</td><td>${'★'.repeat(Math.round(num(port.rating)))}${'☆'.repeat(5-Math.round(num(port.rating)))}</td><td>${esc(port.berth||'—')}</td><td>${port.cost?eur(port.cost):'—'}</td></tr>`).join('')}</tbody></table></section>`:''}${includeCosts?`<section><h2>Diesel & Reisekosten</h2><div class="report-costs"><div><span>Getankt</span><strong>${dec(fuelLiters)} l</strong></div><div><span>Dieselkosten</span><strong>${eur(fuelCost)}</strong></div><div><span>Liegeplätze</span><strong>${eur(portCost)}</strong></div></div></section>`:''}${includeMaintenance&&state.maintenance.length?`<section><h2>Technik & Wartung</h2>${state.maintenance.map(item=>`<p><b>${fmtDate(item.date)} · ${esc(item.title)}</b><br>${esc(item.note||'')}${item.cost?` · ${eur(item.cost)}`:''}</p>`).join('')}</section>`:''}`;
+  $('#reportContent').innerHTML=`<div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle||'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div><div class="report-summary-grid"><div><span>Reisetage</span><strong>${days.length}</strong></div><div><span>Seemeilen</span><strong>${dec(totalNm)} sm</strong></div><div><span>Motorstunden</span><strong>${dec(hours)} h</strong></div><div><span>Häfen</span><strong>${ports.length}</strong></div></div><p class="meta">${esc(settings.boatName)} · Baujahr ${esc(settings.buildYear)} · ${dec2(settings.length)} × ${dec2(settings.beam)} m · ${esc(settings.engine)} · Heimathafen ${esc(settings.homePort)}</p><section class="report-map-section"><h2>Der Törn auf der Seekarte</h2>${reportRouteMapHtml()}</section>${state.route.length?`<section class="report-plan"><h2>Törnplan</h2>${[...state.route].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((stage,index)=>`<div><b>${index+1}. ${fmtDate(stage.date)} · ${esc(stage.from||'—')} → ${esc(stage.to||'—')}</b><span>${dec(stage.nm)} sm${stage.departTime?` · Ablegen ${esc(stage.departTime)} Uhr`:''}${includeWeather&&stage.wind?` · ${esc(stage.wind)}`:''}${includeWeather&&stage.wave?` · Welle ${esc(stage.wave)}`:''}${includeWeather&&stage.tide?` · ${esc(stage.tide)}`:''}</span></div>`).join('')}</section>`:''}${days.map(day=>{const dayPhotos=photos.filter(photo=>photo.relatedId===day.id||(!photo.relatedId&&photo.date===day.date)).sort((a,b)=>Number(b.featured===true||b.featured==='true')-Number(a.featured===true||a.featured==='true'));return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title||`${day.fromPort||''} → ${day.toPort||''}`)}</h2><p class="meta">${esc(day.fromPort||'')} → ${esc(day.toPort||'')} · ${dec(day.distance)} sm${includeWeather?` · ${esc(day.wind||'')} · ${esc(day.wave||'')}`:''}</p><p>${esc(day.summary||'').replace(/\n/g,'<br>')}</p>${day.moment?`<blockquote>„${esc(day.moment)}“</blockquote>`:''}${dayPhotos.map(photo=>photo.data?`<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption||'')}"><figcaption>${esc(photo.caption||'')}</figcaption></figure>`:'').join('')}</section>`;}).join('')||'<p>Noch keine Tagesberichte vorhanden.</p>'}${includePorts&&ports.length?`<section><h2>Hafenbuch</h2><table class="report-port-table"><thead><tr><th>Hafen</th><th>Bewertung</th><th>Liegeplatz</th><th>Kosten</th></tr></thead><tbody>${ports.map(port=>`<tr><td>${esc(port.name)}</td><td>${'★'.repeat(Math.round(num(port.rating)))}${'☆'.repeat(5-Math.round(num(port.rating)))}</td><td>${esc(port.berth||'—')}</td><td>${port.cost?eur(port.cost):'—'}</td></tr>`).join('')}</tbody></table></section>`:''}${includeCosts?`<section class="report-finance-section"><div class="report-section-heading"><div><small>KOSTENÜBERSICHT</small><h2>Diesel & Reisekosten</h2></div><p>Zusammenfassung der im aktuellen Törn erfassten Tank- und Liegeplatzkosten.</p></div><div class="report-costs"><div class="report-cost-card"><span class="report-cost-icon">⛽</span><div><span>Getankt</span><strong>${dec(fuelLiters)} <em>Liter</em></strong></div></div><div class="report-cost-card"><span class="report-cost-icon">€</span><div><span>Dieselkosten</span><strong>${eur(fuelCost)}</strong></div></div><div class="report-cost-card"><span class="report-cost-icon">⚓</span><div><span>Liegeplätze</span><strong>${eur(portCost)}</strong></div></div><div class="report-cost-card report-cost-total"><span class="report-cost-icon">Σ</span><div><span>Gesamtkosten</span><strong>${eur(fuelCost+portCost)}</strong></div></div></div></section>`:''}${includeMaintenance&&state.maintenance.length?`<section><h2>Technik & Wartung</h2>${state.maintenance.map(item=>`<p><b>${fmtDate(item.date)} · ${esc(item.title)}</b><br>${esc(item.note||'')}${item.cost?` · ${eur(item.cost)}`:''}</p>`).join('')}</section>`:''}`;
   reportMapReadyPromise = initReportRouteMap();
   return reportMapReadyPromise;
 }

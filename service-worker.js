@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v7-3-tankbuch-fix-20260731';
+const APP_CACHE = 'leefke-v7-4-bild-kosten-20260731';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=7.3',
+  './index.html?v=7.4',
   './style.css',
-  './style.css?v=7.3',
+  './style.css?v=7.4',
   './app.js',
-  './app.js?v=7.3',
+  './app.js?v=7.4',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',

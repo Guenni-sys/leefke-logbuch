@@ -1,0 +1,7 @@
+LEEFKE URLAUBSEDITION 7.4
+
+- Startseite zeigt beim Öffnen nicht mehr kurz das mitgelieferte Bild vor dem persönlichen Startbild.
+- Das korrekte Bild wird zuerst geladen und anschließend weich eingeblendet.
+- Diesel & Reisekosten im Reisebericht als großzügige, klar lesbare Kostenkarten.
+- Zusätzliche Gesamtsumme aus Diesel- und Liegeplatzkosten.
+- Verbesserte Darstellung auf Smartphone, Tablet, Desktop und beim PDF-Druck.
