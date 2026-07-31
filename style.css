@@ -907,7 +907,7 @@ body{
 }
 
 /* ==========================================================================
-   LEEFKE 7.0 – stabile Urlaubsedition
+   LEEFKE 7.1 – Tagestouren sicher öffnen und bearbeiten
    ========================================================================== */
 .connection-banner{display:flex;align-items:center;justify-content:center;gap:10px;padding:9px 14px;background:#fff4d6;color:#5d481f;border-bottom:1px solid rgba(154,111,35,.28);font-size:.84rem}
 .connection-banner[hidden]{display:none!important}.connection-banner>span{display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:#9a6f23;color:#fff;flex:0 0 auto}.connection-banner div{display:grid;gap:1px}.connection-banner small{color:#725d32}
@@ -937,3 +937,18 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
 }
 @media(min-width:651px){.sync-status{width:180px;min-width:180px}}
 @media(min-width:561px) and (max-width:650px){.sync-status{width:148px;min-width:148px;max-width:148px}}
+
+/* LEEFKE 7.1 – gespeicherte Tagestouren klar öffnen und verlustfrei bearbeiten */
+.day-card-open{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}
+.day-card-open button{background:#f4f8f8;border-color:#b9cbd1;color:var(--navy-800)}
+.day-view-dialog{width:min(760px,calc(100% - 24px));max-height:min(88vh,820px);padding:0;border:0;border-radius:18px;box-shadow:0 28px 80px rgba(0,0,0,.32);color:var(--ink)}
+.day-view-dialog::backdrop{background:rgba(3,20,30,.66);backdrop-filter:blur(3px)}
+.day-view-dialog-inner{position:relative;padding:24px;max-height:88vh;overflow:auto;background:linear-gradient(180deg,#fff,#f7f4ec)}
+.day-view-dialog h3{font-family:Georgia,serif;color:var(--navy-900);font-size:1.7rem;margin:6px 42px 4px 0}
+.day-view-dialog h4{margin:18px 0 5px;color:var(--navy-900)}
+.day-view-facts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px;margin:18px 0}
+.day-view-facts>div{padding:10px 12px;border-radius:11px;background:#fff;border:1px solid var(--line)}
+.day-view-facts span{display:block;color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.07em;margin-bottom:3px}
+.day-view-facts strong{display:block;color:var(--navy-900);overflow-wrap:anywhere}
+#savedDaysSection,#dayForm{scroll-margin-top:92px}
+@media(max-width:560px){.day-view-dialog-inner{padding:18px 15px}.day-view-facts{grid-template-columns:1fr}.day-view-dialog h3{font-size:1.4rem}.day-route-copy #showSavedDaysButton{width:100%}}

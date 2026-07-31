@@ -1,0 +1,8 @@
+LEEFKE Version 7.1 – Tagestour-Korrektur
+
+- Gespeicherte Tagestouren lassen sich über „Eintrag ansehen“ vollständig öffnen.
+- Der Knopf „Gespeicherte Tagestouren ansehen“ führt direkt zur Liste.
+- Beim Bearbeiten wird der vollständige Datensatz frisch aus der lokalen Datenbank geladen.
+- Törnzuordnung und vorhandene Zusatzdaten bleiben beim Speichern erhalten.
+- „Bearbeiten abbrechen“ verändert den gespeicherten Eintrag nicht.
+- Keine Supabase-Änderung erforderlich.

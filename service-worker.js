@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v7-0-urlaub-20260728';
+const APP_CACHE = 'leefke-v7-1-tagestour-20260731';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=7.0',
+  './index.html?v=7.1',
   './style.css',
-  './style.css?v=7.0',
+  './style.css?v=7.1',
   './app.js',
-  './app.js?v=7.0',
+  './app.js?v=7.1',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',

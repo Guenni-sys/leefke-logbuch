@@ -1,15 +1,15 @@
-LEEFKE VERSION 7.0 – URLAUBSEDITION
+LEEFKE VERSION 7.1 – URLAUBSEDITION
 
 1. In der bisherigen App unter „Sicherung“ vorsichtshalber auf jedem Gerät eine Sicherung exportieren.
 2. Diese ZIP-Datei vollständig entpacken.
 3. Im GitHub-Repository „Add file“ → „Upload files“ öffnen.
 4. Alle Dateien AUS dem entpackten Ordner hochladen und vorhandene Dateien ersetzen.
-5. Commit-Text: LEEFKE Version 7.0 Urlaubsedition
+5. Commit-Text: LEEFKE Version 7.1 Urlaubsedition
 6. „Commit changes“ drücken und etwa zwei bis drei Minuten warten.
 7. Danach öffnen:
-   https://guenni-sys.github.io/leefke-logbuch/index.html?v=7.0
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=7.1
 8. Unter Windows einmal Strg + F5 drücken. Auf iPhone, iPad und Android die App vollständig schließen und neu öffnen.
-9. Prüfen, ob oben „BORDTAGEBUCH · URLAUBSEDITION 7.0“ steht.
+9. Prüfen, ob oben „BORDTAGEBUCH · URLAUBSEDITION 7.1“ steht.
 10. Auf jedem Gerät einmal „Konto & Sync“ öffnen und kontrollieren, ob „Synchronisiert“ mit Uhrzeit angezeigt wird.
 
 WICHTIG

@@ -1,4 +1,4 @@
-const APP_VERSION = '7.0';
+const APP_VERSION = '7.1';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -105,6 +105,8 @@ let db;
 let state = {};
 let allState = {};
 let activeTripId = '';
+let editingDayId = '';
+let dayViewRecordId = '';
 let nauticalMap = null;
 let nauticalBaseLayer = null;
 let seamarkLayer = null;
@@ -1325,7 +1327,8 @@ function view(id) {
 function prepareDayForm() {
   const form = $('#dayForm');
   if (!form) return;
-  const editing = Boolean(form.elements.id.value);
+  if (editingDayId && !form.elements.id.value) form.elements.id.value = editingDayId;
+  const editing = Boolean(editingDayId || form.elements.id.value);
   if (!editing && !form.elements.date.value) form.elements.date.value = new Date().toISOString().slice(0, 10);
   if (!editing && !form.elements.dayNo.value) {
     const highestDay = Math.max(0, ...(state.days || []).map(item => num(item.dayNo)));
@@ -1726,7 +1729,8 @@ function renderDays() {
     <div class="meta">${esc(item.depart || '—')} – ${esc(item.arrive || '—')} · ${item.distance ? `${dec(item.distance)} sm` : 'Strecke —'} · ${esc(item.wind || 'Wind —')} · ${esc(item.wave || 'Welle —')}</div>
     ${item.weather || item.tide || item.crew ? `<div class="day-facts">${item.weather ? `<span>☀ ${esc(item.weather)}</span>` : ''}${item.tide ? `<span>↕ ${esc(item.tide)}</span>` : ''}${item.crew ? `<span>⚓ ${esc(item.crew)}</span>` : ''}</div>` : ''}
     <p>${esc(item.summary || '').replace(/\n/g, '<br>')}</p>
-    ${item.moment ? `<blockquote>„${esc(item.moment)}“</blockquote>` : ''}`)).join('') || '<div class="card muted">Keine passenden Tagestouren gefunden.</div>';
+    ${item.moment ? `<blockquote>„${esc(item.moment)}“</blockquote>` : ''}
+    <div class="day-card-open"><button type="button" onclick="openSavedDay('${item.id}')">Eintrag ansehen</button></div>`)).join('') || '<div class="card muted">Keine passenden Tagestouren gefunden.</div>';
 }
 
 function renderFuel(totalHours) {
@@ -2153,8 +2157,11 @@ function setDayFormStatus(message = '', kind = 'info') {
 function updateDayFormMode() {
   const form = $('#dayForm');
   const button = $('#daySaveButton');
+  const cancelButton = $('#dayCancelEditButton');
   if (!form || !button) return;
-  button.textContent = form.elements.id.value ? 'Änderungen speichern' : 'Tagestour speichern';
+  const editing = Boolean(editingDayId || form.elements.id.value);
+  button.textContent = editing ? 'Änderungen speichern' : 'Tagestour speichern';
+  if (cancelButton) cancelButton.hidden = !editing;
 }
 
 function meaningfulDayEntry(item) {
@@ -2198,7 +2205,13 @@ if (dayForm) {
           ? `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}`
           : `Tagestour vom ${fmtDate(item.date)}`;
       }
-      const saved = await put('days', item);
+      // Beim Bearbeiten den vollständigen vorhandenen Datensatz erhalten.
+      // So gehen weder Törnzuordnung noch ältere Zusatzfelder verloren.
+      const completeItem = existing
+        ? { ...existing, ...item, id: existing.id, tripId: existing.tripId || activeTripId, created: existing.created || item.created }
+        : { ...item, tripId: item.tripId || activeTripId };
+      const saved = await put('days', completeItem);
+      editingDayId = '';
       await refresh();
       dayForm.reset();
       prepareDayForm();
@@ -2225,9 +2238,18 @@ if (dayForm) {
     }
   };
   dayForm.addEventListener('reset', () => window.setTimeout(() => {
+    editingDayId = '';
     setDayFormStatus();
     prepareDayForm();
   }, 0));
+  $('#dayCancelEditButton')?.addEventListener('click', () => {
+    editingDayId = '';
+    dayForm.reset();
+    window.setTimeout(() => {
+      setDayFormStatus('Bearbeiten beendet. Der gespeicherte Eintrag wurde nicht verändert.', 'info');
+      prepareDayForm();
+    }, 0);
+  });
 }
 
 for (const id of ['fuel', 'maintenance', 'route', 'port']) {
@@ -2342,17 +2364,57 @@ function fillForm(form, item) {
   syncRatingPickers(form);
 }
 
+async function editDayItem(id) {
+  const item = await getOne('days', id) || state.days.find(entry => entry.id === id);
+  if (!item) return toast('Tagestour wurde nicht gefunden');
+  editingDayId = id;
+  view('day');
+  window.requestAnimationFrame(() => {
+    const form = $('#dayForm');
+    if (!form) return;
+    fillForm(form, item);
+    form.elements.id.value = item.id;
+    updateDayFormMode();
+    const label = item.title || `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}`;
+    setDayFormStatus(`Du bearbeitest „${label}“. Alle gespeicherten Werte wurden ins Formular geladen.`, 'info');
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    toast('Tagestour vollständig geladen');
+  });
+}
+
+async function openSavedDay(id) {
+  const item = await getOne('days', id) || state.days.find(entry => entry.id === id);
+  const dialog = $('#dayViewDialog');
+  const content = $('#dayViewContent');
+  if (!item || !dialog || !content) return toast('Tagestour wurde nicht gefunden');
+  dayViewRecordId = id;
+  content.innerHTML = `
+    <h3 id="dayViewTitle">${esc(item.title || `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}`)}</h3>
+    <p class="meta">${fmtDate(item.date)}${item.dayNo ? ` · Reisetag ${esc(item.dayNo)}` : ''}</p>
+    <div class="day-view-facts">
+      <div><span>Route</span><strong>${esc(item.fromPort || '—')} → ${esc(item.toPort || '—')}</strong></div>
+      <div><span>Zeit</span><strong>${esc(item.depart || '—')} – ${esc(item.arrive || '—')}</strong></div>
+      <div><span>Strecke</span><strong>${item.distance ? `${dec(item.distance)} sm` : '—'}</strong></div>
+      <div><span>Motorstunden</span><strong>${item.engineStart || item.engineEnd ? `${esc(item.engineStart || '—')} – ${esc(item.engineEnd || '—')}` : '—'}</strong></div>
+      <div><span>Wetter</span><strong>${esc(item.weather || '—')}</strong></div>
+      <div><span>Wind / Welle</span><strong>${esc(item.wind || '—')} · ${esc(item.wave || '—')}</strong></div>
+      <div><span>Tide / Strom</span><strong>${esc(item.tide || '—')}</strong></div>
+      <div><span>Besatzung</span><strong>${esc(item.crew || '—')}</strong></div>
+    </div>
+    ${item.summary ? `<section><h4>Tagesbericht</h4><p>${esc(item.summary).replace(/\n/g, '<br>')}</p></section>` : ''}
+    ${item.moment ? `<blockquote>„${esc(item.moment)}“</blockquote>` : ''}`;
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else alert(content.textContent);
+}
+
 function editItem(kind, id) {
+  if (kind === 'days') { editDayItem(id); return; }
   const item = state[kind].find(entry => entry.id === id);
-  const map = { days: 'day', ports: 'port', fuel: 'fuel', maintenance: 'maintenance', route: 'route' };
+  const map = { ports: 'port', fuel: 'fuel', maintenance: 'maintenance', route: 'route' };
   if (!item || !map[kind]) return;
   const form = $(`#${map[kind]}Form`);
-  fillForm(form, item);
-  if (kind === 'days') {
-    updateDayFormMode();
-    setDayFormStatus('Du bearbeitest einen vorhandenen Tagestour-Eintrag. Nach dem Speichern wird derselbe Eintrag aktualisiert.', 'info');
-  }
   view(map[kind] === 'port' ? 'ports' : map[kind]);
+  fillForm(form, item);
   form.scrollIntoView({ behavior: 'smooth' });
   toast('Eintrag zum Bearbeiten geöffnet');
 }
@@ -2398,8 +2460,16 @@ window.routeToDay = routeToDay;
 window.removeItem = removeItem;
 window.toggleCheck = toggleCheck;
 window.editItem = editItem;
+window.editDayItem = editDayItem;
+window.openSavedDay = openSavedDay;
 
 $('#daySearch').oninput = renderDays;
+$('#showSavedDaysButton')?.addEventListener('click', () => $('#savedDaysSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+$('#dayViewEditButton')?.addEventListener('click', () => {
+  const id = dayViewRecordId;
+  $('#dayViewDialog')?.close();
+  if (id) editDayItem(id);
+});
 $('#portSearch').oninput = renderPorts;
 $$('.field-help').forEach(button => button.addEventListener('click', () => openDayFieldHelp(button.dataset.help)));
 $('#dayRouteApply')?.addEventListener('click', () => {
@@ -3359,7 +3429,7 @@ document.addEventListener('visibilitychange', () => {
 });
 
 /* =========================
-   LEEFKE VERSION 7.0
+   LEEFKE VERSION 7.1
    Feldweise Synchronisierung, Realtime, Medien-Cloud, Sicherungen,
    Konfliktauflösung, Bordbetrieb und Routenwetter
    ========================= */
