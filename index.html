@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=7.4">
+  <link rel="stylesheet" href="style.css?v=7.5">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -32,7 +32,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · URLAUBSEDITION 7.4</small>
+        <small>BORDTAGEBUCH · URLAUBSEDITION 7.5</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -202,7 +202,7 @@
           <label><span class="label-row">Strecke in sm <button class="field-help" type="button" data-help="distance" aria-label="Hinweis zur Strecke">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="distance" placeholder="z. B. 42,5"></label>
           <label><span class="label-row">Motorstunden beim Start <button class="field-help" type="button" data-help="engineStart" aria-label="Hinweis zu Motorstunden beim Start">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="engineStart" placeholder="Zählerstand"></label>
           <label><span class="label-row">Motorstunden beim Ende <button class="field-help" type="button" data-help="engineEnd" aria-label="Hinweis zu Motorstunden beim Ende">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="engineEnd" placeholder="Zählerstand"></label>
-          <label><span class="label-row">Wetter <button class="field-help" type="button" data-help="weather" aria-label="Hinweis zum Wetter">?</button></span><input name="weather" list="dayWeatherOptions" placeholder="Auswählen oder selbst eintragen"></label>
+          <label class="day-weather-control"><span class="label-row">Wetter <button class="field-help" type="button" data-help="weather" aria-label="Hinweis zum Wetter">?</button></span><select id="dayWeatherSelect" aria-label="Wetter auswählen"><option value="">Bitte auswählen …</option><option value="Sonnig">Sonnig</option><option value="Heiter">Heiter</option><option value="Wechselnd bewölkt">Wechselnd bewölkt</option><option value="Bedeckt">Bedeckt</option><option value="Schauer">Schauer</option><option value="Regen">Regen</option><option value="Nebel">Nebel</option><option value="Gewitter">Gewitter</option><option value="__custom__">Eigener Eintrag …</option></select><input id="dayWeatherCustom" name="weather" placeholder="Eigenes Wetter eintragen" hidden></label>
           <label><span class="label-row">Wind <button class="field-help" type="button" data-help="wind" aria-label="Hinweis zum Wind">?</button></span><input name="wind" list="dayWindOptions" placeholder="z. B. NW 3 Bft, Böen 5 Bft"></label>
           <label><span class="label-row">Welle <button class="field-help" type="button" data-help="wave" aria-label="Hinweis zur Welle">?</button></span><input name="wave" list="dayWaveOptions" placeholder="z. B. 0,5 m aus NW · 4 s"></label>
           <label><span class="label-row">Tide / Strom <button class="field-help" type="button" data-help="tide" aria-label="Hinweis zu Tide und Strom">?</button></span><input name="tide" list="dayTideOptions" placeholder="z. B. ablaufend, mitlaufender Strom"></label>
@@ -215,9 +215,6 @@
           <p class="wide saved-location"><strong>Nach dem Speichern:</strong> Der Eintrag erscheint direkt unter diesem Formular unter „Gespeicherte Tagestouren“, auf dem Dashboard und im Reisebericht.</p>
         </form>
 
-        <datalist id="dayWeatherOptions">
-          <option value="Sonnig"></option><option value="Heiter"></option><option value="Wechselnd bewölkt"></option><option value="Bedeckt"></option><option value="Schauer"></option><option value="Regen"></option><option value="Nebel"></option><option value="Gewitter"></option>
-        </datalist>
         <datalist id="dayWindOptions">
           <option value="Windstill"></option><option value="N 2 Bft"></option><option value="NO 3 Bft"></option><option value="O 3 Bft"></option><option value="SO 3 Bft"></option><option value="S 3 Bft"></option><option value="SW 3 Bft"></option><option value="W 3 Bft"></option><option value="NW 3 Bft"></option><option value="NW 4 Bft, Böen 5 Bft"></option>
         </datalist>
@@ -288,7 +285,7 @@
             <div>
               <div class="card-kicker">INTERAKTIVE SEEKARTE</div>
               <h3>Routen und gespeicherte Häfen der LEEFKE</h3>
-              <p class="meta">GPX-Routen mit Tonnen, Leuchtfeuern und Seezeichen. Häfen mit hinterlegten Koordinaten erscheinen als Messing-Anker.</p>
+              <p class="meta">Der geöffnete Törn erscheint auch ohne GPX als Planungslinie. Mit GPX wird der genaue Verlauf gezeigt; Tonnen, Leuchtfeuer und Seezeichen kommen aus OpenSeaMap.</p>
             </div>
             <div class="map-controls">
               <select id="gpxSelect" aria-label="GPX-Route auswählen"><option value="">Keine GPX-Route</option></select>
@@ -296,7 +293,7 @@
             </div>
           </div>
           <div id="routeMap" role="application" aria-label="Interaktive Seekartenansicht der gewählten GPX-Route">
-            <div class="map-placeholder"><strong>Noch keine GPX-Route ausgewählt</strong><span>Importiere oben eine GPX-Datei oder wähle eine vorhandene Route aus.</span></div>
+            <div class="map-placeholder"><strong>Seekarte wird vorbereitet</strong><span>Der geplante Törn wird automatisch dargestellt; eine GPX-Datei macht den Verlauf genauer.</span></div>
           </div>
           <div class="map-footer">
             <div id="mapInfo" class="map-info">Noch keine GPX-Route ausgewählt.</div>
@@ -448,7 +445,7 @@
               <span class="port-gps-icon" aria-hidden="true">⌖</span>
               <div><strong>Hafen per GPS vorschlagen</strong><small>Die App bestimmt deinen Standort und sucht passende Häfen, Marinas oder Segelvereine in der Nähe. Du entscheidest anschließend selbst, welcher Vorschlag übernommen wird.</small></div>
             </div>
-            <button id="portGpsButton" type="button" class="port-gps-button">📍 Standort verwenden</button>
+            <div class="port-gps-controls"><label>Suchumkreis<select id="portGpsRadius"><option value="10000">10 km</option><option value="25000" selected>25 km</option><option value="50000">50 km</option></select></label><button id="portGpsButton" type="button" class="port-gps-button">📍 Standort verwenden</button></div>
             <div id="portGpsStatus" class="port-gps-status" aria-live="polite"></div>
             <div id="portGpsSuggestions" class="port-gps-suggestions" hidden></div>
             <small class="port-gps-source">Für die Hafensuche wird die aktuelle Position einmalig an den OpenStreetMap-Abfragedienst übermittelt. Es findet keine dauerhafte Ortung statt.</small>
@@ -503,7 +500,7 @@
 
       <section id="fuel" class="view">
         <div class="title"><small>TANKBUCH</small><h2>Diesel & Verbrauch</h2><p>Tankvorgänge und Verbrauchswerte der LEEFKE mit 400-Liter-Tank.</p></div>
-        <div class="stats compact"><article><span>Getankt</span><strong id="fuelLiters">0 l</strong></article><article><span>Kosten</span><strong id="fuelCost">0 €</strong></article><article><span>Ø Preis</span><strong id="fuelPrice">—</strong></article><article><span>Liter/Motorstunde</span><strong id="fuelPerHour">—</strong></article></div>
+        <div class="stats compact"><article><span>Getankt</span><strong id="fuelLiters">0 l</strong></article><article><span>Kosten</span><strong id="fuelCost">0 €</strong></article><article><span>Ø Preis</span><strong id="fuelPrice">—</strong></article><article><span>Ø seit Tankstopps</span><strong id="fuelPerHour">—</strong></article></div><p class="meta fuel-calculation-note">Der Verbrauch wird jeweils aus <strong>nachgetankten Litern ÷ gefahrenen Motorstunden seit dem vorherigen Tankvorgang</strong> berechnet. Vergleichbare Füllstände liefern den genauesten Wert.</p>
         <form id="fuelForm" class="card form fuel-form" novalidate>
           <input type="hidden" name="id">
           <div class="wide section-heading"><span>⛽</span><div><small>TANKVORGANG</small><h3 id="fuelFormTitle">Tanken dokumentieren</h3></div></div>
@@ -560,11 +557,12 @@
       <section id="checklists" class="view">
         <div class="title"><small>KLAR SCHIFF</small><h2>Checklisten für die LEEFKE</h2><p>Vor dem Ablegen, nach dem Anlegen und für die Sicherheit an Bord.</p></div>
         <form id="checkForm" class="card inline-form checklist-toolbar">
+          <input type="hidden" name="id">
           <label><span>Bereich</span><select name="group"><option>Vor dem Ablegen</option><option>Nach dem Anlegen</option><option>Regelmäßige Sicherheitskontrolle</option><option>Eigene Punkte</option></select></label>
-          <label class="checklist-new-item"><span>Neuer Prüfpunkt</span><input required name="item" placeholder="z. B. Ersatzschlüssel an Bord"></label>
-          <button class="primary">Hinzufügen</button><button type="button" id="resetChecks">Haken zurücksetzen</button><button type="button" id="cleanupChecks">Doppelte Punkte bereinigen</button>
+          <label class="checklist-new-item"><span>Prüfpunkt</span><input required name="item" placeholder="z. B. Ersatzschlüssel an Bord"></label>
+          <button id="checkSaveButton" class="primary">Prüfpunkt hinzufügen</button><button id="checkCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="button" id="resetChecks">Aktuelle Haken zurücksetzen</button><button type="button" id="cleanupChecks">Doppelte Punkte bereinigen</button>
         </form>
-        <p class="meta checklist-note">Die Standardliste ist bewusst ohne Überschneidungen aufgebaut. Eigene Prüfpunkte bleiben bei der Bereinigung erhalten; nur identische Dopplungen und frühere Standardformulierungen werden zusammengeführt.</p>
+        <p class="meta checklist-note">Jede Prüfung erhält Datum, Uhrzeit und Gerät. Über <strong>Protokoll</strong> kannst du frühere Prüfungen ansehen, korrigieren oder löschen.</p>
         <div id="checks" class="grid2"></div>
       </section>
 
@@ -656,9 +654,10 @@
               <div class="actions">
                 <button id="syncNowButton" class="primary" type="button">Jetzt vollständig abgleichen</button>
                 <button id="verifySyncButton" type="button">Datenstand prüfen</button>
+                <button id="checkAppUpdateButton" type="button">App-Aktualisierung prüfen</button>
                 <button id="signOutButton" type="button">Abmelden</button>
               </div>
-              <div id="syncMessage" class="sync-message" aria-live="polite"></div>
+              <div id="syncMessage" class="sync-message" aria-live="polite"></div><div id="appUpdateStatus" class="sync-message" aria-live="polite" hidden></div>
             </div>
 
             <div id="guestModePanel" class="guest-mode-panel" hidden>
@@ -754,6 +753,24 @@
     </form>
   </dialog>
 
+  <dialog id="checkHistoryDialog" class="check-history-dialog" aria-labelledby="checkHistoryTitle">
+    <div class="check-history-dialog-inner">
+      <form method="dialog"><button class="dialog-close" value="cancel" aria-label="Prüfprotokoll schließen">×</button></form>
+      <div class="card-kicker">PRÜFPROTOKOLL</div>
+      <h3 id="checkHistoryTitle">Prüfpunkt</h3>
+      <p id="checkHistoryMeta" class="meta"></p>
+      <form id="checkHistoryForm" class="form compact-form">
+        <input type="hidden" name="itemId"><input type="hidden" name="eventId">
+        <label>Zeitpunkt<input required type="datetime-local" name="checkedAt"></label>
+        <label>Status<select name="action"><option value="checked">Geprüft</option><option value="reset">Zurückgesetzt</option></select></label>
+        <label class="wide">Notiz<input name="note" placeholder="z. B. Ölstand in Ordnung"></label>
+        <div class="wide actions"><button class="primary" type="submit">Protokolleintrag speichern</button><button id="checkHistoryCancelEdit" type="button">Eingabe leeren</button></div>
+      </form>
+      <div id="checkHistoryList" class="check-history-list"></div>
+      <form method="dialog" class="dialog-actions"><button value="ok">Schließen</button></form>
+    </div>
+  </dialog>
+
   <dialog id="fieldHelpDialog" class="field-help-dialog" aria-labelledby="fieldHelpTitle">
     <div class="field-help-dialog-inner">
       <form method="dialog"><button class="dialog-close" value="cancel" aria-label="Hinweis schließen">×</button></form>
@@ -777,6 +794,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=7.4"></script>
+  <script src="app.js?v=7.5"></script>
 </body>
 </html>

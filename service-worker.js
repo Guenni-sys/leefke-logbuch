@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v7-4-bild-kosten-20260731';
+const APP_CACHE = 'leefke-v7-5-stabilitaet-20260802';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=7.4',
+  './index.html?v=7.5',
   './style.css',
-  './style.css?v=7.4',
+  './style.css?v=7.5',
   './app.js',
-  './app.js?v=7.4',
+  './app.js?v=7.5',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
@@ -79,6 +79,7 @@ self.addEventListener('fetch', event => {
   const isRuntimeResource =
     url.hostname.includes('openstreetmap.org') ||
     url.hostname.includes('openseamap.org') ||
+    url.hostname.includes('cartocdn.com') ||
     url.hostname === 'unpkg.com' ||
     url.hostname === 'cdn.jsdelivr.net';
 

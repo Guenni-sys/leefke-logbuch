@@ -1,4 +1,4 @@
-const APP_VERSION = '7.4';
+const APP_VERSION = '7.5';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -107,11 +107,14 @@ let allState = {};
 let activeTripId = '';
 let editingDayId = '';
 let dayViewRecordId = '';
+let openChecklistItemId = '';
+let serviceWorkerRegistration = null;
 let nauticalMap = null;
 let nauticalBaseLayer = null;
 let seamarkLayer = null;
 let portLayer = null;
 let activeGpxLayer = null;
+let plannedTripLayer = null;
 let activeRouteBounds = null;
 let selectedGpxId = '';
 let reportRouteMap = null;
@@ -1324,6 +1327,28 @@ function view(id) {
   window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
 }
 
+const DAY_WEATHER_PRESETS = ['Sonnig', 'Heiter', 'Wechselnd bewölkt', 'Bedeckt', 'Schauer', 'Regen', 'Nebel', 'Gewitter'];
+
+function syncDayWeatherControl(value) {
+  const select = $('#dayWeatherSelect');
+  const input = $('#dayWeatherCustom');
+  if (!select || !input) return;
+  const current = String(value ?? input.value ?? '').trim();
+  if (DAY_WEATHER_PRESETS.includes(current)) {
+    select.value = current;
+    input.value = current;
+    input.hidden = true;
+  } else if (current) {
+    select.value = '__custom__';
+    input.value = current;
+    input.hidden = false;
+  } else {
+    select.value = '';
+    input.value = '';
+    input.hidden = true;
+  }
+}
+
 function prepareDayForm() {
   const form = $('#dayForm');
   if (!form) return;
@@ -1336,6 +1361,7 @@ function prepareDayForm() {
   }
   const settings = getSettings();
   if (!editing && !form.elements.crew.value) form.elements.crew.value = getActiveTrip()?.crew || settings.defaultCrew || '';
+  syncDayWeatherControl(form.elements.weather?.value || '');
   updateDayFormMode();
 }
 
@@ -1405,6 +1431,28 @@ async function setActiveTrip(id, options = {}) {
 }
 window.setActiveTrip = setActiveTrip;
 
+async function openTripOnMap(id) {
+  await setActiveTrip(id, { silent: true });
+  view('route');
+  window.setTimeout(() => {
+    const firstGpx = state.gpx?.[0];
+    const select = $('#gpxSelect');
+    if (firstGpx) {
+      selectedGpxId = firstGpx.id;
+      if (select) select.value = firstGpx.id;
+      drawGpx(firstGpx.id);
+    } else {
+      selectedGpxId = '';
+      if (select) select.value = '';
+      drawPlannedTripMap();
+    }
+    $('#routeMap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 160);
+  toast(`Törn auf Seekarte geöffnet: ${getActiveTrip()?.title || ''}`);
+}
+window.openTripOnMap = openTripOnMap;
+
+
 function renderTripManager() {
   const trips = [...(state.trips || [])].sort((a, b) => String(b.startDate || '').localeCompare(String(a.startDate || '')) || String(a.title || '').localeCompare(String(b.title || ''), 'de'));
   const current = getActiveTrip();
@@ -1421,9 +1469,9 @@ function renderTripManager() {
   const list = $('#tripList');
   if (list) list.innerHTML = trips.map(trip => {
     const active = trip.id === activeTripId;
-    return `<article class="trip-card ${active ? 'active' : ''}">
-      <div><small>${tripStatusLabel(trip.status).toUpperCase()}</small><h4>${esc(trip.title || 'Unbenannter Törn')}</h4><p>${tripDateLabel(trip) || 'Zeitraum noch offen'}${trip.crew ? ` · ${esc(trip.crew)}` : ''}</p></div>
-      <div class="actions"><button type="button" class="${active ? 'primary' : ''}" onclick="setActiveTrip('${trip.id}')">${active ? 'Geöffnet' : 'Öffnen'}</button><button type="button" onclick="openTripDialog('edit','${trip.id}')">Bearbeiten</button></div>
+    return `<article class="trip-card ${active ? 'active' : ''}" role="button" tabindex="0" data-trip-map-id="${esc(trip.id)}" aria-label="Törn ${esc(trip.title || 'Unbenannter Törn')} öffnen und auf der Seekarte anzeigen">
+      <div><small>${tripStatusLabel(trip.status).toUpperCase()}</small><h4>${esc(trip.title || 'Unbenannter Törn')}</h4><p>${tripDateLabel(trip) || 'Zeitraum noch offen'}${trip.crew ? ` · ${esc(trip.crew)}` : ''}</p><span class="trip-map-hint">Antippen: Törn öffnen und auf Seekarte zeigen</span></div>
+      <div class="actions"><button type="button" class="${active ? 'primary' : ''}" onclick="event.stopPropagation();openTripOnMap('${trip.id}')">${active ? 'Auf Karte' : 'Öffnen & Karte'}</button><button type="button" onclick="event.stopPropagation();openTripDialog('edit','${trip.id}')">Bearbeiten</button></div>
     </article>`;
   }).join('') || '<div class="muted">Noch kein Törn angelegt.</div>';
 }
@@ -1682,7 +1730,8 @@ function render() {
   $('#sNm').textContent = dec(totalNm);
   $('#sHours').textContent = dec(totalHours);
   $('#sCost').textContent = eur(fuelCost);
-  $('#sAvg').textContent = totalHours ? `${dec(fuelLiters / totalHours)} l/h` : '—';
+  const fuelConsumption = calculateFuelConsumption();
+  $('#sAvg').textContent = fuelConsumption.totalHours > 0 ? `${dec2(fuelConsumption.average)} l/h` : '—';
 
   const latest = days[0];
   $('#latest').innerHTML = latest ? `
@@ -1705,7 +1754,7 @@ function render() {
 
   renderTank(settings);
   renderDays();
-  renderFuel(totalHours);
+  renderFuel();
   renderMaintenance();
   renderRoute();
   renderPorts();
@@ -1786,18 +1835,63 @@ function formatFuelDecimal(value, digits = 1) {
   return Number(value).toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: digits });
 }
 
-function renderFuel(totalHours) {
+function fuelTimestamp(item) {
+  const date = String(item?.date || '');
+  const time = String(item?.time || '00:00');
+  const stamp = Date.parse(`${date || '1970-01-01'}T${time || '00:00'}:00`);
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+function calculateFuelConsumption() {
+  const hasHours = item => item?.engineHours !== '' && item?.engineHours !== null && item?.engineHours !== undefined && Number.isFinite(Number(item.engineHours));
+  const chronological = [...(state.fuel || [])].sort((a, b) => {
+    const validA = hasHours(a);
+    const validB = hasHours(b);
+    if (validA && validB && Number(a.engineHours) !== Number(b.engineHours)) return Number(a.engineHours) - Number(b.engineHours);
+    if (validA !== validB) return validA ? -1 : 1;
+    return fuelTimestamp(a) - fuelTimestamp(b);
+  });
+  const intervals = new Map();
+  let previous = null;
+  let totalLiters = 0;
+  let totalHours = 0;
+  for (const current of chronological) {
+    if (!hasHours(current)) continue;
+    const currentHours = Number(current.engineHours);
+    if (previous) {
+      const previousHours = Number(previous.engineHours);
+      const drivenHours = currentHours - previousHours;
+      const hasLiters = current.liters !== '' && current.liters !== null && current.liters !== undefined && Number.isFinite(Number(current.liters));
+      const replenishedLiters = Number(current.liters);
+      if (Number.isFinite(drivenHours) && drivenHours > 0 && hasLiters && replenishedLiters >= 0) {
+        const rate = replenishedLiters / drivenHours;
+        intervals.set(current.id, { previous, drivenHours, replenishedLiters, rate });
+        totalHours += drivenHours;
+        totalLiters += replenishedLiters;
+      }
+    }
+    previous = current;
+  }
+  return { intervals, totalHours, totalLiters, average: totalHours > 0 ? totalLiters / totalHours : 0 };
+}
+
+function renderFuel() {
   const liters = state.fuel.reduce((sum, item) => sum + num(item.liters), 0);
   const cost = state.fuel.reduce((sum, item) => sum + num(item.liters) * num(item.price), 0);
+  const consumption = calculateFuelConsumption();
   $('#fuelLiters').textContent = `${dec(liters)} l`;
   $('#fuelCost').textContent = eur(cost);
   $('#fuelPrice').textContent = liters ? `${eur(cost / liters)}/l` : '—';
-  $('#fuelPerHour').textContent = totalHours ? `${dec(liters / totalHours)} l/h` : '—';
+  $('#fuelPerHour').textContent = consumption.totalHours > 0 ? `${dec2(consumption.average)} l/h` : '—';
   $('#fuelList').innerHTML = state.fuel.map(item => {
     const itemLiters = num(item.liters);
     const itemPrice = num(item.price);
     const total = itemLiters * itemPrice;
     const when = `${fmtDate(item.date)}${item.time ? ` · ${esc(item.time)} Uhr` : ''}`;
+    const interval = consumption.intervals.get(item.id);
+    const intervalHtml = interval
+      ? `<div class="fuel-consumption-box"><div><span>Seit letztem Tanken gefahren</span><strong>${formatFuelDecimal(interval.drivenHours, 2)} h</strong></div><div><span>Nachgetankt</span><strong>${formatFuelDecimal(interval.replenishedLiters, 2)} l</strong></div><div><span>Berechneter Verbrauch</span><strong>${formatFuelDecimal(interval.rate, 2)} l/h</strong></div></div>`
+      : `<div class="fuel-consumption-box first"><span>Für diesen Tankvorgang fehlt noch ein vorheriger Eintrag mit Motorstunden. Die Verbrauchsberechnung beginnt ab dem nächsten Tanken.</span></div>`;
     return `<article class="item fuel-entry" data-store="fuel" data-record-id="${esc(item.id)}">
       <header class="fuel-entry-head">
         <div><span class="fuel-entry-kicker">TANKVORGANG</span><h3>${esc(item.place || 'Ort nicht eingetragen')}</h3><p>${when}</p></div>
@@ -1809,6 +1903,7 @@ function renderFuel(totalHours) {
         <div><span>Motorstunden</span><strong>${item.engineHours !== '' && item.engineHours !== undefined ? `${formatFuelDecimal(item.engineHours)} h` : '—'}</strong></div>
         <div><span>Tankstand danach</span><strong>${item.tankPercent !== '' && item.tankPercent !== undefined ? `${formatFuelDecimal(item.tankPercent)} %` : '—'}</strong></div>
       </div>
+      ${intervalHtml}
       ${item.note ? `<p class="fuel-entry-note">${esc(item.note).replace(/\n/g, '<br>')}</p>` : ''}
       <div class="fuel-entry-actions"><button type="button" onclick="editItem('fuel','${item.id}')">Bearbeiten</button><button class="delete" type="button" onclick="removeItem('fuel','${item.id}')">Löschen</button></div>
     </article>`;
@@ -1942,7 +2037,7 @@ function resetPortGpsAssistant() {
   }
 }
 
-function storedPortGpsCandidates(location) {
+function storedPortGpsCandidates(location, radiusKm = 25) {
   return (state.ports || []).map(item => {
     const position = parseCoordinateText(item.coords);
     if (!position || !item.name) return null;
@@ -1954,7 +2049,7 @@ function storedPortGpsCandidates(location) {
       type: 'Bereits im Hafenbuch',
       source: 'LEEFKE'
     };
-  }).filter(Boolean).filter(item => item.distanceKm <= 12);
+  }).filter(Boolean).filter(item => item.distanceKm <= radiusKm);
 }
 
 function overpassPortQuery(latitude, longitude, radius = 9000) {
@@ -1969,42 +2064,56 @@ function overpassPortQuery(latitude, longitude, radius = 9000) {
   );out center tags;`;
 }
 
-async function fetchNearbyPorts(location) {
+async function fetchOverpassEndpoint(endpoint, query, timeoutMs = 16000) {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: controller.signal,
+      cache: 'no-store'
+    });
+    if (!response.ok) throw new Error(`Kartendienst antwortet mit ${response.status}`);
+    return await response.json();
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+async function fetchNearbyPorts(location, radiusMeters = 25000) {
   const endpoints = [
     'https://overpass-api.de/api/interpreter',
-    'https://overpass.kumi.systems/api/interpreter'
+    'https://overpass.kumi.systems/api/interpreter',
+    'https://overpass.private.coffee/api/interpreter'
   ];
-  const query = overpassPortQuery(location.latitude, location.longitude);
+  const query = overpassPortQuery(location.latitude, location.longitude, radiusMeters);
+  let data;
   let lastError = null;
-  for (const endpoint of endpoints) {
-    try {
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-        body: `data=${encodeURIComponent(query)}`
-      });
-      if (!response.ok) throw new Error(`Kartendienst antwortet mit ${response.status}`);
-      const data = await response.json();
-      return (data.elements || []).map(element => {
-        const latitude = Number(element.lat ?? element.center?.lat);
-        const longitude = Number(element.lon ?? element.center?.lon);
-        const tags = element.tags || {};
-        const name = String(tags.name || tags['seamark:name'] || '').trim();
-        if (!name || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
-        return {
-          name,
-          latitude,
-          longitude,
-          distanceKm: haversineKm(location, { latitude, longitude }),
-          type: portGpsType(tags),
-          source: 'OpenStreetMap'
-        };
-      }).filter(Boolean);
-    } catch (error) {
+  try {
+    data = await Promise.any(endpoints.map(endpoint => fetchOverpassEndpoint(endpoint, query).catch(error => {
       lastError = error;
-    }
+      throw error;
+    })));
+  } catch {
+    throw lastError || new Error('Hafensuche momentan nicht erreichbar');
   }
-  throw lastError || new Error('Hafensuche momentan nicht erreichbar');
+  return (data.elements || []).map(element => {
+    const latitude = Number(element.lat ?? element.center?.lat);
+    const longitude = Number(element.lon ?? element.center?.lon);
+    const tags = element.tags || {};
+    const name = String(tags.name || tags['seamark:name'] || tags['name:de'] || '').trim();
+    if (!name || !Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return {
+      name,
+      latitude,
+      longitude,
+      distanceKm: haversineKm(location, { latitude, longitude }),
+      type: portGpsType(tags),
+      source: 'OpenStreetMap'
+    };
+  }).filter(Boolean).filter(item => item.distanceKm <= radiusMeters / 1000 + 0.5);
 }
 
 function uniquePortCandidates(items) {
@@ -2014,7 +2123,7 @@ function uniquePortCandidates(items) {
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 6);
+  }).slice(0, 10);
 }
 
 function renderPortGpsCandidates(items, accuracy) {
@@ -2059,23 +2168,25 @@ async function suggestPortFromGps() {
     if (!form.elements.date.value) form.elements.date.value = dateInputValue();
     setPortGpsStatus(`Position gefunden${Number.isFinite(position.coords.accuracy) ? ` (Genauigkeit etwa ± ${Math.round(position.coords.accuracy)} m)` : ''}. Häfen in der Nähe werden gesucht …`, 'loading');
 
-    const localCandidates = storedPortGpsCandidates(location);
+    const selectedRadius = Math.max(5000, Math.min(50000, Number($('#portGpsRadius')?.value || 25000)));
+    const radiusKm = selectedRadius / 1000;
+    const localCandidates = storedPortGpsCandidates(location, radiusKm);
     let onlineCandidates = [];
     let onlineError = null;
     if (navigator.onLine) {
-      try { onlineCandidates = await fetchNearbyPorts(location); }
+      try { onlineCandidates = await fetchNearbyPorts(location, selectedRadius); }
       catch (error) { onlineError = error; }
     }
     const candidates = uniquePortCandidates([...localCandidates, ...onlineCandidates]);
     renderPortGpsCandidates(candidates, position.coords.accuracy);
     if (candidates.length) {
-      setPortGpsStatus('Standort gefunden. Bitte den passenden Hafen aus den Vorschlägen auswählen; gespeichert wird erst mit „Hafen speichern“.', 'success');
+      setPortGpsStatus(`Standort gefunden. ${candidates.length} Vorschläge im Umkreis bis ${radiusKm.toLocaleString('de-DE')} km. Bitte den passenden Hafen auswählen.`, 'success');
     } else if (!navigator.onLine) {
       setPortGpsStatus('GPS-Position übernommen. Für die automatische Hafensuche ist momentan eine Internetverbindung nötig.', 'warning');
     } else if (onlineError) {
       setPortGpsStatus('GPS-Position übernommen. Der Kartendienst für Hafenvorschläge war gerade nicht erreichbar; der Hafenname kann manuell eingetragen werden.', 'warning');
     } else {
-      setPortGpsStatus('GPS-Position übernommen, aber im Umkreis wurde kein benannter Hafen gefunden.', 'warning');
+      setPortGpsStatus(`GPS-Position übernommen, aber im gewählten Umkreis von ${radiusKm.toLocaleString('de-DE')} km wurde kein benannter Hafen gefunden. Wähle bei Bedarf 50 km und suche erneut.`, 'warning');
     }
   } catch (error) {
     setPortGpsStatus(geolocationErrorText(error), 'error');
@@ -2114,10 +2225,29 @@ function renderPorts() {
   }).join('') || '<div class="card muted">Keine passenden Häfen.</div>';
 }
 
+function checklistDateLabel(value) {
+  if (!value) return 'Noch nie protokolliert';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Zeitpunkt unbekannt' : date.toLocaleString('de-DE', { dateStyle: 'short', timeStyle: 'short' });
+}
+
+function checklistLastChecked(item) {
+  const history = Array.isArray(item.history) ? item.history : [];
+  const checked = history.filter(entry => entry.action === 'checked').sort((a, b) => Date.parse(b.checkedAt || 0) - Date.parse(a.checkedAt || 0))[0];
+  return checked?.checkedAt || item.lastCheckedAt || '';
+}
+
 function renderChecks() {
   const groups = {};
   state.checklists.forEach(item => (groups[item.group || 'Eigene Punkte'] ??= []).push(item));
-  $('#checks').innerHTML = Object.entries(groups).map(([group, items]) => `<article class="card"><div class="card-kicker">CHECKLISTE</div><h3>${esc(group)}</h3>${items.map(item => `<label class="check"><input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleCheck('${item.id}',this.checked)"><span>${esc(item.item)}</span><button class="mini" onclick="removeItem('checklists','${item.id}');return false" aria-label="Prüfpunkt löschen">×</button></label>`).join('')}</article>`).join('');
+  $('#checks').innerHTML = Object.entries(groups).map(([group, items]) => `<article class="card checklist-card"><div class="card-kicker">CHECKLISTE</div><h3>${esc(group)}</h3><div class="checklist-items">${items.map(item => {
+    const last = checklistLastChecked(item);
+    const historyCount = Array.isArray(item.history) ? item.history.length : 0;
+    return `<div class="check-row ${item.done ? 'done' : ''}">
+      <label class="check-main"><input type="checkbox" ${item.done ? 'checked' : ''} onchange="toggleCheck('${item.id}',this.checked)"><span><strong>${esc(item.item)}</strong><small>${item.done ? 'Aktuell geprüft' : 'Aktuell offen'} · ${last ? `zuletzt ${checklistDateLabel(last)}` : 'noch ohne Prüfung'}${item.lastCheckedBy ? ` · ${esc(item.lastCheckedBy)}` : ''}</small></span></label>
+      <div class="check-actions"><button type="button" onclick="openChecklistHistory('${item.id}')">Protokoll${historyCount ? ` (${historyCount})` : ''}</button><button type="button" onclick="editChecklistItem('${item.id}')">Bearbeiten</button><button class="delete" type="button" onclick="removeItem('checklists','${item.id}')">Löschen</button></div>
+    </div>`;
+  }).join('')}</div></article>`).join('') || '<div class="card muted">Noch keine Prüfpunkte vorhanden.</div>';
 }
 
 function renderPhotos() {
@@ -2322,6 +2452,21 @@ if (dayForm) {
 }
 
 
+$('#dayWeatherSelect')?.addEventListener('change', event => {
+  const input = $('#dayWeatherCustom');
+  if (!input) return;
+  if (event.target.value === '__custom__') {
+    input.hidden = false;
+    if (DAY_WEATHER_PRESETS.includes(input.value)) input.value = '';
+    input.focus();
+  } else {
+    input.value = event.target.value || '';
+    input.hidden = true;
+  }
+});
+
+
+
 function parseFuelDecimal(value) {
   const raw = String(value ?? '').trim();
   if (!raw) return '';
@@ -2464,23 +2609,87 @@ $('#settingsForm').onsubmit = async event => {
   toast('Schiffsdaten der LEEFKE gespeichert und zur Synchronisierung vorgemerkt');
 };
 
+function updateCheckFormMode(editing = false) {
+  const form = $('#checkForm');
+  if (!form) return;
+  $('#checkSaveButton').textContent = editing ? 'Änderungen speichern' : 'Prüfpunkt hinzufügen';
+  $('#checkCancelEditButton').hidden = !editing;
+}
+
 $('#checkForm').onsubmit = async event => {
   event.preventDefault();
-  const item = formObject(event.target);
-  await put('checklists', { id: uid(), group: item.group || 'Eigene Punkte', item: item.item, done: false });
-  event.target.reset();
+  const form = event.currentTarget;
+  const values = formObject(form);
+  const existing = values.id ? await getOne('checklists', values.id) : null;
+  await put('checklists', {
+    ...(existing || {}),
+    id: values.id || uid(),
+    group: values.group || 'Eigene Punkte',
+    item: String(values.item || '').trim(),
+    done: existing?.done || false,
+    history: Array.isArray(existing?.history) ? existing.history : []
+  });
+  form.reset();
+  updateCheckFormMode(false);
   await refresh();
-  toast('Prüfpunkt hinzugefügt');
+  toast(existing ? 'Prüfpunkt geändert' : 'Prüfpunkt hinzugefügt');
 };
 
+$('#checkCancelEditButton')?.addEventListener('click', () => {
+  $('#checkForm').reset();
+  updateCheckFormMode(false);
+});
+
 $('#resetChecks').onclick = async () => {
+  const device = await getDeviceIdentity();
+  const now = new Date().toISOString();
   for (const item of state.checklists) {
-    item.done = false;
-    await put('checklists', item);
+    if (!item.done) continue;
+    const history = Array.isArray(item.history) ? [...item.history] : [];
+    history.push({ id: uid(), action: 'reset', checkedAt: now, checkedBy: device.label || 'Dieses Gerät', note: 'Sammelrücksetzung' });
+    await put('checklists', { ...item, done: false, history, lastChangedAt: now });
   }
   await refresh();
-  toast('Checklisten zurückgesetzt');
+  toast('Aktuelle Haken zurückgesetzt und protokolliert');
 };
+
+$('#checkHistoryForm')?.addEventListener('submit', async event => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = formObject(form);
+  const item = await getOne('checklists', values.itemId);
+  if (!item) return toast('Prüfpunkt wurde nicht gefunden');
+  const device = await getDeviceIdentity();
+  const history = Array.isArray(item.history) ? [...item.history] : [];
+  const existingIndex = history.findIndex(entry => entry.id === values.eventId);
+  const entry = {
+    ...(existingIndex >= 0 ? history[existingIndex] : {}),
+    id: values.eventId || uid(),
+    action: values.action || 'checked',
+    checkedAt: new Date(values.checkedAt).toISOString(),
+    checkedBy: existingIndex >= 0 ? (history[existingIndex].checkedBy || device.label) : (device.label || 'Dieses Gerät'),
+    note: String(values.note || '').trim()
+  };
+  if (existingIndex >= 0) history[existingIndex] = entry; else history.push(entry);
+  await put('checklists', recalculateChecklistState(item, history));
+  await refresh();
+  openChecklistItemId = item.id;
+  renderChecklistHistoryDialog();
+  form.reset();
+  form.elements.itemId.value = item.id;
+  form.elements.checkedAt.value = new Date().toISOString().slice(0, 16);
+  form.elements.action.value = 'checked';
+  toast('Prüfprotokoll gespeichert');
+});
+
+$('#checkHistoryCancelEdit')?.addEventListener('click', () => {
+  const form = $('#checkHistoryForm');
+  if (!form) return;
+  form.reset();
+  form.elements.itemId.value = openChecklistItemId;
+  form.elements.checkedAt.value = new Date().toISOString().slice(0, 16);
+  form.elements.action.value = 'checked';
+});
 
 $('#photoForm').onsubmit = event => {
   event.preventDefault();
@@ -2529,11 +2738,98 @@ async function removeItem(store, id) {
 }
 
 async function toggleCheck(id, done) {
-  const item = state.checklists.find(entry => entry.id === id);
+  const item = await getOne('checklists', id) || state.checklists.find(entry => entry.id === id);
   if (!item) return;
-  item.done = done;
-  await put('checklists', item);
+  const device = await getDeviceIdentity();
+  const now = new Date().toISOString();
+  const history = Array.isArray(item.history) ? [...item.history] : [];
+  history.push({ id: uid(), action: done ? 'checked' : 'reset', checkedAt: now, checkedBy: device.label || 'Dieses Gerät', note: '' });
+  await put('checklists', {
+    ...item,
+    done,
+    history,
+    lastChangedAt: now,
+    ...(done ? { lastCheckedAt: now, lastCheckedBy: device.label || 'Dieses Gerät' } : {})
+  });
   await refresh();
+  toast(done ? 'Prüfung mit Zeitpunkt protokolliert' : 'Haken zurückgesetzt und protokolliert');
+}
+
+function editChecklistItem(id) {
+  const item = state.checklists.find(entry => entry.id === id);
+  const form = $('#checkForm');
+  if (!item || !form) return toast('Prüfpunkt wurde nicht gefunden');
+  form.elements.id.value = item.id;
+  form.elements.group.value = item.group || 'Eigene Punkte';
+  form.elements.item.value = item.item || '';
+  updateCheckFormMode(true);
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  form.elements.item.focus();
+}
+
+function checklistHistorySorted(item) {
+  return [...(Array.isArray(item?.history) ? item.history : [])].sort((a, b) => Date.parse(b.checkedAt || 0) - Date.parse(a.checkedAt || 0));
+}
+
+function renderChecklistHistoryDialog() {
+  const item = state.checklists.find(entry => entry.id === openChecklistItemId);
+  const list = $('#checkHistoryList');
+  if (!item || !list) return;
+  $('#checkHistoryTitle').textContent = item.item || 'Prüfpunkt';
+  $('#checkHistoryMeta').textContent = `${item.group || 'Checkliste'} · ${item.done ? 'aktuell geprüft' : 'aktuell offen'}`;
+  const entries = checklistHistorySorted(item);
+  list.innerHTML = entries.map(entry => `<article class="check-history-entry ${entry.action === 'checked' ? 'checked' : 'reset'}"><div><small>${entry.action === 'checked' ? 'GEPRÜFT' : 'ZURÜCKGESETZT'}</small><strong>${checklistDateLabel(entry.checkedAt)}</strong><span>${esc(entry.checkedBy || 'Gerät nicht bekannt')}${entry.note ? ` · ${esc(entry.note)}` : ''}</span></div><div class="actions"><button type="button" onclick="editChecklistHistoryEvent('${item.id}','${entry.id}')">Bearbeiten</button><button class="delete" type="button" onclick="deleteChecklistHistoryEvent('${item.id}','${entry.id}')">Löschen</button></div></article>`).join('') || '<div class="empty-state">Noch keine Prüfung protokolliert.</div>';
+}
+
+function openChecklistHistory(id) {
+  const item = state.checklists.find(entry => entry.id === id);
+  const dialog = $('#checkHistoryDialog');
+  if (!item || !dialog) return toast('Prüfpunkt wurde nicht gefunden');
+  openChecklistItemId = id;
+  const form = $('#checkHistoryForm');
+  form.reset();
+  form.elements.itemId.value = id;
+  form.elements.checkedAt.value = new Date().toISOString().slice(0, 16);
+  form.elements.action.value = 'checked';
+  renderChecklistHistoryDialog();
+  if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+}
+
+function editChecklistHistoryEvent(itemId, eventId) {
+  const item = state.checklists.find(entry => entry.id === itemId);
+  const entry = (item?.history || []).find(row => row.id === eventId);
+  const form = $('#checkHistoryForm');
+  if (!entry || !form) return;
+  form.elements.itemId.value = itemId;
+  form.elements.eventId.value = eventId;
+  form.elements.checkedAt.value = String(entry.checkedAt || '').slice(0, 16);
+  form.elements.action.value = entry.action || 'checked';
+  form.elements.note.value = entry.note || '';
+  form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+}
+
+function recalculateChecklistState(item, history) {
+  const sorted = [...history].sort((a, b) => Date.parse(a.checkedAt || 0) - Date.parse(b.checkedAt || 0));
+  const latest = sorted.at(-1);
+  const latestChecked = [...sorted].reverse().find(entry => entry.action === 'checked');
+  return {
+    ...item,
+    history: sorted,
+    done: latest ? latest.action === 'checked' : false,
+    lastChangedAt: latest?.checkedAt || item.lastChangedAt || '',
+    lastCheckedAt: latestChecked?.checkedAt || '',
+    lastCheckedBy: latestChecked?.checkedBy || ''
+  };
+}
+
+async function deleteChecklistHistoryEvent(itemId, eventId) {
+  const item = await getOne('checklists', itemId);
+  if (!item || !confirm('Diesen Protokolleintrag wirklich löschen?')) return;
+  const history = (item.history || []).filter(entry => entry.id !== eventId);
+  await put('checklists', recalculateChecklistState(item, history));
+  await refresh();
+  openChecklistItemId = itemId;
+  renderChecklistHistoryDialog();
 }
 
 function fillForm(form, item) {
@@ -2553,6 +2849,7 @@ async function editDayItem(id) {
     if (!form) return;
     fillForm(form, item);
     form.elements.id.value = item.id;
+    syncDayWeatherControl(item.weather || '');
     updateDayFormMode();
     const label = item.title || `${item.fromPort || 'Start'} → ${item.toPort || 'Ziel'}`;
     setDayFormStatus(`Du bearbeitest „${label}“. Alle gespeicherten Werte wurden ins Formular geladen.`, 'info');
@@ -2659,6 +2956,7 @@ function routeToDay(routeId) {
   form.elements.depart.value = stage.departTime || '';
   form.elements.distance.value = stage.nm || '';
   form.elements.weather.value = stage.weather || '';
+  syncDayWeatherControl(stage.weather || '');
   form.elements.wind.value = stage.wind || '';
   form.elements.wave.value = stage.wave || '';
   form.elements.tide.value = stage.tide || '';
@@ -2677,6 +2975,10 @@ window.toggleCheck = toggleCheck;
 window.editItem = editItem;
 window.editDayItem = editDayItem;
 window.openSavedDay = openSavedDay;
+window.editChecklistItem = editChecklistItem;
+window.openChecklistHistory = openChecklistHistory;
+window.editChecklistHistoryEvent = editChecklistHistoryEvent;
+window.deleteChecklistHistoryEvent = deleteChecklistHistoryEvent;
 
 $('#daySearch').oninput = renderDays;
 $('#showSavedDaysButton')?.addEventListener('click', () => $('#savedDaysSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
@@ -2747,11 +3049,29 @@ $('#gpxSelect').onchange = event => {
 
 $('#fitRoute').onclick = () => {
   if (!activeRouteBounds || !nauticalMap) {
-    toast('Bitte zuerst eine GPX-Route auswählen');
+    toast('Bitte zuerst einen Törn mit Etappen oder eine GPX-Route öffnen');
     return;
   }
   nauticalMap.fitBounds(activeRouteBounds, { padding: [36, 36], maxZoom: 14 });
 };
+
+function installTileFallback(map, primaryLayer, { report = false } = {}) {
+  let errors = 0;
+  let fallbackAdded = false;
+  primaryLayer.on('tileerror', () => {
+    errors += 1;
+    if (errors < 4 || fallbackAdded || !map) return;
+    fallbackAdded = true;
+    try { map.removeLayer(primaryLayer); } catch {}
+    const fallback = L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+      maxZoom: 19,
+      crossOrigin: true,
+      attribution: '&copy; OpenStreetMap-Mitwirkende &copy; CARTO'
+    }).addTo(map);
+    if (report) waitForReportTileLayer(fallback, 5000).then(() => map.invalidateSize(false));
+    else map.invalidateSize(false);
+  });
+}
 
 function ensureNauticalMap() {
   const mapElement = $('#routeMap');
@@ -2769,10 +3089,12 @@ function ensureNauticalMap() {
     maxZoom: 18
   }).setView([53.72, 8.55], 8);
 
-  nauticalBaseLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  nauticalBaseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
+    crossOrigin: true,
     attribution: '&copy; OpenStreetMap-Mitwirkende'
   }).addTo(nauticalMap);
+  installTileFallback(nauticalMap, nauticalBaseLayer);
 
   seamarkLayer = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
     maxZoom: 18,
@@ -2857,8 +3179,40 @@ function updateMapInfo(route) {
 
 function clearActiveRoute() {
   if (activeGpxLayer && nauticalMap) nauticalMap.removeLayer(activeGpxLayer);
+  if (plannedTripLayer && nauticalMap) nauticalMap.removeLayer(plannedTripLayer);
   activeGpxLayer = null;
+  plannedTripLayer = null;
   activeRouteBounds = null;
+}
+
+function drawPlannedTripMap() {
+  const map = ensureNauticalMap();
+  if (!map || !window.L) return;
+  clearActiveRoute();
+  const segments = reportPlannedRouteSegments();
+  const layers = [];
+  const bounds = L.latLngBounds([]);
+  segments.forEach((segment, index) => {
+    if (!segment.from || !segment.to) return;
+    const points = [L.latLng(segment.from[0], segment.from[1]), L.latLng(segment.to[0], segment.to[1])];
+    points.forEach(point => bounds.extend(point));
+    const halo = L.polyline(points, { color: '#08283b', weight: 8, opacity: .55, interactive: false });
+    const line = L.polyline(points, { color: '#f2bd2e', weight: 4, opacity: 1, dashArray: '10 8' })
+      .bindPopup(`<strong>${esc(segment.label)}</strong>${segment.date ? `<br>${fmtDate(segment.date)}` : ''}`);
+    layers.push(halo, line);
+    if (index === 0) layers.push(L.marker(points[0], { icon: routeMarker('start', 'Start') }).bindPopup(`<strong>${esc(segment.label.split(' → ')[0])}</strong>`));
+    if (index === segments.length - 1) layers.push(L.marker(points[1], { icon: routeMarker('finish', 'Ziel') }).bindPopup(`<strong>${esc(segment.label.split(' → ')[1])}</strong>`));
+  });
+  if (!layers.length) {
+    $('#mapInfo').innerHTML = '<strong>Noch keine darstellbaren Etappen.</strong><span>Trage Start und Ziel in der Törnplanung ein oder importiere eine GPX-Route.</span>';
+    map.setView([53.72, 8.55], 8);
+    return;
+  }
+  plannedTripLayer = L.layerGroup(layers).addTo(map);
+  activeRouteBounds = bounds;
+  map.fitBounds(bounds, { padding: [36, 36], maxZoom: 11 });
+  const trip = getActiveTrip();
+  $('#mapInfo').innerHTML = `<strong>${esc(trip?.title || 'Geplanter Törn')}</strong><span>${segments.length} Etappe${segments.length === 1 ? '' : 'n'} · gestrichelte Planungslinie</span><small>Für den exakten Kurs eine GPX-Route auswählen.</small>`;
 }
 
 function drawGpx(id) {
@@ -2873,7 +3227,7 @@ function drawGpx(id) {
   clearActiveRoute();
 
   if (!route?.points?.length) {
-    map.setView([53.72, 8.55], 8);
+    drawPlannedTripMap();
     return;
   }
 
@@ -4938,11 +5292,12 @@ function initReportRouteMap() {
     preferCanvas: false
   });
 
-  const baseLayer = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
     crossOrigin: true,
     attribution: '&copy; OpenStreetMap-Mitwirkende'
   }).addTo(reportRouteMap);
+  installTileFallback(reportRouteMap, baseLayer, { report: true });
   const seaMarkLayer = L.tileLayer('https://tiles.openseamap.org/seamark/{z}/{x}/{y}.png', {
     maxZoom: 18,
     opacity: 1,
@@ -4974,7 +5329,11 @@ function initReportRouteMap() {
 function buildReport() {
   const settings=getSettings();const days=[...state.days].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const photos=[...state.photos];const ports=[...state.ports].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const totalNm=days.reduce((s,i)=>s+num(i.distance),0);const hours=days.reduce((s,i)=>s+Math.max(0,num(i.engineEnd)-num(i.engineStart)),0);const fuelLiters=state.fuel.reduce((s,i)=>s+num(i.liters),0);const fuelCost=state.fuel.reduce((s,i)=>s+num(i.liters)*num(i.price),0);const portCost=ports.reduce((s,i)=>s+num(i.cost),0);const cover=settings.boatPhoto||photos.find(p=>p.featured)?.data||defaultHero;const includeWeather=$('#reportIncludeWeather')?.checked!==false,includePorts=$('#reportIncludePorts')?.checked!==false,includeCosts=$('#reportIncludeCosts')?.checked!==false,includeMaintenance=$('#reportIncludeMaintenance')?.checked===true;
   $('#reportContent').innerHTML=`<div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle||'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div><div class="report-summary-grid"><div><span>Reisetage</span><strong>${days.length}</strong></div><div><span>Seemeilen</span><strong>${dec(totalNm)} sm</strong></div><div><span>Motorstunden</span><strong>${dec(hours)} h</strong></div><div><span>Häfen</span><strong>${ports.length}</strong></div></div><p class="meta">${esc(settings.boatName)} · Baujahr ${esc(settings.buildYear)} · ${dec2(settings.length)} × ${dec2(settings.beam)} m · ${esc(settings.engine)} · Heimathafen ${esc(settings.homePort)}</p><section class="report-map-section"><h2>Der Törn auf der Seekarte</h2>${reportRouteMapHtml()}</section>${state.route.length?`<section class="report-plan"><h2>Törnplan</h2>${[...state.route].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((stage,index)=>`<div><b>${index+1}. ${fmtDate(stage.date)} · ${esc(stage.from||'—')} → ${esc(stage.to||'—')}</b><span>${dec(stage.nm)} sm${stage.departTime?` · Ablegen ${esc(stage.departTime)} Uhr`:''}${includeWeather&&stage.wind?` · ${esc(stage.wind)}`:''}${includeWeather&&stage.wave?` · Welle ${esc(stage.wave)}`:''}${includeWeather&&stage.tide?` · ${esc(stage.tide)}`:''}</span></div>`).join('')}</section>`:''}${days.map(day=>{const dayPhotos=photos.filter(photo=>photo.relatedId===day.id||(!photo.relatedId&&photo.date===day.date)).sort((a,b)=>Number(b.featured===true||b.featured==='true')-Number(a.featured===true||a.featured==='true'));return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title||`${day.fromPort||''} → ${day.toPort||''}`)}</h2><p class="meta">${esc(day.fromPort||'')} → ${esc(day.toPort||'')} · ${dec(day.distance)} sm${includeWeather?` · ${esc(day.wind||'')} · ${esc(day.wave||'')}`:''}</p><p>${esc(day.summary||'').replace(/\n/g,'<br>')}</p>${day.moment?`<blockquote>„${esc(day.moment)}“</blockquote>`:''}${dayPhotos.map(photo=>photo.data?`<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption||'')}"><figcaption>${esc(photo.caption||'')}</figcaption></figure>`:'').join('')}</section>`;}).join('')||'<p>Noch keine Tagesberichte vorhanden.</p>'}${includePorts&&ports.length?`<section><h2>Hafenbuch</h2><table class="report-port-table"><thead><tr><th>Hafen</th><th>Bewertung</th><th>Liegeplatz</th><th>Kosten</th></tr></thead><tbody>${ports.map(port=>`<tr><td>${esc(port.name)}</td><td>${'★'.repeat(Math.round(num(port.rating)))}${'☆'.repeat(5-Math.round(num(port.rating)))}</td><td>${esc(port.berth||'—')}</td><td>${port.cost?eur(port.cost):'—'}</td></tr>`).join('')}</tbody></table></section>`:''}${includeCosts?`<section class="report-finance-section"><div class="report-section-heading"><div><small>KOSTENÜBERSICHT</small><h2>Diesel & Reisekosten</h2></div><p>Zusammenfassung der im aktuellen Törn erfassten Tank- und Liegeplatzkosten.</p></div><div class="report-costs"><div class="report-cost-card"><span class="report-cost-icon">⛽</span><div><span>Getankt</span><strong>${dec(fuelLiters)} <em>Liter</em></strong></div></div><div class="report-cost-card"><span class="report-cost-icon">€</span><div><span>Dieselkosten</span><strong>${eur(fuelCost)}</strong></div></div><div class="report-cost-card"><span class="report-cost-icon">⚓</span><div><span>Liegeplätze</span><strong>${eur(portCost)}</strong></div></div><div class="report-cost-card report-cost-total"><span class="report-cost-icon">Σ</span><div><span>Gesamtkosten</span><strong>${eur(fuelCost+portCost)}</strong></div></div></div></section>`:''}${includeMaintenance&&state.maintenance.length?`<section><h2>Technik & Wartung</h2>${state.maintenance.map(item=>`<p><b>${fmtDate(item.date)} · ${esc(item.title)}</b><br>${esc(item.note||'')}${item.cost?` · ${eur(item.cost)}`:''}</p>`).join('')}</section>`:''}`;
-  reportMapReadyPromise = initReportRouteMap();
+  reportMapReadyPromise = new Promise(resolve => {
+    window.requestAnimationFrame(() => window.requestAnimationFrame(() => {
+      Promise.resolve(initReportRouteMap()).then(resolve);
+    }));
+  });
   return reportMapReadyPromise;
 }
 
@@ -5232,18 +5591,72 @@ async function applyServiceWorkerUpdate() {
   else location.reload();
 }
 
+function setAppUpdateStatus(message = '', kind = 'info') {
+  const status = $('#appUpdateStatus');
+  if (!status) return;
+  status.hidden = !message;
+  status.className = `sync-message ${kind}`;
+  status.textContent = message;
+}
+
 function setupServiceWorkerUpdates(registration) {
   if (!registration) return;
-  const show = worker => { pendingServiceWorker=worker; $('#updateBanner').hidden=false; };
+  serviceWorkerRegistration = registration;
+  const show = worker => {
+    pendingServiceWorker = worker;
+    $('#updateBanner').hidden = false;
+    setAppUpdateStatus('Eine neue Version wurde geladen und kann jetzt installiert werden.', 'success');
+  };
   if (registration.waiting) show(registration.waiting);
-  registration.addEventListener('updatefound',()=>{const worker=registration.installing;worker?.addEventListener('statechange',()=>{if(worker.state==='installed'&&navigator.serviceWorker.controller)show(worker);});});
-  navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload());
+  registration.addEventListener('updatefound', () => {
+    setAppUpdateStatus('Neue App-Dateien werden geprüft …', 'info');
+    const worker = registration.installing;
+    worker?.addEventListener('statechange', () => {
+      if (worker.state === 'installed' && navigator.serviceWorker.controller) show(worker);
+      else if (worker.state === 'activated') setAppUpdateStatus(`LEEFKE ${APP_VERSION} ist aktiv.`, 'success');
+    });
+  });
+  navigator.serviceWorker.addEventListener('controllerchange', () => location.reload());
+}
+
+async function checkForAppUpdate({ manual = false } = {}) {
+  if (!('serviceWorker' in navigator)) {
+    if (manual) setAppUpdateStatus('Dieser Browser unterstützt keine installierbare App-Aktualisierung.', 'warning');
+    return;
+  }
+  if (!navigator.onLine) {
+    if (manual) setAppUpdateStatus('Offline: Eine Aktualisierung kann erst mit Internetverbindung geprüft werden.', 'warning');
+    return;
+  }
+  try {
+    const registration = serviceWorkerRegistration || await navigator.serviceWorker.getRegistration('./');
+    if (!registration) {
+      if (manual) setAppUpdateStatus('Die App-Installation wurde noch nicht gefunden. Bitte die Seite einmal neu öffnen.', 'warning');
+      return;
+    }
+    serviceWorkerRegistration = registration;
+    if (manual) setAppUpdateStatus('Aktualisierung wird geprüft …', 'info');
+    await registration.update();
+    await new Promise(resolve => window.setTimeout(resolve, 900));
+    if (registration.waiting) {
+      pendingServiceWorker = registration.waiting;
+      $('#updateBanner').hidden = false;
+      setAppUpdateStatus('Neue Version verfügbar. Oben auf „Jetzt aktualisieren“ tippen.', 'success');
+    } else if (manual) {
+      setAppUpdateStatus(`LEEFKE ${APP_VERSION} ist auf diesem Gerät aktuell.`, 'success');
+    }
+  } catch (error) {
+    console.warn('App-Aktualisierung konnte nicht geprüft werden.', error);
+    if (manual) setAppUpdateStatus(`Prüfung fehlgeschlagen: ${error?.message || 'Unbekannter Fehler'}`, 'error');
+  }
 }
 
 // Zusätzliche UI-Ereignisse. Sie werden nach dem vorhandenen v5-Code gesetzt und ersetzen dessen Medienhandler.
 window.addEventListener('load', () => {
   $('#globalTripSelect')?.addEventListener('change', event => setActiveTrip(event.target.value));
   $('#newTripButton')?.addEventListener('click', () => openTripDialog('new'));
+  $('#tripList')?.addEventListener('click', event => { const card = event.target.closest('[data-trip-map-id]'); if (card && !event.target.closest('button')) openTripOnMap(card.dataset.tripMapId); });
+  $('#tripList')?.addEventListener('keydown', event => { const card = event.target.closest('[data-trip-map-id]'); if (card && (event.key === 'Enter' || event.key === ' ')) { event.preventDefault(); openTripOnMap(card.dataset.tripMapId); } });
   $('#editTripButton')?.addEventListener('click', () => openTripDialog('edit', activeTripId));
   $('#tripForm')?.addEventListener('submit', saveTripForm);
   $('#routeWeatherForm')?.addEventListener('submit', analyzeRouteWeather);
@@ -5256,6 +5669,7 @@ window.addEventListener('load', () => {
   $('#photoAutoSync')?.addEventListener('change',async event=>{await put('settings',{...getSettings(),photoAutoSync:event.target.checked,id:'main'});await refresh()});
   $('#photoForm')?.elements.relatedType?.addEventListener('change',photoRelationOptions);
   $('#applyUpdateButton')?.addEventListener('click',applyServiceWorkerUpdate);
+  $('#checkAppUpdateButton')?.addEventListener('click', () => checkForAppUpdate({ manual: true }));
   $('#dismissUpdateButton')?.addEventListener('click',()=>{$('#updateBanner').hidden=true});
   $('#enterGuestModeButton')?.addEventListener('click', enterGuestMode);
   $('#exitGuestButton')?.addEventListener('click', exitGuestMode);
@@ -5317,9 +5731,10 @@ if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=e
   startAutoSync();
   if ('serviceWorker' in navigator) {
     try {
-      const registration = await navigator.serviceWorker.register('service-worker.js');
+      const registration = await navigator.serviceWorker.register(`service-worker.js?v=${APP_VERSION}`, { updateViaCache: 'none' });
+      serviceWorkerRegistration = registration;
       setupServiceWorkerUpdates(registration);
-      registration.update();
+      checkForAppUpdate({ manual: false });
     } catch (error) {
       console.warn('Service Worker konnte nicht registriert werden.', error);
     }
@@ -5331,11 +5746,12 @@ function verifyMobileScrollState() {
   const navOpen = $('#nav')?.classList.contains('open');
   if (!navOpen) restoreDocumentScrolling();
 }
-window.addEventListener('pageshow', verifyMobileScrollState);
+window.addEventListener('pageshow', () => { verifyMobileScrollState(); checkForAppUpdate({ manual: false }); });
 window.addEventListener('resize', verifyMobileScrollState);
 window.addEventListener('orientationchange', () => window.setTimeout(verifyMobileScrollState, 120));
+window.addEventListener('online', () => checkForAppUpdate({ manual: false }));
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') verifyMobileScrollState();
+  if (document.visibilityState === 'visible') { verifyMobileScrollState(); checkForAppUpdate({ manual: false }); }
 });
 
 // Mobile Bedienleiste nach dem Laden auf die aktuelle Ansicht abstimmen.

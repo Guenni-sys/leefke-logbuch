@@ -1196,3 +1196,62 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
   .report-cost-icon{width:38px;height:38px}
   .report-section-heading p{font-size:.78rem}
 }
+
+/* Version 7.5 – Stabilitätskorrekturen für Urlaubsbetrieb */
+.day-weather-control{display:grid;align-content:start;gap:7px}
+.day-weather-control .label-row{margin:0}
+.day-weather-control select,.day-weather-control input{width:100%;min-width:0}
+.day-weather-control input[hidden]{display:none!important}
+
+.port-gps-controls{display:flex;align-items:end;justify-content:flex-end;gap:9px;min-width:0}
+.port-gps-controls label{display:grid;gap:4px;margin:0;min-width:92px;color:var(--muted);font-size:.7rem;font-weight:800}
+.port-gps-controls select{min-height:38px;padding:7px 28px 7px 9px;background-color:#fff}
+.fuel-calculation-note{margin:-2px 0 14px;padding:10px 13px;border-left:3px solid var(--brass);background:#fbf7ec;border-radius:0 9px 9px 0}
+.fuel-consumption-box{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px;border:1px solid rgba(35,101,105,.18);border-radius:12px;background:linear-gradient(135deg,#edf7f5,#f8f5eb)}
+.fuel-consumption-box>div{min-width:0}
+.fuel-consumption-box span{display:block;color:var(--muted);font-size:.7rem;line-height:1.3;margin-bottom:3px}
+.fuel-consumption-box strong{display:block;color:var(--navy-900);font-size:1rem;overflow-wrap:anywhere}
+.fuel-consumption-box.first{display:block;color:var(--muted);font-size:.77rem;background:#f6f4ef}
+
+.trip-card[role="button"]{cursor:pointer;transition:border-color .16s ease,box-shadow .16s ease,transform .16s ease}
+.trip-card[role="button"]:hover,.trip-card[role="button"]:focus-visible{border-color:var(--brass);box-shadow:0 8px 22px rgba(8,31,48,.12);outline:none;transform:translateY(-1px)}
+.trip-map-hint{display:block;margin-top:6px;color:#6c777c!important;font-size:.7rem;font-weight:750}
+
+.checklist-card{min-width:0}
+.checklist-items{display:grid;gap:8px;margin-top:10px}
+.check-row{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid rgba(19,47,64,.09)}
+.check-row:last-child{border-bottom:0}
+.check-main{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:start;margin:0;min-width:0;cursor:pointer}
+.check-main input{width:20px;height:20px;margin-top:1px;accent-color:var(--ocean)}
+.check-main span{min-width:0}
+.check-main strong{display:block;color:var(--navy-900);overflow-wrap:anywhere}
+.check-main small{display:block;margin-top:3px;color:var(--muted);font-size:.7rem;line-height:1.35;overflow-wrap:anywhere}
+.check-row.done .check-main strong{color:#35634b}
+.check-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.check-actions button{padding:6px 8px;font-size:.72rem;white-space:nowrap}
+.check-actions .delete{position:static;inset:auto}
+.check-history-dialog{width:min(760px,calc(100% - 24px));max-height:calc(100dvh - 28px);padding:0;border:0;border-radius:18px;box-shadow:0 26px 70px rgba(0,0,0,.38)}
+.check-history-dialog::backdrop{background:rgba(3,20,30,.68);backdrop-filter:blur(3px)}
+.check-history-dialog-inner{position:relative;padding:24px;overflow:auto;max-height:calc(100dvh - 28px);background:#fbfaf7}
+.check-history-list{display:grid;gap:8px;margin:14px 0}
+.check-history-entry{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:11px 12px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.check-history-entry.checked{border-left:4px solid #4c8a66}
+.check-history-entry.reset{border-left:4px solid #b78b45}
+.check-history-entry small{display:block;color:var(--brass-dark);font-weight:850;letter-spacing:.08em;font-size:.62rem}
+.check-history-entry strong{display:block;margin:2px 0;color:var(--navy-900)}
+.check-history-entry span{display:block;color:var(--muted);font-size:.74rem;overflow-wrap:anywhere}
+.check-history-entry .actions{margin:0;justify-content:flex-end}
+
+@media(max-width:700px){
+  .port-gps-controls{display:grid;grid-template-columns:1fr;align-items:stretch}
+  .port-gps-controls label{width:100%}
+  .port-gps-controls select,.port-gps-controls button{width:100%}
+  .fuel-consumption-box{grid-template-columns:1fr}
+  .check-row{grid-template-columns:1fr}
+  .check-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%}
+  .check-actions button{width:100%;white-space:normal}
+  .check-history-entry{grid-template-columns:1fr}
+  .check-history-entry .actions{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .check-history-entry .actions button{width:100%}
+  .check-history-dialog-inner{padding:20px 15px}
+}

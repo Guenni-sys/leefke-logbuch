@@ -1,17 +1,19 @@
-LEEFKE VERSION 7.4 – BILDWECHSEL UND REISEKOSTEN
+LEEFKE URLAUBSEDITION 7.5 – STABILITÄTSKORREKTUREN
 
 1. In der bisherigen App unter „Sicherung“ vorsichtshalber eine Urlaubssicherung exportieren.
 2. Diese ZIP-Datei vollständig entpacken.
 3. Im GitHub-Repository „Add file“ → „Upload files“ öffnen.
 4. Alle Dateien AUS dem entpackten Ordner hochladen und vorhandene Dateien ersetzen.
-5. Commit-Text: LEEFKE Version 7.4 Bild und Reisekosten
+5. Commit-Text: LEEFKE Version 7.5 Stabilitätskorrekturen
 6. „Commit changes“ drücken und etwa zwei bis drei Minuten warten.
 7. Danach öffnen:
-   https://guenni-sys.github.io/leefke-logbuch/index.html?v=7.4
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=7.5
 8. Unter Windows einmal Strg + F5 drücken. Auf iPhone, iPad und Android die App vollständig schließen und neu öffnen.
-9. Prüfen, ob oben „BORDTAGEBUCH · URLAUBSEDITION 7.4“ steht.
+9. Prüfen, ob oben „BORDTAGEBUCH · URLAUBSEDITION 7.5“ steht.
+10. Auf Android bei Bedarf unter „Konto & Synchronisierung“ auf „App-Aktualisierung prüfen“ tippen.
 
 WICHTIG
 - In Supabase muss nichts geändert oder ausgeführt werden.
 - Konten, Törns und gespeicherte Daten bleiben erhalten.
-- Beim Start wird jetzt erst das richtige persönliche Bootsfoto geladen und dann eingeblendet.
+- Verbrauchswerte werden erst ab dem zweiten Tankvorgang mit eingetragenen Motorstunden berechnet.
+- Die Berechnung lautet: nachgetankte Liter geteilt durch die Motorstunden seit dem vorherigen Tankvorgang.

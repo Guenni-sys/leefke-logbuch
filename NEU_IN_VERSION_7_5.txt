@@ -1,0 +1,10 @@
+LEEFKE Urlaubsedition 7.5 – Stabilitätskorrekturen
+
+- Wetterauswahl im Tageslogbuch als zuverlässiges Auswahlfeld mit eigener Eingabe
+- GPS-Hafensuche mit wählbarem Umkreis 10, 25 oder 50 km und mehreren Kartendiensten
+- Android-Aktualisierung mit eigener Prüftaste, cachefreier Service-Worker-Prüfung und Prüfung beim Öffnen
+- Verbrauchsberechnung nach jedem Tankstopp: nachgetankte Liter geteilt durch Motorstunden seit dem vorherigen Tanken
+- Checklisten mit Zeitstempel, Gerät, Prüfprotokoll, Bearbeiten und Löschen einzelner Protokolleinträge
+- Törne sind anklickbar und öffnen sich direkt auf der Seekarte
+- Ohne GPX wird der geplante Törn als gestrichelte Linie auf der Seekarte dargestellt
+- Reisebericht-Seekarte wird erst nach stabilem Seitenaufbau initialisiert
