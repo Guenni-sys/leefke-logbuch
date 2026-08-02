@@ -1,0 +1,7 @@
+LEEFKE URLAUBSEDITION 7.6 – ANDROID-SYNCHRONISIERUNG
+
+- Tankstand berücksichtigt Tankvorgänge aus allen Törns
+- Verdeckte Tagestouren und Tankvorgänge aus anderen Törns werden angezeigt
+- Automatischer Wechsel zum aktiven Törn, wenn das Gerät auf einem leeren Törn steht
+- Neuer sicherer Reparaturabgleich: Cloud-Daten neu einlesen, ohne lokale Einträge zu löschen
+- Diagnose zeigt Anzahl von Törnen, Tagestouren und Tankvorgängen in Cloud und Gerät

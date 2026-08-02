@@ -1255,3 +1255,13 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
   .check-history-entry .actions button{width:100%}
   .check-history-dialog-inner{padding:20px 15px}
 }
+
+
+/* Version 7.6 – geräteübergreifende Daten sichtbar und reparierbar */
+.trip-data-notice{display:flex;align-items:center;justify-content:space-between;gap:14px;margin:12px 0 16px;padding:13px 15px;border:1px solid rgba(181,132,43,.38);border-radius:13px;background:#fff8e7;color:var(--navy-900)}
+.trip-data-notice>div:first-child{display:grid;gap:3px}.trip-data-notice span{font-size:.82rem;color:var(--muted)}
+.trip-data-notice .actions{margin:0;justify-content:flex-end}.trip-data-notice button{padding:8px 10px;font-size:.78rem}
+.sync-repair-report{margin-top:12px;padding:13px 15px;border-radius:13px;border:1px solid rgba(36,122,92,.3);background:#edf8f3;color:var(--navy-900)}
+.sync-repair-report>strong{display:block;margin-bottom:8px}.sync-repair-report p{margin:8px 0 0;color:var(--muted)}
+.sync-repair-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}.sync-repair-grid span{padding:7px 9px;border-radius:8px;background:#fff;font-size:.82rem}
+@media(max-width:700px){.trip-data-notice{align-items:stretch;flex-direction:column}.trip-data-notice .actions{justify-content:flex-start}.sync-repair-grid{grid-template-columns:1fr}}

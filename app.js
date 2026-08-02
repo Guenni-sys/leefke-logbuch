@@ -1,4 +1,4 @@
-const APP_VERSION = '7.5';
+const APP_VERSION = '7.6';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1755,6 +1755,7 @@ function render() {
   renderTank(settings);
   renderDays();
   renderFuel();
+  renderCrossTripNotices();
   renderMaintenance();
   renderRoute();
   renderPorts();
@@ -1777,7 +1778,9 @@ function render() {
 }
 
 function renderTank(settings) {
-  const fuelLevels = state.fuel.filter(item => item.tankPercent !== '' && item.tankPercent !== undefined && item.tankPercent !== null);
+  // Der Tankstand gehört zum Schiff und nicht nur zum gerade geöffneten Törn.
+  // Deshalb werden Tankvorgänge aus allen Törns berücksichtigt.
+  const fuelLevels = (allState.fuel || state.fuel || []).filter(item => item.tankPercent !== '' && item.tankPercent !== undefined && item.tankPercent !== null);
   const latestFuelWithLevel = fuelLevels.sort((a, b) => syncTimestamp(b) - syncTimestamp(a))[0] || null;
   const settingsTime = Date.parse(settings._fieldUpdatedAt?.currentTankPercent || settings._updatedAt || 0) || 0;
   const fuelTime = syncTimestamp(latestFuelWithLevel);
@@ -1909,6 +1912,7 @@ function renderFuel() {
     </article>`;
   }).join('') || '<div class="card muted">Noch keine Tankvorgänge eingetragen.</div>';
 }
+
 
 function renderMaintenance() {
   $('#maintenanceList').innerHTML = state.maintenance.map(item => card(item, 'maintenance', `
@@ -4627,6 +4631,11 @@ async function syncNow(options = {}) {
       }
     } finally { suppressSyncTracking = false; }
 
+    const repairedTripAssignments = await repairMissingTripAssignments();
+    if (repairedTripAssignments) remoteChangedLocal = true;
+    const activeTripChangedBySync = await reconcileActiveTripAfterSync();
+    if (activeTripChangedBySync) remoteChangedLocal = true;
+
     const outgoing = [];
     for (const store of syncableStores) {
       for (const item of await all(store)) {
@@ -4982,6 +4991,172 @@ function maintenanceDueInfo(item) {
   return { dateDays, hoursLeft, due };
 }
 
+
+function tripNameById(id) {
+  return (allState.trips || []).find(item => item.id === id)?.title || 'anderer Törn';
+}
+
+function groupedHiddenTripCounts(store) {
+  const rows = allState[store] || [];
+  const groups = new Map();
+  for (const row of rows) {
+    if (!row.tripId || row.tripId === activeTripId) continue;
+    groups.set(row.tripId, (groups.get(row.tripId) || 0) + 1);
+  }
+  return [...groups.entries()].sort((a, b) => b[1] - a[1]);
+}
+
+function renderTripDataNotice(targetId, store, singular, plural, destinationView) {
+  const target = $(`#${targetId}`);
+  if (!target) return;
+  const groups = groupedHiddenTripCounts(store);
+  if (!groups.length) {
+    target.hidden = true;
+    target.innerHTML = '';
+    return;
+  }
+  const total = groups.reduce((sum, [, count]) => sum + count, 0);
+  const buttons = groups.slice(0, 4).map(([tripId, count]) => `<button type="button" onclick="openTripData('${esc(tripId)}','${destinationView}')">${esc(tripNameById(tripId))} öffnen · ${count}</button>`).join('');
+  target.innerHTML = `<div><strong>${total} ${total === 1 ? singular : plural} sind vorhanden, gehören aber zu einem anderen Törn.</strong><span>Aktuell geöffnet: ${esc(getActiveTrip()?.title || 'kein Törn')}.</span></div><div class="actions">${buttons}</div>`;
+  target.hidden = false;
+}
+
+function renderCrossTripNotices() {
+  renderTripDataNotice('dayTripNotice', 'days', 'Tagestour', 'Tagestouren', 'day');
+  renderTripDataNotice('fuelTripNotice', 'fuel', 'Tankvorgang', 'Tankvorgänge', 'fuel');
+}
+
+async function openTripData(tripId, destinationView = 'day') {
+  await setActiveTrip(tripId, { silent: true });
+  view(destinationView);
+  toast(`Törn geöffnet: ${getActiveTrip()?.title || ''}`);
+}
+window.openTripData = openTripData;
+
+
+async function repairMissingTripAssignments() {
+  const trips = await all('trips');
+  if (!trips.length) return 0;
+  const validIds = new Set(trips.map(trip => trip.id));
+  const target = trips.find(trip => trip.status === 'active') || trips.find(trip => trip.id === INITIAL_TRIP_ID) || trips[0];
+  let repaired = 0;
+  for (const store of TRIP_SCOPED_STORES) {
+    for (const row of await all(store)) {
+      if (row.tripId && validIds.has(row.tripId)) continue;
+      await put(store, { ...row, tripId: target.id }, { skipLog: true });
+      repaired += 1;
+    }
+  }
+  return repaired;
+}
+
+async function reconcileActiveTripAfterSync() {
+  const trips = await all('trips');
+  if (!trips.length) return false;
+  const activity = new Map(trips.map(trip => [trip.id, { count: 0, latest: 0 }]));
+  for (const store of ['days', 'fuel', 'route', 'ports', 'gpx']) {
+    for (const row of await all(store)) {
+      if (!row.tripId) continue;
+      const current = activity.get(row.tripId) || { count: 0, latest: 0 };
+      current.count += 1;
+      const eventTime = store === 'fuel' ? Math.max(fuelTimestamp(row), syncTimestamp(row)) : Math.max(Date.parse(`${row.date || row.startDate || '1970-01-01'}T12:00:00`) || 0, syncTimestamp(row));
+      current.latest = Math.max(current.latest, eventTime);
+      activity.set(row.tripId, current);
+    }
+  }
+  const currentTrip = trips.find(trip => trip.id === activeTripId);
+  const currentActivity = activity.get(activeTripId) || { count: 0, latest: 0 };
+  const ranked = [...trips].sort((a, b) => {
+    const aa = activity.get(a.id) || { count: 0, latest: 0 };
+    const bb = activity.get(b.id) || { count: 0, latest: 0 };
+    const activeDiff = Number(b.status === 'active') - Number(a.status === 'active');
+    return activeDiff || bb.latest - aa.latest || bb.count - aa.count;
+  });
+  const best = ranked[0];
+  const bestActivity = activity.get(best?.id) || { count: 0, latest: 0 };
+  const shouldSwitch = !currentTrip ||
+    (currentTrip.status !== 'active' && best?.status === 'active' && bestActivity.count > 0) ||
+    (currentActivity.count === 0 && bestActivity.count > 0);
+  if (shouldSwitch && best?.id && best.id !== activeTripId) {
+    activeTripId = best.id;
+    await metaSet('activeTrip', { tripId: activeTripId, changedAt: new Date().toISOString(), reason: 'sync-repair' });
+    return true;
+  }
+  return false;
+}
+
+function syncStoreCounts(rows) {
+  const counts = { trips: 0, days: 0, fuel: 0, settings: 0 };
+  for (const row of rows) {
+    if (row.deleted_at) continue;
+    if (row.record_type === SETTINGS_FIELD_RECORD_TYPE || row.record_type === 'settings') counts.settings += 1;
+    else if (Object.prototype.hasOwnProperty.call(counts, row.record_type)) counts[row.record_type] += 1;
+  }
+  return counts;
+}
+
+async function repairDeviceFromCloud() {
+  const report = $('#syncRepairReport');
+  if (!currentSession?.user?.id) return setMessage('#syncMessage', 'Bitte zuerst mit dem gleichen LEEFKE-Konto anmelden wie auf den anderen Geräten.', 'error');
+  if (!navigator.onLine) return setMessage('#syncMessage', 'Für die Reparatur wird Internet benötigt.', 'error');
+  if (syncInProgress) return;
+  syncInProgress = true;
+  syncVisualInProgress = true;
+  await updateSyncUI();
+  setMessage('#syncMessage', 'Cloud-Daten werden vollständig neu eingelesen – lokale Einträge bleiben erhalten …');
+  try {
+    await createAutoBackup('Vor Cloud-Reparatur', true);
+    const fetched = await fetchRemoteRecords();
+    const remote = unifiedRemoteRows(fetched);
+    const cloudCounts = syncStoreCounts(fetched);
+    let imported = 0;
+    let updated = 0;
+    suppressSyncTracking = true;
+    try {
+      for (const row of remote) {
+        if (!syncableStores.includes(row.record_type) || row.deleted_at) continue;
+        const local = await getOne(row.record_type, row.record_id);
+        const remotePayload = normalizeRecord(row.record_type, { ...(row.payload || {}), id: row.record_id }, row.updated_at, row.payload?._updatedBy || 'cloud');
+        if (!local) {
+          await rawPut(row.record_type, remotePayload);
+          imported += 1;
+        } else {
+          const merged = await mergeRecordFieldwise(row.record_type, local, remotePayload, row.updated_at);
+          if (comparablePayload(row.record_type, local) !== comparablePayload(row.record_type, merged)) {
+            await rawPut(row.record_type, merged);
+            updated += 1;
+          }
+        }
+      }
+    } finally {
+      suppressSyncTracking = false;
+    }
+    const repairedTripAssignments = await repairMissingTripAssignments();
+    const switched = await reconcileActiveTripAfterSync();
+    await markLinked('repair-merge');
+    await setDirty(true);
+    await metaSet('lastSyncRepair', { at: new Date().toISOString(), imported, updated, cloudCounts });
+    syncInProgress = false;
+    syncVisualInProgress = false;
+    await refresh();
+    await syncNow({ force: true, silent: true, reason: 'repair-follow-up' });
+    const localCounts = { trips: (await all('trips')).length, days: (await all('days')).length, fuel: (await all('fuel')).length };
+    if (report) {
+      report.innerHTML = `<strong>Reparatur abgeschlossen</strong><div class="sync-repair-grid"><span>Cloud: ${cloudCounts.trips} Törne</span><span>${cloudCounts.days} Tagestouren</span><span>${cloudCounts.fuel} Tankvorgänge</span><span>Auf diesem Gerät: ${localCounts.trips} / ${localCounts.days} / ${localCounts.fuel}</span></div><p>${imported} fehlende Datensätze übernommen, ${updated} vorhandene Datensätze aktualisiert.${repairedTripAssignments ? ` ${repairedTripAssignments} Eintrag/Einträge wurden einem gültigen Törn zugeordnet.` : ''}${switched ? ' Der Törn mit den aktuellen Einträgen wurde automatisch geöffnet.' : ''}</p>`;
+      report.hidden = false;
+    }
+    setMessage('#syncMessage', 'Cloud-Daten wurden neu eingelesen und anschließend abgeglichen.', 'success');
+    toast('Android-Datenbestand repariert');
+  } catch (error) {
+    console.error('Cloud-Reparatur fehlgeschlagen', error);
+    setMessage('#syncMessage', `Reparatur fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+  } finally {
+    syncInProgress = false;
+    syncVisualInProgress = false;
+    await updateSyncUI();
+  }
+}
+
 function renderMaintenance() {
   $('#maintenanceList').innerHTML = state.maintenance.map(item => {
     const info = maintenanceDueInfo(item);
@@ -5044,7 +5219,7 @@ async function fetchRoutePointForecast(point,date,time){
 }
 async function analyzeRouteWeather(event){
   event?.preventDefault(); const gpx=state.gpx.find(item=>item.id===$('#routeWeatherGpx').value); if(!gpx)return setMessage('#routeWeatherState','Bitte eine GPX-Route auswählen.','error');
-  const date=$('#routeWeatherDate').value,time=$('#routeWeatherTime').value,speed=num($('#routeWeatherSpeed').value)||7.5;if(!date||!time)return;
+  const date=$('#routeWeatherDate').value,time=$('#routeWeatherTime').value,speed=num($('#routeWeatherSpeed').value)||6.5;if(!date||!time)return;
   if(!navigator.onLine)return setMessage('#routeWeatherState','Für eine neue Routenauswertung wird Internet benötigt.','error');
   setMessage('#routeWeatherState','Wetter an mehreren Punkten der Route wird geladen …');
   const samples=sampleRoutePoints(gpx,7); const start=new Date(`${date}T${time}:00`); const results=[];
@@ -5663,6 +5838,7 @@ window.addEventListener('load', () => {
   $('#historyStoreFilter')?.addEventListener('change', renderHistory);
   $('#undoLastChangeButton')?.addEventListener('click', undoLastOwnChange);
   $('#verifySyncButton')?.addEventListener('click', verifySyncState);
+  $('#repairDeviceSyncButton')?.addEventListener('click', repairDeviceFromCloud);
   $('#createAutoBackupButton')?.addEventListener('click', async()=>{await createAutoBackup('Manueller Sicherungspunkt',true);await refresh();toast('Sicherungspunkt angelegt')});
   $('#createMaintenanceTemplates')?.addEventListener('click',createMaintenanceTemplates);
   $('#syncPhotosButton')?.addEventListener('click',syncPhotosNow);
