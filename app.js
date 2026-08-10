@@ -1,4 +1,4 @@
-const APP_VERSION = '7.6';
+const APP_VERSION = '8.0';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1266,7 +1266,6 @@ async function updateVacationUi(context = {}) {
 
 const MOBILE_SAVE_TARGETS = {
   day: ['dayForm', 'Tagestour speichern'],
-  route: ['routeForm', 'Etappe speichern'],
   ports: ['portForm', 'Hafen speichern'],
   fuel: ['fuelForm', 'Tankvorgang speichern'],
   maintenance: ['maintenanceForm', 'Wartung speichern'],
@@ -1275,7 +1274,7 @@ const MOBILE_SAVE_TARGETS = {
 };
 
 function updateMobileChrome(id) {
-  const directViews = new Set(['home', 'day', 'route', 'weather']);
+  const directViews = new Set(['home', 'day', 'weather', 'ports']);
   $$('[data-mobile-view]').forEach(button => {
     const active = button.dataset.mobileView === id;
     button.classList.toggle('active', active);
@@ -1435,17 +1434,10 @@ async function openTripOnMap(id) {
   await setActiveTrip(id, { silent: true });
   view('route');
   window.setTimeout(() => {
-    const firstGpx = state.gpx?.[0];
+    selectedGpxId = '';
     const select = $('#gpxSelect');
-    if (firstGpx) {
-      selectedGpxId = firstGpx.id;
-      if (select) select.value = firstGpx.id;
-      drawGpx(firstGpx.id);
-    } else {
-      selectedGpxId = '';
-      if (select) select.value = '';
-      drawPlannedTripMap();
-    }
+    if (select) select.value = '';
+    drawPlannedTripMap();
     $('#routeMap')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }, 160);
   toast(`Törn auf Seekarte geöffnet: ${getActiveTrip()?.title || ''}`);
@@ -1524,29 +1516,8 @@ async function saveTripForm(event) {
 }
 
 async function defaults() {
-  const checks = await all('checklists');
-  if (!checks.length) {
-    for (const item of STANDARD_CHECKLIST_ITEMS) {
-      await put('checklists', { id: item.id, group: item.group, item: item.item, done: false });
-    }
-  }
-
-  const routes = await all('route');
-  if (!routes.length) {
-    const initialRoutes = [
-      ['2026-08-01', 'Bremerhaven', 'Cuxhaven', 59],
-      ['2026-08-02', 'Cuxhaven', 'Brunsbüttel', 17],
-      ['2026-08-03', 'Brunsbüttel', 'Rendsburg', 0],
-      ['2026-08-04', 'Rendsburg', 'Laboe', 16],
-      ['2026-08-05', 'Laboe', 'Marstal', 36]
-    ];
-    for (const route of initialRoutes) {
-      await put('route', {
-        id: uid(), date: route[0], from: route[1], to: route[2], nm: route[3],
-        hours: '', status: 'planned', departTime: '', weather: '', wind: '', wave: '', tide: '', berth: '', gpxId: '', note: ''
-      });
-    }
-  }
+  // Version 8.0: keine Etappenplanung und keine Checklisten mehr automatisch anlegen.
+  // Vorhandene Alt-Daten bleiben vollständig erhalten.
 
   const settingsRows = await all('settings');
   if (!settingsRows.length) {
@@ -1705,6 +1676,7 @@ function render() {
   $('#headerBoatLine').textContent = `${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` · ${settings.model}` : ''} · ${settings.homePort || 'Lemwerder'}`;
   $('#tripTitle').textContent = settings.tripTitle || 'Aktueller Törn';
   $('#tripDates').textContent = [fmtDate(settings.tripStart), fmtDate(settings.tripEnd)].filter(Boolean).join(' – ');
+  if ($('#homeTripLine')) $('#homeTripLine').textContent = `${settings.tripTitle || 'Aktueller Törn'}${settings.tripStart ? ` · ab ${fmtDate(settings.tripStart)}` : ''}`;
   $('#leefkeStory').textContent = `${settings.boatName || 'LEEFKE'} ist unser ${settings.buildYear || 1996} gebauter ${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` der Baureihe ${settings.model}` : ''}: ein ${dec2(settings.length)} Meter langer Verdränger aus ${settings.hullMaterial || 'Stahl'} mit klassischem Spitzgatt. Der ${settings.engine || 'Perkins M135'} bringt uns mit ruhigen ${settings.cruiseSpeed || '6,5 kn'} vom ${settings.homePort || 'Heimathafen'} hinaus auf Nord- und Ostsee.`;
 
   $('#vLength').textContent = `${dec2(settings.length)} m`;
@@ -1741,13 +1713,27 @@ function render() {
 
   const routes = [...state.route].filter(item => item.status !== 'done' && item.status !== 'skip').sort((a, b) => String(a.date).localeCompare(String(b.date)));
   const next = routes[0];
-  $('#nextRoute').innerHTML = next ? `
-    <h3>${esc(next.from)} → ${esc(next.to)}</h3>
-    <div class="meta">${fmtDate(next.date)} · ${dec(next.nm)} sm${next.hours ? ` · ${dec(next.hours)} Std.` : ''}</div>
-    <p>${esc(next.note || '')}</p>` : 'Noch keine Etappe geplant.';
+  if ($('#nextRoute')) $('#nextRoute').innerHTML = next ? `${esc(next.from || '')} → ${esc(next.to || '')}` : 'Etappenplanung ist in Version 8.0 nicht mehr Teil des Bordalltags.';
 
-  const openMaintenance = state.maintenance.filter(item => !item.done);
-  $('#openMaint').innerHTML = openMaintenance.length ? openMaintenance.slice(0, 5).map(item => `<div>◆ ${esc(item.title)}${item.dueDate ? ` · fällig ${fmtDate(item.dueDate)}` : ''}</div>`).join('') : 'Keine offenen Punkte.';
+  const currentHours = num(settings.currentEngineHours);
+  const dueItems = [];
+  const latestMaintenanceByTitle = new Map();
+  for (const item of state.maintenance || []) {
+    const key = String(item.title || item.category || item.id).trim().toLowerCase();
+    const previous = latestMaintenanceByTitle.get(key);
+    if (!previous || String(item.date || '').localeCompare(String(previous.date || '')) > 0) latestMaintenanceByTitle.set(key, item);
+  }
+  for (const item of latestMaintenanceByTitle.values()) {
+    const dateDays = item.dueDate ? daysUntil(item.dueDate) : null;
+    const hoursLeft = item.dueHours && currentHours ? num(item.dueHours) - currentHours : null;
+    if ((dateDays !== null && dateDays <= 90) || (hoursLeft !== null && hoursLeft <= 30)) dueItems.push({ title: item.title, dateDays, hoursLeft });
+  }
+  for (const item of state.safety || []) {
+    const dateDays = item.dueDate ? daysUntil(item.dueDate) : null;
+    const warn = num(item.remindDays) || 60;
+    if (dateDays !== null && dateDays <= warn) dueItems.push({ title: item.name, dateDays, hoursLeft: null });
+  }
+  if ($('#openMaint')) $('#openMaint').innerHTML = dueItems.length ? dueItems.slice(0,4).map(item => `<div class="due-home-row"><strong>${esc(item.title || 'Erinnerung')}</strong><span>${item.dateDays !== null ? (item.dateDays < 0 ? `${Math.abs(item.dateDays)} Tage überfällig` : `noch ${item.dateDays} Tage`) : ''}${item.hoursLeft !== null ? `${item.dateDays !== null ? ' · ' : ''}${item.hoursLeft < 0 ? `${dec(Math.abs(item.hoursLeft))} h überfällig` : `noch ${dec(item.hoursLeft)} h`}` : ''}</span></div>`).join('') : 'Keine fälligen Punkte.';
 
   const equipment = lines(settings.equipment).slice(0, 8);
   $('#quickInfo').innerHTML = `<div class="equipment-list">${equipment.map(item => `<div>${esc(item)}</div>`).join('')}</div><div class="meta" style="margin-top:12px">${state.ports.length} Häfen · ${state.photos.length} Fotos · ${state.gpx.length} GPX-Routen</div>`;
@@ -1774,7 +1760,38 @@ function render() {
   if (activeWeatherSnapshot) renderWeatherSnapshot(activeWeatherSnapshot, activeWeatherHourIndex);
   if (nauticalMap) refreshPortLayer();
   renderTripManager();
+  renderTripArchive();
+  renderDeadlines();
   renderV6Extras();
+}
+
+
+function renderTripArchive() {
+  const days = [...(state.days || [])].sort((a,b)=>String(a.date||'').localeCompare(String(b.date||'')));
+  const photos = state.photos || [];
+  const totalNm = days.reduce((sum,item)=>sum+num(item.distance),0);
+  const totalHours = days.reduce((sum,item)=>sum+Math.max(0,num(item.engineEnd)-num(item.engineStart)),0);
+  if ($('#archiveDayCount')) $('#archiveDayCount').textContent = days.length;
+  if ($('#archiveNm')) $('#archiveNm').textContent = dec(totalNm);
+  if ($('#archiveHours')) $('#archiveHours').textContent = dec(totalHours);
+  if ($('#archivePhotoCount')) $('#archivePhotoCount').textContent = photos.length;
+  const list=$('#archiveDayList'); if(!list)return;
+  list.innerHTML=days.map((item,index)=>{
+    const dayPhotos=photos.filter(photo=>photo.relatedType==='day' ? photo.relatedId===item.id || (!photo.relatedId && photo.date===item.date) : photo.date===item.date);
+    const cover=dayPhotos[0]?.data;
+    return `<article class="archive-day-card" onclick="openSavedDay('${item.id}')" role="button" tabindex="0"><div class="archive-day-no">${index+1}</div>${cover?`<img src="${cover}" alt="${esc(item.title||'Tagestour')}">`:''}<div><small>${fmtDate(item.date)}</small><h3>${esc(item.title || `${item.fromPort||'Start'} → ${item.toPort||'Ziel'}`)}</h3><p>${esc(item.fromPort||'—')} → ${esc(item.toPort||'—')}${item.distance?` · ${dec(item.distance)} sm`:''}</p><span>${dayPhotos.length} Foto${dayPhotos.length===1?'':'s'}${item.seaFeel?` · ${esc(item.seaFeel)}`:''}</span></div><b>›</b></article>`;
+  }).join('') || '<div class="empty-state">Noch keine Tagestouren in diesem Törn.</div>';
+}
+
+function renderDeadlines() {
+  const list=$('#deadlineList'); if(!list)return;
+  const items=[...(state.safety||[])].sort((a,b)=>String(a.dueDate||'9999').localeCompare(String(b.dueDate||'9999')));
+  list.innerHTML=items.map(item=>{
+    const remaining=daysUntil(item.dueDate); const warn=num(item.remindDays)||60;
+    const cls=remaining!==null && remaining<0?'overdue':remaining!==null && remaining<=warn?'due':'';
+    const label=remaining===null?'kein Termin':remaining<0?`${Math.abs(remaining)} Tage überfällig`:remaining===0?'heute fällig':`noch ${remaining} Tage`;
+    return `<article class="deadline-row ${cls}"><div><strong>${esc(item.name||'Erinnerung')}</strong><small>${item.dueDate?`fällig ${fmtDate(item.dueDate)} · ${label}`:label}${item.note?` · ${esc(item.note)}`:''}</small></div><div class="actions"><button type="button" onclick="editDeadline('${item.id}')">Bearbeiten</button><button class="delete" type="button" onclick="removeItem('safety','${item.id}')">Löschen</button></div></article>`;
+  }).join('') || '<div class="empty-state">Noch keine Fristen angelegt.</div>';
 }
 
 function renderTank(settings) {
@@ -1818,7 +1835,7 @@ function renderDays() {
       <div class="day-entry-overview">
         <div><span>Route</span><strong>${esc(item.fromPort || '—')} → ${esc(item.toPort || '—')}</strong></div>
         <div><span>Zeit</span><strong>${esc(item.depart || '—')} – ${esc(item.arrive || '—')}</strong></div>
-        <div><span>Wetter</span><strong>${esc(item.weather || '—')}</strong></div>
+        <div><span>Tatsächlich</span><strong>${esc(item.weather || '—')}${item.seaFeel ? ` · ${esc(item.seaFeel)}` : ''}</strong></div>
         <div><span>Wind / Welle</span><strong>${esc(item.wind || '—')}${item.wave ? ` · ${esc(item.wave)}` : ''}</strong></div>
       </div>
       ${item.tide || item.crew ? `<div class="day-facts">${item.tide ? `<span>↕ ${esc(item.tide)}</span>` : ''}${item.crew ? `<span>⚓ ${esc(item.crew)}</span>` : ''}</div>` : ''}
@@ -2150,6 +2167,17 @@ function geolocationErrorText(error) {
   return 'Der Standort konnte nicht bestimmt werden.';
 }
 
+
+async function reversePortCandidate(location) {
+  if (!navigator.onLine) return null;
+  try {
+    const url=`https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=18&lat=${location.latitude}&lon=${location.longitude}`;
+    const response=await fetch(url,{headers:{'Accept-Language':'de'},cache:'no-store'}); if(!response.ok)return null;
+    const data=await response.json(); const a=data.address||{}; const name=a.marina||a.harbour||a.port||data.name||String(data.display_name||'').split(',')[0];
+    if(!name)return null; return {name,latitude:Number(data.lat)||location.latitude,longitude:Number(data.lon)||location.longitude,distanceKm:haversineKm(location,{latitude:Number(data.lat)||location.latitude,longitude:Number(data.lon)||location.longitude}),type:'GPS / OpenStreetMap',source:'OpenStreetMap'};
+  } catch { return null; }
+}
+
 async function suggestPortFromGps() {
   const button = $('#portGpsButton');
   const form = $('#portForm');
@@ -2180,6 +2208,8 @@ async function suggestPortFromGps() {
     if (navigator.onLine) {
       try { onlineCandidates = await fetchNearbyPorts(location, selectedRadius); }
       catch (error) { onlineError = error; }
+      const reverseCandidate = await reversePortCandidate(location);
+      if (reverseCandidate) onlineCandidates.unshift(reverseCandidate);
     }
     const candidates = uniquePortCandidates([...localCandidates, ...onlineCandidates]);
     renderPortGpsCandidates(candidates, position.coords.accuracy);
@@ -2199,6 +2229,21 @@ async function suggestPortFromGps() {
     button.textContent = '📍 Standort erneut bestimmen';
   }
 }
+
+async function searchPortByName(query) {
+  const raw=String(query||'').trim(); if(!raw) return [];
+  const local=(allState.ports||[]).filter(p=>String(p.name||'').toLowerCase().includes(raw.toLowerCase())).map(p=>{const c=parseCoordinateText(p.coords);return c?{name:p.name,latitude:c.latitude,longitude:c.longitude,type:'Bereits im Hafenbuch',display:p.name}:null}).filter(Boolean);
+  let online=[];
+  if(navigator.onLine){
+    for(const q of [raw, `${raw} marina`, `${raw} hafen`]){
+      try{const url=`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=8&countrycodes=de,dk,nl&q=${encodeURIComponent(q)}`;const response=await fetch(url,{headers:{'Accept-Language':'de'},cache:'no-store'});if(response.ok){const data=await response.json();online.push(...data.map(x=>({name:(x.name||String(x.display_name||'').split(',')[0]||raw),latitude:Number(x.lat),longitude:Number(x.lon),type:x.type||'Hafen / Ort',display:x.display_name||x.name})).filter(x=>Number.isFinite(x.latitude)&&Number.isFinite(x.longitude)));if(online.length)break;}}catch{}
+    }
+  }
+  const fixed=fixedLocationByName(raw); if(fixed)online.unshift({name:fixed.name,latitude:fixed.latitude,longitude:fixed.longitude,type:'Ort',display:fixed.name});
+  const seen=new Set(); return [...local,...online].filter(x=>{const k=`${x.name.toLowerCase()}|${x.latitude.toFixed(3)}|${x.longitude.toFixed(3)}`;if(seen.has(k))return false;seen.add(k);return true}).slice(0,8);
+}
+function renderPortNameSuggestions(items){const box=$('#portNameSuggestions');if(!box)return;window.__portNameCandidates=items;box.hidden=false;box.innerHTML=items.length?items.map((x,i)=>`<button type="button" class="port-gps-suggestion" data-port-name-index="${i}"><span class="port-gps-marker">⚓</span><span><strong>${esc(x.name)}</strong><small>${esc(x.display||x.type||'')}</small></span><span class="port-gps-choose">Übernehmen</span></button>`).join(''):'<div class="port-gps-empty"><strong>Kein Hafen gefunden.</strong><span>Du kannst den Namen trotzdem speichern; die App versucht beim Speichern nochmals die Koordinaten zu ermitteln.</span></div>'}
+async function geocodePortIntoForm(form){if(String(form.elements.coords.value||'').trim())return true;const items=await searchPortByName(form.elements.name.value);if(!items.length)return false;const chosen=items[0];form.elements.coords.value=`${chosen.latitude.toFixed(6)}, ${chosen.longitude.toFixed(6)}`;if(!String(form.elements.name.value||'').trim())form.elements.name.value=chosen.name;return true}
 
 function returnLabel(value) {
   if (value === 'no') return ['Eher nicht noch einmal', 'no'];
@@ -2223,6 +2268,8 @@ function renderPorts() {
       </div>
       ${item.contact ? `<p><b>UKW / Telefon:</b> ${esc(item.contact)}</p>` : ''}
       ${item.coords ? `<p><b>Position:</b> ${esc(item.coords)}</p>` : ''}
+      ${item.showerCost ? `<p><b>Duschen:</b> ${esc(item.showerCost)}</p>` : ''}
+      ${item.accessCodes ? `<div class="port-access-codes"><b>Zugangscodes</b><span>${esc(item.accessCodes).replace(/\n/g, '<br>')}</span></div>` : ''}
       ${item.services ? `<p><b>Versorgung:</b> ${esc(item.services)}</p>` : ''}
       ${item.approach ? `<p><b>Ansteuerung:</b> ${esc(item.approach).replace(/\n/g, '<br>')}</p>` : ''}
       ${item.note ? `<p>${esc(item.note).replace(/\n/g, '<br>')}</p>` : ''}`);
@@ -2273,9 +2320,9 @@ function renderGpxSelect() {
 
   if (mapSelect) {
     const current = mapSelect.value || selectedGpxId;
-    mapSelect.innerHTML = '<option value="">Keine GPX-Route</option>' + options;
+    mapSelect.innerHTML = '<option value="">Tagestouren anzeigen</option>' + options;
     if (state.gpx.some(item => item.id === current)) mapSelect.value = current;
-    else if (state.gpx[0]) mapSelect.value = state.gpx[0].id;
+    else mapSelect.value = '';
     selectedGpxId = mapSelect.value;
   }
 
@@ -2414,6 +2461,13 @@ if (dayForm) {
         ? { ...existing, ...item, id: existing.id, tripId: existing.tripId || activeTripId, created: existing.created || item.created }
         : { ...item, tripId: item.tripId || activeTripId };
       const saved = await put('days', completeItem);
+      if (item.engineEnd !== '' && Number.isFinite(Number(item.engineEnd))) {
+        const settingsNow = normalizeSettingsRecord(getSettings(), getSettings()._updatedAt);
+        if (!settingsNow.currentEngineHours || Number(item.engineEnd) > Number(settingsNow.currentEngineHours)) {
+          const now = new Date().toISOString();
+          await put('settings', { ...settingsNow, id: 'main', currentEngineHours: Number(item.engineEnd), _fieldUpdatedAt: { ...(settingsNow._fieldUpdatedAt || {}), currentEngineHours: now } });
+        }
+      }
       editingDayId = '';
       await refresh();
       dayForm.reset();
@@ -2548,6 +2602,13 @@ if (fuelForm) {
         note: String(raw.note || '').trim(),
         created: existing?.created || Date.now()
       });
+      if (engineHours !== '' && Number.isFinite(Number(engineHours))) {
+        const settingsNow = normalizeSettingsRecord(getSettings(), getSettings()._updatedAt);
+        if (!settingsNow.currentEngineHours || Number(engineHours) > Number(settingsNow.currentEngineHours)) {
+          const now = new Date().toISOString();
+          await put('settings', { ...settingsNow, id: 'main', currentEngineHours: Number(engineHours), _fieldUpdatedAt: { ...(settingsNow._fieldUpdatedAt || {}), currentEngineHours: now } });
+        }
+      }
       fuelForm.reset();
       updateFuelFormMode(false);
       await refresh();
@@ -2580,23 +2641,20 @@ if (fuelForm) {
   });
 }
 
-for (const id of ['maintenance', 'route', 'port']) {
-  const form = $(`#${id}Form`);
-  form.onsubmit = async event => {
-    event.preventDefault();
-    const item = formObject(form);
-    item.id = item.id || uid();
-    item.created = item.created || Date.now();
-    if (id === 'maintenance') item.done = item.done === 'true';
-    const store = id === 'port' ? 'ports' : id;
-    await put(store, item);
-    if (id === 'route' && item.gpxId) selectedGpxId = item.gpxId;
-    form.reset();
-    syncRatingPickers(form);
-    await refresh();
-    toast(id === 'port' ? 'Hafen mit Sternen gespeichert' : 'Gespeichert');
-  };
-}
+// Legacy-Etappen bleiben technisch erhalten, sind in Version 8.0 aber nicht Teil der normalen Bedienung.
+const legacyRouteForm = $('#routeForm');
+if (legacyRouteForm) legacyRouteForm.onsubmit = async event => { event.preventDefault(); const item=formObject(legacyRouteForm); item.id=item.id||uid(); item.created=item.created||Date.now(); await put('route',item); legacyRouteForm.reset(); await refresh(); };
+
+const portFormV8=$('#portForm');
+if(portFormV8) portFormV8.onsubmit=async event=>{event.preventDefault();const item=formObject(portFormV8);if(!String(item.name||'').trim())return;try{if(!String(item.coords||'').trim())await geocodePortIntoForm(portFormV8);const current=item.id?await getOne('ports',item.id):null;const finalItem={...(current||{}),...formObject(portFormV8),id:item.id||uid(),created:current?.created||Date.now()};await put('ports',finalItem);portFormV8.reset();resetPortGpsAssistant();syncRatingPickers(portFormV8);await refresh();toast(finalItem.coords?'Hafen mit Position gespeichert':'Hafen gespeichert – Koordinaten konnten nicht automatisch gefunden werden');}catch(error){console.error(error);alert('Der Hafen konnte nicht gespeichert werden. '+(error.message||''));}};
+
+function maintenanceMaterialsFromEditor(){return [...document.querySelectorAll('#materialRows .material-row')].map(row=>({name:row.querySelector('[data-material-name]')?.value.trim()||'',quantity:row.querySelector('[data-material-qty]')?.value.trim()||'',cost:parseFuelDecimal(row.querySelector('[data-material-cost]')?.value)||0})).filter(x=>x.name||x.cost);}
+function renderMaterialEditor(materials=[]){const box=$('#materialRows');if(!box)return;box.innerHTML='';(materials.length?materials:[{name:'',quantity:'',cost:''}]).forEach(add=>addMaterialRow(add));updateMaterialTotal();}
+function addMaterialRow(item={}){const box=$('#materialRows');if(!box)return;const row=document.createElement('div');row.className='material-row';row.innerHTML=`<input data-material-name placeholder="Material" value="${esc(item.name||'')}"><input data-material-qty placeholder="Menge" value="${esc(item.quantity||'')}"><input data-material-cost inputmode="decimal" placeholder="Kosten €" value="${item.cost?esc(item.cost):''}"><button type="button" aria-label="Material entfernen">×</button>`;row.querySelectorAll('input').forEach(input=>input.addEventListener('input',updateMaterialTotal));row.querySelector('button').addEventListener('click',()=>{row.remove();updateMaterialTotal()});box.appendChild(row);}
+function updateMaterialTotal(){const total=maintenanceMaterialsFromEditor().reduce((s,x)=>s+num(x.cost),0);if($('#materialTotal'))$('#materialTotal').textContent=eur(total);return total;}
+function updateNextServicePreview(){const form=$('#maintenanceForm');if(!form)return;const date=form.elements.date.value;const h=parseFuelDecimal(form.elements.engineHours.value);const days=parseFuelDecimal(form.elements.intervalDays.value);const hours=parseFuelDecimal(form.elements.intervalHours.value);const parts=[];if(date&&days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+Number(days));parts.push(`spätestens ${fmtDate(dateInputValue(d))}`)}if(h!==''&&hours)parts.push(`bei ${dec2(Number(h)+Number(hours))} Motorstunden`);$('#nextServicePreview').textContent=parts.length?`Nächster Service: ${parts.join(' oder ')}`:'Nächster Termin wird aus Datum und/oder Motorstunden berechnet.';}
+const maintenanceFormV8=$('#maintenanceForm');
+if(maintenanceFormV8) maintenanceFormV8.onsubmit=async event=>{event.preventDefault();const values=formObject(maintenanceFormV8);const existing=values.id?await getOne('maintenance',values.id):null;const engine=parseFuelDecimal(values.engineHours);const intervalDays=parseFuelDecimal(values.intervalDays);const intervalHours=parseFuelDecimal(values.intervalHours);let dueDate='';if(values.date&&intervalDays){const d=new Date(`${values.date}T12:00:00`);d.setDate(d.getDate()+Number(intervalDays));dueDate=dateInputValue(d)}const dueHours=engine!==''&&intervalHours?Number(engine)+Number(intervalHours):'';const materials=maintenanceMaterialsFromEditor();const cost=materials.reduce((s,x)=>s+num(x.cost),0);await put('maintenance',{...(existing||{}),id:values.id||uid(),date:values.date,category:values.category,title:values.title,engineHours:engine,intervalDays,intervalHours,dueDate,dueHours,cost,materials,note:values.note||'',done:true,created:existing?.created||Date.now()});maintenanceFormV8.reset();renderMaterialEditor();updateNextServicePreview();await refresh();toast('Wartung gespeichert');};
 
 $('#settingsForm').onsubmit = async event => {
   event.preventDefault();
@@ -2905,12 +2963,14 @@ async function openSavedDay(id) {
 
     <section class="day-view-section">
       <div class="day-view-section-title"><span>≈</span><div><small>BEDINGUNGEN</small><h4>Wetter, Wind & Wasser</h4></div></div>
-      <div class="day-view-facts day-view-facts-weather">
+      ${item.forecastWeather || item.forecastWind || item.forecastWave || item.forecastTide ? `<div class="day-forecast-block"><small>VORHERSAGE</small><div class="day-view-facts day-view-facts-weather"><div><span>Wetter</span><strong>${esc(item.forecastWeather || '—')}</strong></div><div><span>Wind</span><strong>${esc(item.forecastWind || '—')}</strong></div><div><span>Welle</span><strong>${esc(item.forecastWave || '—')}</strong></div><div><span>Tide / Strom</span><strong>${esc(item.forecastTide || '—')}</strong></div></div></div>` : ''}
+      <div class="day-actual-block"><small>TATSÄCHLICH</small><div class="day-view-facts day-view-facts-weather">
         <div><span>Wetter</span><strong>${esc(item.weather || '—')}</strong></div>
         <div><span>Wind</span><strong>${esc(item.wind || '—')}</strong></div>
         <div><span>Welle</span><strong>${esc(item.wave || '—')}</strong></div>
         <div><span>Tide / Strom</span><strong>${esc(item.tide || '—')}</strong></div>
-      </div>
+        <div><span>Empfinden</span><strong>${esc(item.seaFeel || '—')}</strong></div>
+      </div></div>
     </section>
 
     ${item.summary ? `<section class="day-view-text"><h4>Tagesbericht</h4><p>${esc(item.summary).replace(/\n/g, '<br>')}</p></section>` : ''}
@@ -2927,6 +2987,10 @@ async function editItem(kind, id) {
   const form = $(`#${map[kind]}Form`);
   view(map[kind] === 'port' ? 'ports' : map[kind]);
   fillForm(form, item);
+  if (kind === 'maintenance') {
+    renderMaterialEditor(Array.isArray(item.materials) ? item.materials : []);
+    updateNextServicePreview();
+  }
   if (kind === 'fuel') {
     updateFuelFormMode(true);
     setFuelFormStatus('Der Tankvorgang ist vollständig geladen. Änderungen werden erst mit „Änderungen speichern“ übernommen.', 'info');
@@ -2983,6 +3047,20 @@ window.editChecklistItem = editChecklistItem;
 window.openChecklistHistory = openChecklistHistory;
 window.editChecklistHistoryEvent = editChecklistHistoryEvent;
 window.deleteChecklistHistoryEvent = deleteChecklistHistoryEvent;
+
+$('#dayForecastApply')?.addEventListener('click',()=>{
+  const form=$('#dayForm'); if(!form)return;
+  const saved=window.__leefkeLastPassageForecast;
+  if(saved){form.elements.forecastWeather.value=saved.weather||'';form.elements.forecastWind.value=saved.wind||'';form.elements.forecastWave.value=saved.wave||'';form.elements.forecastTide.value=saved.tide||'';if(!form.elements.fromPort.value)form.elements.fromPort.value=saved.start||'';if(!form.elements.toPort.value)form.elements.toPort.value=saved.target||'';toast('Fahrtwetter übernommen');return;}
+  const snap=activeWeatherSnapshot;const hour=snap?.hours?.[activeWeatherHourIndex];if(!hour)return toast('Noch keine Vorhersage geladen. Öffne zuerst „Wetter & Gezeiten“.');form.elements.forecastWeather.value=weatherCodeInfo(hour.weatherCode)[1];form.elements.forecastWind.value=`${windDirectionText(hour.windDirection)} ${dec2(hour.windSpeed)} kn (${beaufortFromKnots(hour.windSpeed)} Bft)`;form.elements.forecastWave.value=hour.waveHeight===null?'':`${dec2(hour.waveHeight)} m · ${hour.wavePeriod===null?'—':`${dec2(hour.wavePeriod)} s`}`;form.elements.forecastTide.value=tideExtrema(snap.hours||[]).map(x=>`${x.type} ca. ${formatTime(x.time)}`).join(' · ');toast('Letzte Vorhersage übernommen');
+});
+$('#passageWeatherForm')?.addEventListener('submit',loadPassageWeather);
+if($('#passageDate')&&!$('#passageDate').value)$('#passageDate').value=dateInputValue();
+$('#portNameSearchButton')?.addEventListener('click',async()=>{const form=$('#portForm');const q=form?.elements.name.value||'';const btn=$('#portNameSearchButton');btn.disabled=true;btn.textContent='Suche …';try{renderPortNameSuggestions(await searchPortByName(q));}finally{btn.disabled=false;btn.textContent='Hafen suchen';}});
+$('#portNameSuggestions')?.addEventListener('click',event=>{const btn=event.target.closest('[data-port-name-index]');if(!btn)return;const item=(window.__portNameCandidates||[])[Number(btn.dataset.portNameIndex)];if(!item)return;const form=$('#portForm');form.elements.name.value=item.name;form.elements.coords.value=`${item.latitude.toFixed(6)}, ${item.longitude.toFixed(6)}`;$('#portNameSuggestions').hidden=true;toast('Hafen und Koordinaten übernommen');});
+$('#addMaterialRow')?.addEventListener('click',()=>addMaterialRow());
+['date','engineHours','intervalDays','intervalHours'].forEach(name=>$('#maintenanceForm')?.elements[name]?.addEventListener('input',updateNextServicePreview));
+$('#maintenanceForm')?.addEventListener('reset',()=>window.setTimeout(()=>{renderMaterialEditor();updateNextServicePreview()},0));
 
 $('#daySearch').oninput = renderDays;
 $('#showSavedDaysButton')?.addEventListener('click', () => $('#savedDaysSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
@@ -3216,7 +3294,7 @@ function drawPlannedTripMap() {
   activeRouteBounds = bounds;
   map.fitBounds(bounds, { padding: [36, 36], maxZoom: 11 });
   const trip = getActiveTrip();
-  $('#mapInfo').innerHTML = `<strong>${esc(trip?.title || 'Geplanter Törn')}</strong><span>${segments.length} Etappe${segments.length === 1 ? '' : 'n'} · gestrichelte Planungslinie</span><small>Für den exakten Kurs eine GPX-Route auswählen.</small>`;
+  $('#mapInfo').innerHTML = `<strong>${esc(trip?.title || 'Dokumentierter Törn')}</strong><span>${segments.length} Tagestour${segments.length === 1 ? '' : 'en'} · aus dem Tageslogbuch</span><small>Die Linie verbindet bekannte Start- und Zielorte. Eine GPX-Route kann optional genauer dargestellt werden.</small>`;
 }
 
 function drawGpx(id) {
@@ -3341,13 +3419,15 @@ function renderWeatherLocationOptions() {
   if (!select) return;
   const current = select.value || 'fixed:lemwerder';
   const fixedOptions = Object.values(WEATHER_LOCATIONS).map(item => `<option value="fixed:${item.key}">${esc(item.name)}</option>`).join('');
-  const routeOptions = [...state.route].sort((a, b) => String(a.date).localeCompare(String(b.date))).map((route, index) => {
-    const date = fmtDate(route.date);
-    return `<option value="route:${route.id}:from">Etappe ${index + 1}${date ? ` · ${date}` : ''} · Start: ${esc(route.from || 'offen')}</option><option value="route:${route.id}:to">Etappe ${index + 1}${date ? ` · ${date}` : ''} · Ziel: ${esc(route.to || 'offen')}</option>`;
-  }).join('');
-  select.innerHTML = `<optgroup label="Feste Orte">${fixedOptions}</optgroup>${routeOptions ? `<optgroup label="Ort aus geplanter Etappe">${routeOptions}</optgroup>` : ''}<optgroup label="Freier Punkt"><option value="map:custom">Punkt direkt auf der Seekarte</option></optgroup>`;
+  select.innerHTML = `<optgroup label="Standort"><option value="gps:current">📍 Aktueller Standort</option></optgroup><optgroup label="Feste Orte">${fixedOptions}</optgroup><optgroup label="Freier Punkt"><option value="map:custom">Punkt direkt auf der Seekarte</option></optgroup>`;
   if ([...select.options].some(option => option.value === current)) select.value = current;
   else select.value = 'fixed:lemwerder';
+}
+
+async function currentGpsLocation(name = 'Aktueller Standort') {
+  if (!navigator.geolocation) throw new Error('Dieses Gerät unterstützt keine Standortbestimmung.');
+  const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 18000, maximumAge: 60000 }));
+  return { name, latitude: position.coords.latitude, longitude: position.coords.longitude, source: 'gps', zoom: 12, accuracy: position.coords.accuracy };
 }
 
 function weatherMarkerIcon() {
@@ -3389,6 +3469,7 @@ function setWeatherLocation(location, options = {}) {
 }
 
 async function weatherLocationFromSelection(value = $('#weatherLocation')?.value) {
+  if (value === 'gps:current') return currentGpsLocation();
   if (value?.startsWith('fixed:')) return { ...WEATHER_LOCATIONS[value.split(':')[1]], source: 'fixed' };
   if (value?.startsWith('route:')) {
     const [, id, side] = value.split(':');
@@ -5158,11 +5239,14 @@ async function repairDeviceFromCloud() {
 }
 
 function renderMaintenance() {
-  $('#maintenanceList').innerHTML = state.maintenance.map(item => {
-    const info = maintenanceDueInfo(item);
-    const details = [item.engineHours ? `${dec(item.engineHours)} h` : '', item.cost ? eur(item.cost) : '', item.dueDate ? `fällig ${fmtDate(item.dueDate)}${info.dateDays !== null ? ` (${info.dateDays} Tage)` : ''}` : '', item.dueHours ? `bei ${dec(item.dueHours)} h${info.hoursLeft !== null ? ` (${dec(info.hoursLeft)} h verbleibend)` : ''}` : ''].filter(Boolean).join(' · ');
-    return card(item, 'maintenance', `<div class="meta">${fmtDate(item.date)} · ${esc(item.category || '')}</div><h3>${esc(item.title)}</h3><span class="due-chip ${item.done ? 'ok' : info.due ? 'due' : 'ok'}">${item.done ? 'erledigt' : info.due ? 'bald fällig' : 'offen'}</span><p>${esc(item.note || '')}</p><div class="meta">${details}</div>`);
-  }).join('') || '<div class="card muted">Noch keine Wartungseinträge.</div>';
+  const currentHours=num(getSettings().currentEngineHours);
+  $('#maintenanceList').innerHTML = (state.maintenance||[]).map(item => {
+    const dateDays=item.dueDate?daysUntil(item.dueDate):null; const hoursLeft=item.dueHours&&currentHours?num(item.dueHours)-currentHours:null;
+    const materials=Array.isArray(item.materials)?item.materials:[];
+    const materialHtml=materials.length?`<div class="maintenance-material-summary">${materials.map(x=>`<span><b>${esc(x.name||'Material')}</b>${x.quantity?` · ${esc(x.quantity)}`:''}${x.cost?` · ${eur(x.cost)}`:''}</span>`).join('')}</div>`:'';
+    const next=[item.dueDate?`spätestens ${fmtDate(item.dueDate)}${dateDays!==null?` · ${dateDays<0?`${Math.abs(dateDays)} Tage überfällig`:`noch ${dateDays} Tage`}`:''}`:'',item.dueHours?`bei ${dec2(item.dueHours)} h${hoursLeft!==null?` · ${hoursLeft<0?`${dec2(Math.abs(hoursLeft))} h überfällig`:`noch ${dec2(hoursLeft)} h`}`:''}`:''].filter(Boolean).join(' oder ');
+    return `<article class="item maintenance-v8" data-store="maintenance" data-record-id="${esc(item.id)}"><div class="maintenance-v8-head"><div><small>${fmtDate(item.date)} · ${esc(item.category||'')}</small><h3>${esc(item.title||'Wartung')}</h3></div><strong>${item.cost?eur(item.cost):'—'}</strong></div>${item.note?`<p>${esc(item.note).replace(/\n/g,'<br>')}</p>`:''}${materialHtml}${next?`<div class="next-service-line"><span>Nächster Service</span><strong>${next}</strong></div>`:''}<div class="actions"><button onclick="editItem('maintenance','${item.id}')">Bearbeiten</button><button class="delete" onclick="removeItem('maintenance','${item.id}')">Löschen</button></div></article>`;
+  }).join('') || '<div class="card muted">Noch keine Wartung dokumentiert.</div>';
 }
 
 async function createMaintenanceTemplates() {
@@ -5176,6 +5260,44 @@ async function createMaintenanceTemplates() {
     await put('maintenance',{id:uid(),date:now,category,title,engineHours:currentHours||'',done:false,dueDate:dateInputValue(dueDate),dueHours:hours&&currentHours?currentHours+hours:'',cost:'',note:'Automatisch angelegter, frei bearbeitbarer LEEFKE-Wartungspunkt.'});
   }
   await refresh(); toast('LEEFKE-Wartungsplan angelegt');
+}
+
+
+async function resolvePlaceForPassage(value, { allowGps = false } = {}) {
+  const raw=String(value||'').trim();
+  if(allowGps && raw==='gps:current') return currentGpsLocation();
+  if(raw.startsWith('fixed:')) return { ...WEATHER_LOCATIONS[raw.split(':')[1]], source:'fixed' };
+  const fixed=fixedLocationByName(raw); if(fixed)return {...fixed,source:'fixed'};
+  const port=portByName(raw); const coords=parseCoordinateString(port?.coords); if(coords)return {name:port.name,...coords,source:'port'};
+  const key=normalizePlaceName(raw); const known=REPORT_PLACE_COORDS[key]; if(known)return{name:raw,latitude:known[0],longitude:known[1],source:'known'};
+  if(!raw)throw new Error('Bitte einen Zielort eintragen.');
+  if(!navigator.onLine)throw new Error('Der Zielort ist noch nicht gespeichert. Für die Ortssuche wird kurz Internet benötigt.');
+  const url=`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(raw)}&count=8&language=de&format=json`;
+  const response=await fetch(url,{cache:'no-store'}); if(!response.ok)throw new Error('Zielort konnte nicht gesucht werden.');
+  const data=await response.json(); const result=(data.results||[]).find(x=>['DE','DK','NL'].includes(x.country_code))||data.results?.[0];
+  if(!result)throw new Error(`„${raw}“ wurde nicht gefunden.`);
+  return{name:raw||result.name,latitude:result.latitude,longitude:result.longitude,source:'geocode'};
+}
+function courseDirectionText(deg){return windDirectionText(deg)}
+function boatWindGraphic(course, sourceDirection, kind='wind'){
+  const relative=relativeSeaLabel(course,sourceDirection); const diff=((sourceDirection-course+360)%360); const arrows=['↓','↙','←','↖','↑','↗','→','↘']; const arrow=arrows[Math.round(diff/45)%8];
+  return `<div class="boat-relative"><div class="boat-relative-visual"><span class="relative-arrow">${arrow}</span><span class="relative-boat">🚤</span></div><strong>${kind==='wave'?'Welle':'Wind'} ${esc(relative)}</strong></div>`;
+}
+async function fetchPassageHour(location,date,time){
+  const snapshot=await fetchWeatherData(location,date); if(!snapshot.hours?.length)throw new Error(`Keine Wetterdaten für ${location.name}.`);
+  const target=`${date}T${time||'08:00'}`; let best=0,bestDiff=Infinity; snapshot.hours.forEach((h,i)=>{const d=Math.abs(Date.parse(h.time)-Date.parse(target));if(d<bestDiff){best=i;bestDiff=d}}); return {snapshot,hour:snapshot.hours[best]};
+}
+async function loadPassageWeather(event){
+  event?.preventDefault(); const box=$('#passageWeatherState'), result=$('#passageWeatherResult'); if(box){box.textContent='Standort, Ziel, Wind und Seegang werden geladen …';box.className='sync-message'} if(result)result.innerHTML='';
+  try{
+    const start=await resolvePlaceForPassage($('#passageStart').value,{allowGps:true}); const target=await resolvePlaceForPassage($('#passageTarget').value); const date=$('#passageDate').value||dateInputValue(); const time=$('#passageTime').value||'08:00';
+    const course=bearingBetween([start.latitude,start.longitude],[target.latitude,target.longitude]); const [a,b]=await Promise.all([fetchPassageHour(start,date,time),fetchPassageHour(target,date,time)]); const sh=a.hour,th=b.hour;
+    const tidesA=tideExtrema(a.snapshot.hours||[]).slice(0,4); const tidesB=tideExtrema(b.snapshot.hours||[]).slice(0,4);
+    const card=(title,loc,h,tides)=>`<article><small>${title}</small><h4>${esc(loc.name)}</h4><div class="passage-facts"><div><span>Wind</span><strong>${windDirectionText(h.windDirection)} ${dec2(h.windSpeed)} kn · ${beaufortFromKnots(h.windSpeed)} Bft</strong></div><div><span>Böen</span><strong>${h.windGust===null?'—':`${dec2(h.windGust)} kn`}</strong></div><div><span>Welle</span><strong>${h.waveHeight===null?'—':`${dec2(h.waveHeight)} m aus ${windDirectionText(h.waveDirection)}`}</strong></div><div><span>Periode</span><strong>${h.wavePeriod===null?'—':`${dec2(h.wavePeriod)} s · ${dec2(60/h.wavePeriod)} Wellen/min`}</strong></div><div class="passage-tides"><span>Gezeiten</span><strong>${tides.length?tides.map(x=>`${x.type} ${formatTime(x.time)}`).join(' · '):'—'}</strong></div></div>${boatWindGraphic(course,h.windDirection,'wind')}${h.waveDirection!==null?boatWindGraphic(course,h.waveDirection,'wave'):''}</article>`;
+    result.innerHTML=`<div class="passage-course"><span>Kurs zum Ziel</span><strong>${String(Math.round(course)).padStart(3,'0')}° · ${courseDirectionText(course)}</strong><small>Luftlinie – tatsächlicher Fahrwasserkurs kann abweichen.</small></div><div class="passage-point-grid">${card('START',start,sh,tidesA)}${card('ZIEL',target,th,tidesB)}</div><button id="savePassageForecast" type="button" class="primary">Vorhersage fürs Tageslog merken</button>`;
+    result.querySelector('#savePassageForecast')?.addEventListener('click',()=>{window.__leefkeLastPassageForecast={date,start:start.name,target:target.name,weather:`${weatherCodeInfo(sh.weatherCode)[1]} → ${weatherCodeInfo(th.weatherCode)[1]}`,wind:`Start ${windDirectionText(sh.windDirection)} ${dec2(sh.windSpeed)} kn (${beaufortFromKnots(sh.windSpeed)} Bft) · Ziel ${windDirectionText(th.windDirection)} ${dec2(th.windSpeed)} kn (${beaufortFromKnots(th.windSpeed)} Bft)`,wave:`Start ${sh.waveHeight===null?'—':`${dec2(sh.waveHeight)} m · ${dec2(sh.wavePeriod)} s`} · Ziel ${th.waveHeight===null?'—':`${dec2(th.waveHeight)} m · ${dec2(th.wavePeriod)} s`}`,tide:`Start ${tidesA.map(x=>`${x.type} ${formatTime(x.time)}`).join(' · ')} · Ziel ${tidesB.map(x=>`${x.type} ${formatTime(x.time)}`).join(' · ')}`};toast('Vorhersage für das Tageslog vorgemerkt')});
+    if(box){box.textContent='Fahrtwetter geladen.';box.className='sync-message success'}
+  }catch(error){if(box){box.textContent=error.message||'Fahrtwetter konnte nicht geladen werden.';box.className='sync-message error'}}
 }
 
 function bearingBetween(a,b) {
@@ -5317,22 +5439,20 @@ function reportPointByName(name) {
 
 function reportPlannedRouteSegments() {
   const segments = [];
-  const stages = [...state.route]
-    .filter(stage => stage.status !== 'skip')
-    .sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
-
+  const days = [...(state.days || [])].sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
+  for (const day of days) {
+    const from = reportPointByName(day.fromPort);
+    const to = reportPointByName(day.toPort);
+    if (!from && !to) continue;
+    segments.push({ id: day.id, label: `${day.fromPort || 'Start'} → ${day.toPort || 'Ziel'}`, from, to, date: day.date, nm: day.distance, source: 'day' });
+  }
+  if (segments.length) return segments;
+  const stages = [...(state.route || [])].filter(stage => stage.status !== 'skip').sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')));
   for (const stage of stages) {
     const from = reportPointByName(stage.from);
     const to = reportPointByName(stage.to);
     if (!from && !to) continue;
-    segments.push({
-      id: stage.id,
-      label: `${stage.from || 'Start'} → ${stage.to || 'Ziel'}`,
-      from,
-      to,
-      date: stage.date,
-      nm: stage.nm
-    });
+    segments.push({ id: stage.id, label: `${stage.from || 'Start'} → ${stage.to || 'Ziel'}`, from, to, date: stage.date, nm: stage.nm, source: 'legacy' });
   }
   return segments;
 }
@@ -5347,7 +5467,7 @@ function reportRouteMapHtml() {
   const routeCaption = hasGpx
     ? '<span><i class="report-legend-line"></i> GPX-Route</span>'
     : hasPlan
-      ? '<span><i class="report-legend-line planned"></i> geplanter Törn</span>'
+      ? '<span><i class="report-legend-line planned"></i> dokumentierter Törn</span>'
       : '<span><i class="report-legend-line planned"></i> Seekartenübersicht</span>';
 
   return `<div class="report-map-shell">
@@ -5355,7 +5475,7 @@ function reportRouteMapHtml() {
       <div id="reportMapLoading" class="report-map-loading"><span>⚓</span><strong>Seekarte wird geladen …</strong><small>Küstenkarte, Seezeichen und der Verlauf des aktuellen Törns werden eingeblendet.</small></div>
     </div>
     <div class="report-map-caption">${routeCaption}<span>⚓ Start / Hafen</span><span>◆ Ziel</span><span>Seezeichen: OpenSeaMap</span></div>
-    <p class="report-map-warning">Planungs- und Dokumentationsansicht – keine zugelassene Navigationskarte. Ohne GPX verbindet die App bekannte Etappenorte als gestrichelte Planungslinie.</p>
+    <p class="report-map-warning">Planungs- und Dokumentationsansicht – keine zugelassene Navigationskarte. Ohne GPX verbindet die App bekannte Start- und Zielorte der Tagestouren als dokumentierte Tagesroute.</p>
   </div>`;
 }
 
@@ -5859,10 +5979,17 @@ window.addEventListener('load', () => {
   $('#holidayModeToggle')?.addEventListener('change', event => applyHolidayMode(event.target.checked));
   $('#holidayBackupButton')?.addEventListener('click', () => downloadFullBackup({ vacation: true }));
   $('#holidayBackupButtonBackupPage')?.addEventListener('click', () => downloadFullBackup({ vacation: true }));
+  renderMaterialEditor();
+  updateNextServicePreview();
   applyHolidayMode();
   updateConnectionBanner();
   applyGuestModeUI();
 });
+
+
+const deadlineForm=$('#deadlineForm');
+if(deadlineForm) deadlineForm.onsubmit=async event=>{event.preventDefault();const v=formObject(deadlineForm);let due=v.dueDate||'';const interval=parseFuelDecimal(v.intervalDays);if(!due&&v.lastCheck&&interval){const d=new Date(`${v.lastCheck}T12:00:00`);d.setDate(d.getDate()+Number(interval));due=dateInputValue(d)}const existing=v.id?await getOne('safety',v.id):null;await put('safety',{...(existing||{}),id:v.id||uid(),name:v.name,lastCheck:v.lastCheck||'',intervalDays:interval,dueDate:due,remindDays:parseFuelDecimal(v.remindDays)||60,status:'ok',note:v.note||''});deadlineForm.reset();await refresh();toast('Erinnerung gespeichert');};
+window.editDeadline=async id=>{const item=await getOne('safety',id);if(!item)return;fillForm($('#deadlineForm'),item);$('#deadlineForm').scrollIntoView({behavior:'smooth',block:'center'});};
 
 // Formulare für Bordbetrieb
 for (const [store, formId] of [['inventory','inventoryForm'],['safety','safetyForm']]) {

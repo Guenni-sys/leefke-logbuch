@@ -1,0 +1,22 @@
+LEEFKE 8.0 – SCHLANKE BORDBUCH-EDITION
+
+Ziel:
+Die App soll nach realer Urlaubserfahrung wieder schnell und selbstverständlich benutzt werden.
+
+Neu / vereinfacht:
+- deutlich kleinerer Startseiten-Header
+- keine Etappenplanung mehr in der normalen Bedienung
+- Tageslog nach der Fahrt: Fahrt + Vorhersage + tatsächliche Bedingungen
+- Wetter & Gezeiten: aktueller Standort -> Ziel; Wind/Welle relativ zum Boot
+- Gezeiten bleiben sichtbar
+- Hafenbuch: GPS + Namenssuche, Koordinaten automatisch, Zugangscodes, Duschkosten
+- Tankbuch bleibt einfach; Verbrauch je Tankintervall
+- Wartung: freier Arbeitsbericht, Materialliste + Kosten, Zeit-/Motorstundenintervall
+- Fristen: Feuerlöscher, Gasprüfung, Rettungsinsel usw.
+- Checklisten aus der normalen Bedienung entfernt
+- Törnarchiv statt Törnplanung: Tageslogs, Bilder und Seekarte
+- bestehende Datenbank / Supabase-Struktur bleibt erhalten
+
+Wichtig:
+Alt-Daten aus früheren Versionen werden nicht gelöscht. Etappen und Checklisten bleiben in Sicherungen erhalten,
+werden aber in Version 8.0 nicht mehr als Hauptfunktion angeboten.

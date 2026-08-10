@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=7.6">
+  <link rel="stylesheet" href="style.css?v=8.0">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -32,7 +32,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · URLAUBSEDITION 7.6</small>
+        <small>BORDTAGEBUCH · VERSION 8.0</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -49,270 +49,118 @@
       <button data-view="home" class="active"><span>⌂</span> Übersicht</button>
       <button data-view="day"><span>✎</span> Tageslogbuch</button>
       <button data-view="weather"><span>☀</span> Wetter & Gezeiten</button>
-      <button data-view="route"><span>↝</span> Törn & Seekarte</button>
       <button data-view="ports"><span>⚓</span> Hafenbuch</button>
-      <button data-view="fuel"><span>⛽</span> Tank & Verbrauch</button>
-      <details id="navMoreGroup" class="nav-more-group" open>
-        <summary>Weitere Bereiche</summary>
+      <button data-view="fuel"><span>⛽</span> Tankbuch</button>
+      <button data-view="route"><span>⌁</span> Törnarchiv</button>
+      <details id="navMoreGroup" class="nav-more-group">
+        <summary>Mehr</summary>
         <div>
-          <button data-view="maintenance"><span>⚙</span> Wartung</button>
-          <button data-view="operations"><span>🧰</span> Bordbetrieb</button>
-          <button data-view="checklists"><span>✓</span> Checklisten</button>
-          <button data-view="photos"><span>▦</span> Galerie</button>
-          <button data-view="report"><span>▤</span> Reisebericht</button>
+          <button data-view="maintenance"><span>⚙</span> Wartung & Fristen</button>
+          <button data-view="photos"><span>▦</span> Fotos</button>
           <button data-view="settings"><span>♜</span> Schiffspass</button>
           <button data-view="sync"><span>☁</span> Konto & Sync</button>
-          <button data-view="history"><span>⟲</span> Verlauf & Konflikte <b id="conflictNavBadge" class="nav-badge" hidden>0</b></button>
+          <button data-view="history"><span>⟲</span> Verlauf <b id="conflictNavBadge" class="nav-badge" hidden>0</b></button>
           <button data-view="backup"><span>⇩</span> Sicherung</button>
         </div>
       </details>
-      <div class="nav-footer">Stahl · Spitzgatt · 1996</div>
+      <div class="nav-footer">Bordbuch · Wetter · Häfen</div>
     </nav>
 
     <main>
       <section id="home" class="view active">
-        <article class="hero">
+        <article class="home-compact-header">
           <img id="heroBoatImage" class="boat-image-pending" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="Die LEEFKE unterwegs">
-          <div class="hero-shade"></div>
-          <div class="hero-nameplate">
-            <span>Das Bordtagebuch von</span>
-            <h2>LEEFKE</h2>
-            <p>Groeneveld Kotter · Finse · Baujahr 1996</p>
-          </div>
-          <div class="compass" aria-hidden="true"><span>N</span><b>✦</b></div>
+          <div class="home-compact-shade"></div>
+          <div class="home-compact-copy"><small>AN BORD</small><h2>LEEFKE</h2><p id="homeTripLine">Aktueller Törn</p></div>
         </article>
 
-        <section class="leefke-intro" aria-label="Die LEEFKE">
-          <div class="intro-mark" aria-hidden="true">⚓</div>
-          <div class="intro-copy">
-            <small>UNSER SCHIFF</small>
-            <h2>LEEFKE – klassischer Stahlkotter mit Charakter</h2>
-            <p id="leefkeStory">LEEFKE ist unser 1996 gebauter Groeneveld Kotter der Baureihe Finse: ein 11,50 Meter langer Stahlverdränger mit klassischem Spitzgatt. Ruhig, solide und verlässlich bringt sie uns von der Weser hinaus auf Nord- und Ostsee.</p>
-          </div>
-          <div class="voyage-panel">
-            <small>AKTUELLER TÖRN</small>
-            <strong id="tripTitle">Dänische Südsee 2026</strong>
-            <span id="tripDates">01.–16. August 2026</span>
-            <label class="home-trip-switcher" aria-label="Anderen Törn auswählen"><span>Anderen Törn öffnen</span><select id="globalTripSelect"></select></label>
-            <div class="actions">
-              <button class="primary" data-open="day">Neuen Tag eintragen</button>
-              <button data-open="route">Etappe planen</button>
-            </div>
-          </div>
+        <section class="home-actions" aria-label="Schnellzugriff">
+          <button class="primary" data-open="day"><span>✎</span><strong>Tagestour eintragen</strong><small>nach dem Anlegen</small></button>
+          <button data-open="weather"><span>☀</span><strong>Wetter & Gezeiten</strong><small>Start → Ziel</small></button>
+          <button data-open="ports"><span>⚓</span><strong>Hafen eintragen</strong><small>Liegeplatz & Codes</small></button>
+          <button data-open="fuel"><span>⛽</span><strong>Tanken</strong><small>Verbrauch berechnen</small></button>
         </section>
 
-        <section class="holiday-console card no-print" aria-label="Urlaubsmodus und Schnellzugriff">
-          <div class="holiday-console-head">
-            <div>
-              <div class="card-kicker">URLAUBSEDITION</div>
-              <h3>Schnell an Bord erfassen</h3>
-              <p>Die vier wichtigsten Bereiche für unterwegs – alles Weitere bleibt über „Mehr“ erreichbar.</p>
-            </div>
-            <label class="holiday-mode-switch"><input id="holidayModeToggle" type="checkbox"><span><strong>Urlaubsmodus</strong><small id="holidayModeText">Aus</small></span></label>
-          </div>
-          <div class="holiday-quick-actions">
-            <button class="primary" data-open="day"><span>✎</span><strong>Tagestour</strong><small>Fahrt eintragen</small></button>
-            <button data-open="weather"><span>☀</span><strong>Wetter & Gezeiten</strong><small>Vorhersage prüfen</small></button>
-            <button data-open="route"><span>↝</span><strong>Törn & Seekarte</strong><small>Route ansehen</small></button>
-            <button data-open="ports"><span>⚓</span><strong>Hafen</strong><small>Liegeplatz erfassen</small></button>
-          </div>
-          <div class="holiday-health">
-            <div><span>Cloud</span><strong id="holidaySyncText">Status wird geprüft …</strong></div>
-            <div><span>Letzte Sicherung</span><strong id="holidayBackupText">Noch kein Export</strong></div>
-            <button id="holidayBackupButton" type="button">Urlaubssicherung erstellen</button>
-          </div>
-        </section>
-
-        <div class="vessel-strip" aria-label="Schiffsdaten der LEEFKE">
-          <div><span>↔ Länge</span><strong id="vLength">11,50 m</strong></div>
-          <div><span>↔ Breite</span><strong id="vBeam">3,85 m</strong></div>
-          <div><span>⌄ Tiefgang</span><strong id="vDraft">1,15 m</strong></div>
-          <div><span>⚓ Verdrängung</span><strong id="vDisplacement">ca. 13 t</strong></div>
-          <div><span>⚙ Motor</span><strong id="vEngine">Perkins M135</strong></div>
-          <div><span>⛽ Diesel</span><strong id="vTank">400 l</strong></div>
+        <div class="home-status-grid">
+          <article class="card"><div class="card-kicker">LETZTER TAG</div><div id="latest" class="muted">Noch kein Eintrag.</div></article>
+          <article class="card tank-card compact-tank"><div class="card-kicker">DIESEL</div><div class="tank-gauge"><div id="tankFill" class="tank-fill"></div></div><div class="tank-value"><strong id="tankPercent">—</strong><span id="tankLiters">Tankstand nicht eingetragen</span></div></article>
+          <article class="card"><div class="card-kicker">FRISTEN & SERVICE</div><h3>Nächste Erinnerung</h3><div id="openMaint" class="muted">Keine fälligen Punkte.</div><button data-open="maintenance" class="text-button">Wartung & Fristen →</button></article>
+          <article class="card"><div class="card-kicker">TÖRN</div><h3 id="tripTitle">Aktueller Törn</h3><span id="tripDates" class="meta"></span><label class="home-trip-switcher"><span>Törn wechseln</span><select id="globalTripSelect"></select></label><button data-open="route" class="text-button">Törnarchiv öffnen →</button></article>
         </div>
 
-        <div class="stats">
-          <article><span>Reisetage</span><strong id="sDays">0</strong><small>im aktuellen Bordbuch</small></article>
-          <article><span>Seemeilen</span><strong id="sNm">0,0</strong><small>gefahren</small></article>
-          <article><span>Motorstunden</span><strong id="sHours">0,0</strong><small>auf Reisen</small></article>
-          <article><span>Dieselkosten</span><strong id="sCost">0 €</strong><small>erfasst</small></article>
-          <article><span>Ø Verbrauch</span><strong id="sAvg">—</strong><small>Liter je Stunde</small></article>
+        <div class="stats compact home-mini-stats">
+          <article><span>Tagestouren</span><strong id="sDays">0</strong></article>
+          <article><span>Seemeilen</span><strong id="sNm">0,0</strong></article>
+          <article><span>Motorstunden</span><strong id="sHours">0,0</strong></article>
+          <article><span>Ø Verbrauch</span><strong id="sAvg">—</strong></article>
         </div>
 
-        <div class="grid2 home-grid">
-          <article class="card tank-card">
-            <div class="card-kicker">TANKANZEIGE</div>
-            <h3>Dieselvorrat der LEEFKE</h3>
-            <div class="tank-gauge" aria-label="Tankfüllstand">
-              <div id="tankFill" class="tank-fill"></div>
-              <div class="tank-marks"><span>400 l</span><span>200 l</span><span>0 l</span></div>
-            </div>
-            <div class="tank-value"><strong id="tankPercent">—</strong><span id="tankLiters">Tankstand nicht eingetragen</span></div>
-          </article>
+        <article class="card home-backup no-print"><div><div class="card-kicker">DATENSICHERUNG</div><strong id="holidaySyncText">Status wird geprüft …</strong><small id="holidayBackupText">Noch kein Export</small></div><button id="holidayBackupButton" type="button">Sicherung erstellen</button></article>
 
-          <article class="card ship-card">
-            <div class="card-kicker">SCHIFFSPASS</div>
-            <h3 id="shipCardTitle">LEEFKE · Groeneveld Kotter</h3>
-            <dl class="ship-facts">
-              <div><dt>Baujahr</dt><dd id="fBuildYear">1996</dd></div>
-              <div><dt>Rumpf</dt><dd id="fHull">Stahl · Multiknickspant · Spitzgatt</dd></div>
-              <div><dt>Heimathafen</dt><dd id="fHomePort">Weser Yacht Club Lemwerder</dd></div>
-              <div><dt>Marschfahrt</dt><dd id="fCruise">6,5 kn</dd></div>
-            </dl>
-            <button data-open="settings" class="text-button">Schiffsdaten öffnen →</button>
-          </article>
-
-          <article class="card"><div class="card-kicker">LOGBUCH</div><h3>Letzter Eintrag</h3><div id="latest" class="muted">Noch kein Eintrag.</div></article>
-          <article class="card"><div class="card-kicker">KURS</div><h3>Nächste Etappe</h3><div id="nextRoute" class="muted">Noch keine Etappe geplant.</div></article>
-          <article class="card"><div class="card-kicker">MASCHINENRAUM</div><h3>Offene Wartung</h3><div id="openMaint" class="muted">Keine offenen Punkte.</div></article>
-          <article class="card"><div class="card-kicker">AUSRÜSTUNG</div><h3>LEEFKE auf einen Blick</h3><div id="quickInfo" class="muted"></div></article>
+        <div class="legacy-home-data" hidden>
+          <span id="leefkeStory"></span><span id="vLength"></span><span id="vBeam"></span><span id="vDraft"></span><span id="vDisplacement"></span><span id="vEngine"></span><span id="vTank"></span><span id="shipCardTitle"></span><span id="fBuildYear"></span><span id="fHull"></span><span id="fHomePort"></span><span id="fCruise"></span><span id="sCost"></span><span id="nextRoute"></span><span id="quickInfo"></span>
+          <input id="holidayModeToggle" type="checkbox"><span id="holidayModeText"></span>
         </div>
       </section>
 
       <section id="day" class="view">
-        <div class="title"><small>TAGESLOGBUCH</small><h2>Ein Tag an Bord der LEEFKE</h2><p>Route, Wetter, Seegang und die besonderen Momente des Tages.</p></div>
+        <div class="title"><small>TAGESLOGBUCH</small><h2>Tagestour dokumentieren</h2><p>Nach dem Anlegen in wenigen Minuten erledigt: Fahrt, Vorhersage und das, was tatsächlich draußen war.</p></div>
 
-        <article class="card day-form-guide">
-          <div>
-            <div class="card-kicker">SO FUNKTIONIERT ES</div>
-            <h3>Tagestour erfassen</h3>
-            <p>Der Eintrag wird sofort <strong>lokal auf diesem Gerät</strong> gespeichert. Wenn du angemeldet bist, wird er zusätzlich mit der LEEFKE-Cloud und den anderen Geräten synchronisiert.</p>
-          </div>
-          <div class="day-route-copy">
-            <label class="day-route-select">Geplante Etappe übernehmen
-              <select id="dayRouteSource"><option value="">Etappe auswählen …</option></select>
-            </label>
-            <div class="day-route-actions">
-              <button id="dayRouteApply" type="button">Etappe übernehmen</button>
-              <button id="showSavedDaysButton" type="button">Gespeicherte Tagestouren ansehen</button>
-            </div>
-          </div>
-        </article>
+        <article class="card day-quick-head"><div><div class="card-kicker">NACH DER FAHRT</div><h3>Nur die wichtigen Daten</h3><p>Keine Etappenplanung und keine Pflichtfelder außer dem Datum. Vorhersagen können aus „Wetter & Gezeiten“ übernommen werden.</p></div><button id="showSavedDaysButton" type="button">Gespeicherte Tagestouren</button></article>
 
-        <form id="dayForm" class="card form day-form">
+        <form id="dayForm" class="card form day-form v8-day-form">
           <input type="hidden" name="id">
-          <label><span class="label-row">Datum <button class="field-help" type="button" data-help="date" aria-label="Hinweis zum Feld Datum">?</button></span><input required type="date" name="date"></label>
-          <label><span class="label-row">Reisetag <button class="field-help" type="button" data-help="dayNo" aria-label="Hinweis zum Feld Reisetag">?</button></span><input type="number" min="1" step="1" inputmode="numeric" name="dayNo" placeholder="z. B. 3"></label>
-          <label class="wide"><span class="label-row">Überschrift <button class="field-help" type="button" data-help="title" aria-label="Hinweis zur Überschrift">?</button></span><input name="title" placeholder="z. B. Von Bremerhaven hinaus auf die Nordsee"></label>
-          <label><span class="label-row">Von <button class="field-help" type="button" data-help="fromPort" aria-label="Hinweis zum Startort">?</button></span><input name="fromPort" list="portNames" autocomplete="off" placeholder="Startort oder Hafen"></label>
-          <label><span class="label-row">Nach <button class="field-help" type="button" data-help="toPort" aria-label="Hinweis zum Zielort">?</button></span><input name="toPort" list="portNames" autocomplete="off" placeholder="Zielort oder Hafen"></label>
-          <label><span class="label-row">Ablegen <button class="field-help" type="button" data-help="depart" aria-label="Hinweis zur Ablegezeit">?</button></span><input type="time" name="depart"></label>
-          <label><span class="label-row">Anlegen <button class="field-help" type="button" data-help="arrive" aria-label="Hinweis zur Anlegezeit">?</button></span><input type="time" name="arrive"></label>
-          <label><span class="label-row">Strecke in sm <button class="field-help" type="button" data-help="distance" aria-label="Hinweis zur Strecke">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="distance" placeholder="z. B. 42,5"></label>
-          <label><span class="label-row">Motorstunden beim Start <button class="field-help" type="button" data-help="engineStart" aria-label="Hinweis zu Motorstunden beim Start">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="engineStart" placeholder="Zählerstand"></label>
-          <label><span class="label-row">Motorstunden beim Ende <button class="field-help" type="button" data-help="engineEnd" aria-label="Hinweis zu Motorstunden beim Ende">?</button></span><input type="number" min="0" step="0.1" inputmode="decimal" name="engineEnd" placeholder="Zählerstand"></label>
-          <label class="day-weather-control"><span class="label-row">Wetter <button class="field-help" type="button" data-help="weather" aria-label="Hinweis zum Wetter">?</button></span><select id="dayWeatherSelect" aria-label="Wetter auswählen"><option value="">Bitte auswählen …</option><option value="Sonnig">Sonnig</option><option value="Heiter">Heiter</option><option value="Wechselnd bewölkt">Wechselnd bewölkt</option><option value="Bedeckt">Bedeckt</option><option value="Schauer">Schauer</option><option value="Regen">Regen</option><option value="Nebel">Nebel</option><option value="Gewitter">Gewitter</option><option value="__custom__">Eigener Eintrag …</option></select><input id="dayWeatherCustom" name="weather" placeholder="Eigenes Wetter eintragen" hidden></label>
-          <label><span class="label-row">Wind <button class="field-help" type="button" data-help="wind" aria-label="Hinweis zum Wind">?</button></span><input name="wind" list="dayWindOptions" placeholder="z. B. NW 3 Bft, Böen 5 Bft"></label>
-          <label><span class="label-row">Welle <button class="field-help" type="button" data-help="wave" aria-label="Hinweis zur Welle">?</button></span><input name="wave" list="dayWaveOptions" placeholder="z. B. 0,5 m aus NW · 4 s"></label>
-          <label><span class="label-row">Tide / Strom <button class="field-help" type="button" data-help="tide" aria-label="Hinweis zu Tide und Strom">?</button></span><input name="tide" list="dayTideOptions" placeholder="z. B. ablaufend, mitlaufender Strom"></label>
-          <label><span class="label-row">Besatzung <button class="field-help" type="button" data-help="crew" aria-label="Hinweis zur Besatzung">?</button></span><input name="crew" placeholder="Namen, durch Komma getrennt"></label>
-          <label class="wide"><span class="label-row">Tagesbericht <button class="field-help" type="button" data-help="summary" aria-label="Hinweis zum Tagesbericht">?</button></span><textarea rows="7" name="summary" placeholder="Wie verlief die Fahrt? Besondere Beobachtungen, Manöver, Verkehr, Liegeplatz …"></textarea></label>
-          <label class="wide"><span class="label-row">Moment des Tages <button class="field-help" type="button" data-help="moment" aria-label="Hinweis zum Moment des Tages">?</button></span><textarea rows="3" name="moment" placeholder="Der schönste, spannendste oder ungewöhnlichste Augenblick"></textarea></label>
+          <div class="wide section-heading"><span>↝</span><div><small>FAHRT</small><h3>Von – nach</h3></div></div>
+          <label>Datum<input required type="date" name="date"></label>
+          <label>Reisetag<input type="number" min="1" step="1" inputmode="numeric" name="dayNo" placeholder="optional"></label>
+          <label>Von<input name="fromPort" list="portNames" autocomplete="off" placeholder="Startort / Hafen"></label>
+          <label>Nach<input name="toPort" list="portNames" autocomplete="off" placeholder="Zielort / Hafen"></label>
+          <label>Ablegen<input type="time" name="depart"></label><label>Anlegen<input type="time" name="arrive"></label>
+          <label>Strecke (sm)<input type="number" min="0" step="0.1" inputmode="decimal" name="distance"></label>
+          <label>Besatzung<input name="crew" placeholder="optional"></label>
+          <label>Motorstunden Start<input type="number" min="0" step="0.1" inputmode="decimal" name="engineStart"></label>
+          <label>Motorstunden Ende<input type="number" min="0" step="0.1" inputmode="decimal" name="engineEnd"></label>
+          <label class="wide">Überschrift<input name="title" placeholder="optional – wird sonst aus Start und Ziel gebildet"></label>
+
+          <div class="wide section-heading forecast-heading"><span>☀</span><div><small>VOR DER FAHRT</small><h3>Gespeicherte Vorhersage</h3><p>Optional – mit einem Klick aus dem Wetterbereich übernehmen.</p></div><button id="dayForecastApply" type="button">Letzte Vorhersage übernehmen</button></div>
+          <label>Wetter<input name="forecastWeather" placeholder="z. B. heiter, 18 °C"></label>
+          <label>Wind<input name="forecastWind" placeholder="z. B. W 3–4 Bft"></label>
+          <label>Welle<input name="forecastWave" placeholder="z. B. 0,6 m · 4,8 s"></label>
+          <label>Tide / Strom<input name="forecastTide" placeholder="z. B. ablaufend"></label>
+
+          <div class="wide section-heading actual-heading"><span>≈</span><div><small>NACH DER FAHRT</small><h3>Tatsächliche Bedingungen</h3></div></div>
+          <label>Wetter<select id="dayWeatherSelect" aria-label="Wetter auswählen"><option value="">Bitte auswählen …</option><option value="Sonnig">Sonnig</option><option value="Heiter">Heiter</option><option value="Wechselnd bewölkt">Wechselnd bewölkt</option><option value="Bedeckt">Bedeckt</option><option value="Schauer">Schauer</option><option value="Regen">Regen</option><option value="Nebel">Nebel</option><option value="Gewitter">Gewitter</option><option value="__custom__">Eigener Eintrag …</option></select><input id="dayWeatherCustom" name="weather" placeholder="Eigenes Wetter" hidden></label>
+          <label>Wind<input name="wind" list="dayWindOptions" placeholder="z. B. NW 4 Bft"></label>
+          <label>Wellenhöhe / Periode<input name="wave" list="dayWaveOptions" placeholder="z. B. 0,8 m · ca. 4 s"></label>
+          <label>Tide / Strom<input name="tide" list="dayTideOptions" placeholder="z. B. ablaufend, Strom mit"></label>
+          <label>Wie fühlte es sich an?<select name="seaFeel"><option value="">Bitte auswählen …</option><option>Ruhig</option><option>Angenehm</option><option>Lebhaft</option><option>Unruhig</option><option>Ruppig</option><option>Anspruchsvoll</option></select></label>
+          <label class="wide">Tagesnotiz<textarea rows="6" name="summary" placeholder="Fahrtverlauf, Verkehr, Welle, Besonderheiten, Ansteuerung …"></textarea></label>
+          <label class="wide">Moment des Tages<textarea rows="2" name="moment" placeholder="optional"></textarea></label>
 
           <div id="dayFormStatus" class="wide form-status" role="status" aria-live="polite" hidden></div>
-          <div class="wide actions"><button id="daySaveButton" class="primary" type="submit">Tagestour speichern</button><button id="dayCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="reset">Formular leeren</button></div>
-          <p class="wide saved-location"><strong>Nach dem Speichern:</strong> Der Eintrag erscheint direkt unter diesem Formular unter „Gespeicherte Tagestouren“, auf dem Dashboard und im Reisebericht.</p>
+          <div class="wide actions"><button id="daySaveButton" class="primary" type="submit">Tagestour speichern</button><button id="dayCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="reset">Leeren</button></div>
         </form>
-
-        <datalist id="dayWindOptions">
-          <option value="Windstill"></option><option value="N 2 Bft"></option><option value="NO 3 Bft"></option><option value="O 3 Bft"></option><option value="SO 3 Bft"></option><option value="S 3 Bft"></option><option value="SW 3 Bft"></option><option value="W 3 Bft"></option><option value="NW 3 Bft"></option><option value="NW 4 Bft, Böen 5 Bft"></option>
-        </datalist>
-        <datalist id="dayWaveOptions">
-          <option value="Glatt / unter 0,1 m"></option><option value="0,2 m"></option><option value="0,5 m"></option><option value="0,8 m"></option><option value="1,0 m"></option><option value="1,5 m"></option><option value="0,5 m aus NW · 4 s"></option><option value="1,0 m aus W · 6 s"></option>
-        </datalist>
-        <datalist id="dayTideOptions">
-          <option value="Auflaufend"></option><option value="Ablaufend"></option><option value="Stillwasser"></option><option value="Mitlaufender Strom"></option><option value="Gegenstrom"></option><option value="Auflaufend · mitlaufender Strom"></option><option value="Ablaufend · Gegenstrom"></option>
-        </datalist>
-
-        <div id="savedDaysSection" class="list-heading"><div><div class="card-kicker">BORDBUCH</div><h3>Gespeicherte Tagestouren</h3><p class="meta">Mit „Eintrag ansehen“ öffnest du die vollständige Tour. Mit „Bearbeiten“ werden alle gespeicherten Werte wieder ins Formular geladen.</p></div><span id="dayListCount" class="list-count">0 Einträge</span></div>
-        <div id="dayTripNotice" class="trip-data-notice" hidden></div>
-        <div class="toolbar"><input id="daySearch" placeholder="Tagestouren durchsuchen …"></div>
-        <div id="dayList" class="stack"></div>
+        <datalist id="dayWindOptions"><option value="Windstill"></option><option value="W 3 Bft"></option><option value="NW 4 Bft"></option><option value="SW 3 Bft"></option></datalist>
+        <datalist id="dayWaveOptions"><option value="ruhig"></option><option value="0,3–0,5 m · 5 s"></option><option value="0,5–0,8 m · 4 s"></option><option value="0,8–1,0 m · 4 s"></option><option value="1,0–1,5 m · 5 s"></option></datalist>
+        <datalist id="dayTideOptions"><option value="auflaufend"></option><option value="ablaufend"></option><option value="Strom mit"></option><option value="Strom gegen"></option></datalist>
+        <datalist id="portNames"></datalist>
+        <div id="savedDaysSection" class="saved-days-section"><div class="saved-days-heading"><div><small>GESPEICHERT</small><h3>Tagestouren dieses Törns</h3></div><span id="dayListCount" class="meta"></span></div><div class="toolbar"><input id="daySearch" placeholder="Tagestouren durchsuchen …"></div><div id="dayList" class="stack"></div></div>
+        <div class="legacy-day-route" hidden><select id="dayRouteSource"><option value=""></option></select><button id="dayRouteApply" type="button"></button></div>
       </section>
 
       <section id="route" class="view">
-        <div class="title"><small>TÖRNZENTRALE</small><h2>Etappen, Häfen, Wetter & Seekarte</h2><p>Der komplette Törn der LEEFKE in einer gemeinsamen Übersicht – vom Ablegen bis zum nächsten Liegeplatz.</p></div>
-
-        <article class="card trip-manager">
-          <div class="trip-manager-head">
-            <div><div class="card-kicker">GEÖFFNETER TÖRN</div><h3 id="tripManagerTitle">Dänische Südsee 2026</h3><p id="tripManagerMeta" class="meta">01.–16. August 2026</p></div>
-            <div class="actions"><button id="newTripButton" class="primary" type="button">Neuen Törn anlegen</button><button id="editTripButton" type="button">Aktuellen Törn bearbeiten</button></div>
-          </div>
-          <p class="trip-manager-note"><strong>Jeder Törn hat seinen eigenen Törnplan, seine Tagestouren, GPX-Routen, Fotos, Hafenbesuche, Wetterdaten und Tankvorgänge.</strong> Schiffspass, Wartung, Vorräte und Sicherheitsausrüstung gelten dagegen für die LEEFKE insgesamt.</p>
-          <div id="tripList" class="trip-list"></div>
-        </article>
-
-        <div class="trip-overview" aria-label="Törnübersicht">
-          <article><span>Nächste Etappe</span><strong id="tripNext">Noch nicht geplant</strong><small id="tripNextMeta">—</small></article>
-          <article><span>Reststrecke</span><strong id="tripRemaining">0,0 sm</strong><small>geplante Etappen</small></article>
-          <article><span>Planzeit</span><strong id="tripPlanHours">0,0 Std.</strong><small>noch vorgesehen</small></article>
-          <article><span>Häfen im Törn</span><strong id="tripPorts">0</strong><small>Start- und Zielhäfen</small></article>
-        </div>
-
-        <div class="grid2 route-planner-grid">
-          <form id="routeForm" class="card form route-form">
-            <input type="hidden" name="id">
-            <div class="wide section-heading"><span>↝</span><div><small>ETAPPE PLANEN</small><h3>Reisetag der LEEFKE</h3></div></div>
-            <label>Datum<input type="date" name="date"></label>
-            <label>Status<select name="status"><option value="planned">geplant</option><option value="done">gefahren</option><option value="skip">entfällt</option></select></label>
-            <label>Von<input name="from" list="portNames" placeholder="Starthafen"></label>
-            <label>Nach<input name="to" list="portNames" placeholder="Zielhafen"></label>
-            <label>Geplante Abfahrt<input type="time" name="departTime"></label>
-            <label>Liegeplatz / Hafenhinweis<input name="berth" placeholder="z. B. Gästehafen, Steg B"></label>
-            <label>Entfernung (sm)<input type="number" step="0.1" name="nm"></label>
-            <label>Planzeit (Std.)<input type="number" step="0.1" name="hours"></label>
-            <label>Wetter<input name="weather" placeholder="z. B. sonnig, 19 °C"></label>
-            <label>Wind<input name="wind" placeholder="z. B. NW 3 Bft"></label>
-            <label>Welle<input name="wave" placeholder="z. B. 0,5–0,8 m"></label>
-            <label>Tide / Strom<input name="tide" placeholder="z. B. ab HW Bremerhaven auslaufend"></label>
-            <label class="wide">Zugeordnete GPX-Route<select name="gpxId" id="routeGpxSelect"><option value="">Noch keine GPX-Route zugeordnet</option></select></label>
-            <label class="wide">Notiz / Besonderheiten<textarea rows="3" name="note" placeholder="Ansteuerung, Schleusen, Ausweichhafen, Reserven …"></textarea></label>
-            <div class="wide actions"><button class="primary">Etappe speichern</button><button type="reset">Leeren</button></div>
-            <datalist id="portNames"></datalist>
-          </form>
-
-          <article class="card gpx-import-card">
-            <div class="card-kicker">PLOTTERROUTE</div><h3>GPX-Datei importieren</h3>
-            <p>Eine Route vom Plotter oder Planungsprogramm auswählen. Danach kannst du sie direkt einer Etappe zuordnen und auf der Seekarte anzeigen.</p>
-            <input id="gpxImport" type="file" accept=".gpx,application/gpx+xml,text/xml">
-            <div id="gpxInfo" class="meta"></div>
-            <div class="gpx-tip"><span>⚓</span><p><strong>Praktisch:</strong> Nach dem Import erscheint die Route automatisch in der Etappenplanung und in der Kartenauswahl.</p></div>
-          </article>
-        </div>
-
-        <article class="card map-card">
-          <div class="map-head">
-            <div>
-              <div class="card-kicker">INTERAKTIVE SEEKARTE</div>
-              <h3>Routen und gespeicherte Häfen der LEEFKE</h3>
-              <p class="meta">Der geöffnete Törn erscheint auch ohne GPX als Planungslinie. Mit GPX wird der genaue Verlauf gezeigt; Tonnen, Leuchtfeuer und Seezeichen kommen aus OpenSeaMap.</p>
-            </div>
-            <div class="map-controls">
-              <select id="gpxSelect" aria-label="GPX-Route auswählen"><option value="">Keine GPX-Route</option></select>
-              <button id="fitRoute" type="button">Route zentrieren</button>
-            </div>
-          </div>
-          <div id="routeMap" role="application" aria-label="Interaktive Seekartenansicht der gewählten GPX-Route">
-            <div class="map-placeholder"><strong>Seekarte wird vorbereitet</strong><span>Der geplante Törn wird automatisch dargestellt; eine GPX-Datei macht den Verlauf genauer.</span></div>
-          </div>
-          <div class="map-footer">
-            <div id="mapInfo" class="map-info">Noch keine GPX-Route ausgewählt.</div>
-            <div class="map-legend"><span><i class="legend-start">⚓</i> Start</span><span><i class="legend-finish">◆</i> Ziel</span><span><i class="legend-port">⚓</i> Hafen</span><span><i class="legend-line"></i> Route</span></div>
-          </div>
-          <div class="nautical-warning"><strong>Hinweis:</strong> Diese Ansicht dient der Törnplanung und Dokumentation. Sie ersetzt keine zugelassene elektronische oder amtliche Seekarte an Bord.</div>
-        </article>
-
-        <div class="voyage-board-head">
-          <div><small>DER AKTUELLE TÖRN</small><h3 id="voyageBoardTitle">Etappen der LEEFKE</h3></div>
-          <div class="summarybar" id="routeSummary"></div>
-        </div>
-        <div id="routeList" class="voyage-board"></div>
+        <div class="title"><small>TÖRNARCHIV</small><h2>Unsere Reisen mit der LEEFKE</h2><p>Keine Planung mehr: Hier entsteht aus den gespeicherten Tagestouren automatisch das Törntagebuch mit Seekarte und Bildern.</p></div>
+        <article class="card trip-manager archive-trip-manager"><div class="trip-manager-head"><div><div class="card-kicker">GEÖFFNETER TÖRN</div><h3 id="tripManagerTitle">Aktueller Törn</h3><p id="tripManagerMeta" class="meta"></p></div><div class="actions"><button id="newTripButton" type="button">Neuen Törn</button><button id="editTripButton" type="button">Törn bearbeiten</button></div></div><div id="tripList" class="trip-list"></div></article>
+        <div class="stats compact archive-stats"><article><span>Tagestouren</span><strong id="archiveDayCount">0</strong></article><article><span>Seemeilen</span><strong id="archiveNm">0,0</strong></article><article><span>Motorstunden</span><strong id="archiveHours">0,0</strong></article><article><span>Fotos</span><strong id="archivePhotoCount">0</strong></article></div>
+        <article class="card map-card"><div class="map-head"><div><div class="card-kicker">SEEKARTE</div><h3>Der dokumentierte Törn</h3><p class="meta">Die App verbindet die Start- und Zielhäfen deiner Tagestouren. Wenn eine GPX-Datei vorhanden ist, kann sie zusätzlich angezeigt werden.</p></div><div class="map-controls"><select id="gpxSelect" aria-label="GPX-Route auswählen"><option value="">Tagestouren anzeigen</option></select><button id="fitRoute" type="button">Törn zentrieren</button></div></div><div id="routeMap"><div class="map-placeholder"><strong>Seekarte wird vorbereitet</strong><span>Tagestouren und Häfen werden automatisch eingeblendet.</span></div></div><div class="map-footer"><div id="mapInfo" class="map-info">Noch keine Tagestouren mit bekannten Orten.</div><div class="map-legend"><span><i class="legend-start">⚓</i> Start</span><span><i class="legend-finish">◆</i> Ziel</span><span><i class="legend-port">⚓</i> Hafen</span><span><i class="legend-line"></i> Törn</span></div></div></article>
+        <article class="card gpx-import-card archive-gpx"><div><div class="card-kicker">OPTIONAL</div><h3>GPX-Route ergänzen</h3><p>Nur wenn du eine genaue Route im Törnarchiv sehen möchtest. Für das Tageslog ist GPX nicht nötig.</p></div><input id="gpxImport" type="file" accept=".gpx,application/gpx+xml,text/xml"><div id="gpxInfo" class="meta"></div></article>
+        <div class="archive-days-heading"><div><small>TÖRNTAGEBUCH</small><h3>Alle Tagestouren</h3></div><button data-open="day">Neuen Tag eintragen</button></div><div id="archiveDayList" class="archive-day-list"></div>
+        <div class="legacy-route-ui" hidden><form id="routeForm"><input name="id"><input name="date"><input name="status"><input name="from"><input name="to"><input name="departTime"><input name="berth"><input name="nm"><input name="hours"><input name="weather"><input name="wind"><input name="wave"><input name="tide"><select name="gpxId" id="routeGpxSelect"></select><textarea name="note"></textarea></form><span id="tripNext"></span><span id="tripNextMeta"></span><span id="tripRemaining"></span><span id="tripPlanHours"></span><span id="tripPorts"></span><span id="voyageBoardTitle"></span><span id="routeSummary"></span><div id="routeList"></div></div>
       </section>
 
-
       <section id="weather" class="view">
-        <div class="title"><small>WETTER & GEZEITEN</small><h2>Seewetter für die LEEFKE</h2><p>Wind, Böen, Wellen, Wellenfolge, Strömung und modellierte Tide für einen Ort und ein Datum.</p></div>
+        <div class="title"><small>WETTER & GEZEITEN</small><h2>Fahrtwetter für die LEEFKE</h2><p>Aktueller Ort und Ziel genügen: Wind und Welle werden relativ zum Kurs der LEEFKE angezeigt. Gezeiten bleiben separat sichtbar.</p></div>
+        <article class="card passage-weather-card"><div class="card-kicker">START → ZIEL</div><h3>Wie wirken Wind und Welle auf die LEEFKE?</h3><form id="passageWeatherForm" class="form compact-form"><label>Start<select id="passageStart"><option value="gps:current">📍 Aktueller Standort</option><option value="fixed:lemwerder">Lemwerder</option><option value="fixed:bremerhaven">Bremerhaven</option><option value="fixed:cuxhaven">Cuxhaven</option><option value="fixed:helgoland">Helgoland</option></select></label><label>Ziel<input id="passageTarget" list="portNames" placeholder="Hafen oder Ort"></label><label>Datum<input id="passageDate" type="date" required></label><label>Uhrzeit<input id="passageTime" type="time" value="08:00" required></label><button class="primary" type="submit">Fahrtwetter anzeigen</button></form><div id="passageWeatherState" class="sync-message"></div><div id="passageWeatherResult" class="passage-weather-result"></div></article>
 
         <div class="weather-layout">
           <article class="card weather-control-card">
@@ -353,7 +201,7 @@
             <div><small>VORHERSAGE</small><h3 id="weatherHeadline">—</h3><p id="weatherSubline" class="meta">—</p></div>
             <div class="weather-result-actions">
               <button id="weatherReloadButton" type="button">Neu laden</button>
-              <button id="weatherApplyRouteButton" class="primary" type="button" hidden>In Etappe übernehmen</button>
+              <button id="weatherApplyRouteButton" class="primary legacy-route-action" type="button" hidden>In Etappe übernehmen</button>
             </div>
           </div>
 
@@ -420,7 +268,7 @@
           </article>
         </div>
 
-        <article class="card route-weather-card">
+        <article class="card route-weather-card legacy-weather-route">
           <div class="card-kicker">WETTER ENTLANG DER ROUTE</div>
           <h3>GPX-Passage für die geplante Abfahrtszeit prüfen</h3>
           <p class="meta">Die App berechnet ungefähre Ankunftszeiten an mehreren Punkten der Route und ordnet Wind und Welle relativ zum gefahrenen Kurs ein. Die Bewertung beschreibt den erwartbaren Komfort – sie ist keine Fahrtfreigabe.</p>
@@ -451,13 +299,13 @@
             <div id="portGpsSuggestions" class="port-gps-suggestions" hidden></div>
             <small class="port-gps-source">Für die Hafensuche wird die aktuelle Position einmalig an den OpenStreetMap-Abfragedienst übermittelt. Es findet keine dauerhafte Ortung statt.</small>
           </div>
-          <label>Hafen<input required name="name" placeholder="Hafen auswählen oder selbst eintragen"></label>
+          <div class="wide port-name-search"><label>Hafen<input required name="name" placeholder="Hafenname eingeben"></label><button id="portNameSearchButton" type="button">Hafen suchen</button></div><div id="portNameSuggestions" class="wide port-gps-suggestions" hidden></div>
           <label>Datum<input type="date" name="date"></label>
           <label>Liegeplatz<input name="berth"></label>
-          <label>Kosten (€)<input type="number" step="0.01" name="cost"></label>
+          <label>Liegegeld (€)<input type="number" step="0.01" name="cost"></label><label>Duschkosten<input name="showerCost" placeholder="z. B. 10 DKK / 2 €"></label>
           <label>Strom / Wasser<input name="services"></label>
           <label>UKW / Telefon<input name="contact"></label>
-          <label>Koordinaten<input name="coords" placeholder="54.18, 7.89"></label>
+          <label>Koordinaten<input name="coords" readonly placeholder="werden automatisch übernommen"></label>
           <label>Noch einmal anlaufen?<select name="returnVisit"><option value="yes">Ja, gerne</option><option value="maybe">Vielleicht</option><option value="no">Eher nicht</option></select></label>
 
           <fieldset class="rating-field wide rating-overall">
@@ -491,7 +339,7 @@
             </fieldset>
           </div>
 
-          <label class="wide">Ansteuerung / Besonderheiten<textarea rows="3" name="approach"></textarea></label>
+          <label class="wide">Zugangscodes<textarea rows="3" name="accessCodes" placeholder="z. B. Stegtor 4711# · Toilette 8294 · Dusche 1234"></textarea></label><label class="wide">Ansteuerung / Besonderheiten<textarea rows="3" name="approach"></textarea></label>
           <label class="wide">Notiz<textarea rows="4" name="note"></textarea></label>
           <div class="wide actions"><button class="primary">Hafen speichern</button><button type="reset">Leeren</button></div>
         </form>
@@ -522,18 +370,19 @@
       </section>
 
       <section id="maintenance" class="view">
-        <div class="title"><small>TECHNIK</small><h2>Wartung & Ereignisse</h2><p>Perkins M135, Bordtechnik und sicherheitsrelevante Arbeiten.</p></div>
-        <form id="maintenanceForm" class="card form">
-          <input type="hidden" name="id"><label>Datum<input required type="date" name="date"></label><label>Kategorie<select name="category"><option>Motor · Perkins M135</option><option>Getriebe</option><option>Dieselanlage</option><option>Hydraulik</option><option>Elektrik</option><option>Navigation</option><option>Rumpf</option><option>Sicherheit</option><option>Sonstiges</option></select></label><label class="wide">Titel<input required name="title"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Erledigt<select name="done"><option value="false">Nein</option><option value="true">Ja</option></select></label><label>Fällig am<input type="date" name="dueDate"></label><label>Fällig bei Motorstunden<input type="number" step="0.1" name="dueHours"></label><label>Kosten (€)<input type="number" step="0.01" name="cost"></label><label class="wide">Notiz<textarea rows="4" name="note"></textarea></label><div class="wide actions"><button class="primary">Speichern</button><button type="reset">Leeren</button></div>
+        <div class="title"><small>TECHNIK</small><h2>Wartung & Fristen</h2><p>Einfach festhalten, was gemacht wurde, welches Material verbaut wurde und wann der nächste Termin ansteht.</p></div>
+        <form id="maintenanceForm" class="card form v8-maintenance-form">
+          <input type="hidden" name="id"><label>Datum<input required type="date" name="date"></label><label>Kategorie<select name="category"><option>Motor</option><option>Getriebe</option><option>Dieselanlage</option><option>Elektrik</option><option>Hydraulik</option><option>Sanitär</option><option>Rumpf</option><option>Sonstiges</option></select></label><label class="wide">Wartung / Titel<input required name="title" placeholder="z. B. Motorservice / Ölwechsel"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Nächster Service nach Tagen<input type="number" min="0" step="1" name="intervalDays" placeholder="z. B. 360"></label><label>Nächster Service nach Motorstunden<input type="number" min="0" step="1" name="intervalHours" placeholder="z. B. 150"></label><div class="wide next-service-preview" id="nextServicePreview">Nächster Termin wird aus Datum und/oder Motorstunden berechnet.</div><label class="wide">Was wurde gemacht?<textarea rows="5" name="note" placeholder="Freies Wartungsprotokoll …"></textarea></label>
+          <div class="wide materials-editor"><div class="section-heading"><span>▤</span><div><small>MATERIAL</small><h3>Material & Kosten</h3></div><button id="addMaterialRow" type="button">+ Material</button></div><div id="materialRows" class="material-rows"></div><div class="material-total"><span>Materialkosten gesamt</span><strong id="materialTotal">0,00 €</strong></div></div>
+          <input type="hidden" name="dueDate"><input type="hidden" name="dueHours"><input type="hidden" name="cost"><input type="hidden" name="done" value="true">
+          <div class="wide actions"><button class="primary">Wartung speichern</button><button type="reset">Leeren</button></div>
         </form>
-        <article class="card maintenance-templates">
-          <div><div class="card-kicker">LEEFKE-WARTUNGSPLAN</div><h3>Typische Intervalle vorbereiten</h3><p class="meta">Legt editierbare Erinnerungen für Perkins M135, Dieselfilter, Impeller, Keilriemen, Rettungsinsel und Feuerlöscher an.</p></div>
-          <button id="createMaintenanceTemplates" type="button">Wartungsplan anlegen</button>
-        </article>
         <div id="maintenanceList" class="stack"></div>
+        <article class="card deadline-card"><div class="card-kicker">ERINNERUNGEN</div><h3>Prüfungen & Ablaufdaten</h3><p class="meta">Zum Beispiel Feuerlöscher, Gasprüfung oder Rettungsinsel. Die Startseite erinnert rechtzeitig.</p><form id="deadlineForm" class="form compact-form"><input type="hidden" name="id"><label>Erinnerung<input required name="name" placeholder="z. B. Gasprüfung"></label><label>Letzte Prüfung<input type="date" name="lastCheck"></label><label>Intervall (Tage)<input type="number" min="0" step="1" name="intervalDays" placeholder="z. B. 730"></label><label>Fällig am<input type="date" name="dueDate"></label><label>Warnung vorher (Tage)<input type="number" min="0" step="1" name="remindDays" value="60"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Erinnerung speichern</button><button type="reset">Leeren</button></div></form><div id="deadlineList" class="stack compact-stack"></div></article>
+        <button id="createMaintenanceTemplates" type="button" hidden></button>
       </section>
 
-      <section id="operations" class="view">
+      <section id="operations" class="view legacy-hidden">
         <div class="title"><small>BORDBETRIEB</small><h2>Vorräte, Sicherheit & Dokumente</h2><p>Was an Bord ist, wann Prüfungen fällig werden und wo Rechnungen oder Anleitungen abgelegt sind.</p></div>
         <div class="stats compact operations-stats"><article><span>Vorräte knapp</span><strong id="inventoryLowCount">0</strong></article><article><span>Prüfungen fällig</span><strong id="safetyDueCount">0</strong></article><article><span>Dokumente</span><strong id="documentCount">0</strong></article><article><span>Wartung offen</span><strong id="operationMaintCount">0</strong></article></div>
         <div class="grid2 operations-grid">
@@ -556,7 +405,7 @@
         </article>
       </section>
 
-      <section id="checklists" class="view">
+      <section id="checklists" class="view legacy-hidden">
         <div class="title"><small>KLAR SCHIFF</small><h2>Checklisten für die LEEFKE</h2><p>Vor dem Ablegen, nach dem Anlegen und für die Sicherheit an Bord.</p></div>
         <form id="checkForm" class="card inline-form checklist-toolbar">
           <input type="hidden" name="id">
@@ -736,8 +585,8 @@
   <div class="mobile-tabbar no-print" role="navigation" aria-label="Schnellnavigation">
     <button type="button" data-mobile-view="home" class="active" aria-label="Übersicht"><span>⌂</span><small>Start</small></button>
     <button type="button" data-mobile-view="day" aria-label="Tageslogbuch"><span>✎</span><small>Logbuch</small></button>
-    <button type="button" data-mobile-view="route" aria-label="Törn und Seekarte"><span>↝</span><small>Karte</small></button>
     <button type="button" data-mobile-view="weather" aria-label="Wetter und Gezeiten"><span>☀</span><small>Wetter</small></button>
+    <button type="button" data-mobile-view="ports" aria-label="Hafenbuch"><span>⚓</span><small>Hafen</small></button>
     <button id="mobileMoreButton" type="button" aria-label="Weitere Bereiche öffnen" aria-expanded="false"><span>☰</span><small>Mehr</small></button>
   </div>
 
@@ -797,6 +646,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=7.6"></script>
+  <script src="app.js?v=8.0"></script>
 </body>
 </html>

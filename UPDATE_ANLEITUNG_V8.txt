@@ -1,0 +1,15 @@
+LEEFKE VERSION 8.0 – UPDATE
+
+1. In der bisherigen App eine vollständige Sicherung exportieren.
+2. Dieses ZIP vollständig entpacken.
+3. Im GitHub-Repository Add file -> Upload files öffnen.
+4. Alle Dateien aus dem entpackten Ordner hochladen und vorhandene Dateien ersetzen.
+5. Commit z. B.: LEEFKE Version 8.0 schlanke Bordbuch Edition
+6. Etwa 2-3 Minuten warten.
+7. Öffnen:
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=8.0
+8. Auf jedem Gerät prüfen, ob oben VERSION 8.0 steht.
+9. Einmal Konto & Sync -> vollständig abgleichen.
+
+Supabase:
+Keine neue SQL-Datei erforderlich. Die vorhandene Datenbank bleibt kompatibel.
