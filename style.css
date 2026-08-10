@@ -1302,3 +1302,573 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
   .weather-form-actions{display:grid!important;grid-template-columns:1fr!important}
   .weather-form-actions button{width:100%}
 }
+
+
+/* ============================================================
+   LEEFKE 8.2 – Formular- und Aktionsfelder komplett bereinigt
+   ============================================================ */
+
+/* Alle Formulare: keine herauslaufenden oder unterschiedlich hohen Felder */
+.form,
+.compact-form{
+  align-items:start;
+}
+.form label,
+.compact-form label{
+  min-width:0;
+  margin:0;
+}
+.form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.form select,
+.form textarea,
+.compact-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.compact-form select,
+.compact-form textarea{
+  display:block;
+  width:100%;
+  max-width:100%;
+  min-width:0;
+  box-sizing:border-box;
+}
+.form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.form select,
+.compact-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.compact-form select{
+  min-height:42px;
+}
+.form textarea,
+.compact-form textarea{
+  line-height:1.45;
+}
+
+/* Hafenbuch – klare Sektionen statt gemischter Grid-Zellen */
+.port-form{
+  grid-template-columns:minmax(0,1fr);
+  gap:14px;
+  overflow:hidden;
+}
+.port-form>.wide{
+  grid-column:1;
+  min-width:0;
+}
+.port-form-section{
+  display:grid;
+  gap:13px;
+  min-width:0;
+  padding:15px;
+  border:1px solid var(--line);
+  border-radius:13px;
+  background:linear-gradient(145deg,#fffdf9,#f7f2e8);
+}
+.port-form-section-head{
+  display:flex;
+  align-items:center;
+  gap:10px;
+  padding-bottom:10px;
+  border-bottom:1px solid var(--line);
+}
+.port-form-section-head>span{
+  display:grid;
+  place-items:center;
+  flex:0 0 34px;
+  width:34px;
+  height:34px;
+  border-radius:50%;
+  background:var(--navy-900);
+  color:var(--brass-light);
+  font-size:1rem;
+}
+.port-form-section-head small{
+  display:block;
+  color:var(--brass-dark);
+  font-size:.62rem;
+  font-weight:850;
+  letter-spacing:.1em;
+}
+.port-form-section-head h3{
+  margin:1px 0 0;
+  color:var(--navy-900);
+  font-size:1rem;
+}
+.port-form-grid{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:12px 14px;
+  align-items:start;
+  min-width:0;
+}
+.port-form-grid>label,
+.port-form-grid>.port-name-search,
+.port-form-grid>.port-gps-suggestions{
+  min-width:0;
+}
+.field-span-2{
+  grid-column:1/-1;
+}
+.port-name-search{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(120px,150px);
+  align-items:end;
+  gap:8px;
+}
+.port-name-search button{
+  width:100%;
+  min-height:42px;
+  margin:0;
+  white-space:normal;
+}
+.input-with-unit{
+  display:grid;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:stretch;
+  min-width:0;
+}
+.input-with-unit input{
+  border-radius:9px 0 0 9px!important;
+}
+.input-with-unit span{
+  display:grid;
+  place-items:center;
+  min-width:38px;
+  padding:0 9px;
+  border:1px solid #b9c6ca;
+  border-left:0;
+  border-radius:0 9px 9px 0;
+  background:#eef2f2;
+  color:var(--navy-800);
+  font-weight:800;
+}
+.port-rating-section .rating-overall{
+  margin:0;
+}
+.port-rating-section .rating-categories{
+  margin:0;
+}
+
+/* GPS-Block darf auf Tablets/Android nicht die Formularbreite sprengen */
+.port-gps-assistant{
+  width:100%;
+  max-width:100%;
+  box-sizing:border-box;
+  min-width:0;
+}
+.port-gps-copy,
+.port-gps-controls,
+.port-gps-suggestions,
+.port-gps-suggestion{
+  min-width:0;
+}
+.port-gps-suggestion strong,
+.port-gps-suggestion small{
+  overflow-wrap:anywhere;
+  white-space:normal;
+}
+
+/* Gespeicherte Datensätze: Bearbeiten/Löschen nie wieder absolut über Inhalten */
+.item{
+  padding-right:18px;
+  min-width:0;
+}
+.item>.edit,
+.item>.delete{
+  position:static!important;
+  inset:auto!important;
+}
+.record-actions,
+.fuel-entry-actions,
+.day-entry-actions,
+.maintenance-v8>.actions,
+.deadline-row>.actions{
+  position:static;
+  display:flex;
+  justify-content:flex-end;
+  align-items:center;
+  gap:8px;
+  width:100%;
+  box-sizing:border-box;
+  padding-top:11px;
+  margin-top:10px;
+  border-top:1px solid var(--line);
+}
+.record-actions .edit,
+.record-actions .delete,
+.fuel-entry-actions button,
+.maintenance-v8>.actions button,
+.deadline-row>.actions button{
+  position:static!important;
+  inset:auto!important;
+  min-width:105px;
+  margin:0;
+}
+.edit{
+  border-color:#adc9d4;
+  color:#155b72;
+  background:#f4fbfd;
+}
+.delete{
+  border-color:#e1b4ad;
+  color:#8b3028;
+  background:#fff7f5;
+}
+
+/* Hafenkarte – Inhalte und Aktionsfelder sauber getrennt */
+.port-entry-card{
+  display:grid;
+  gap:9px;
+  padding:16px!important;
+  min-width:0;
+}
+.port-entry-card .port-head{
+  padding-right:0;
+}
+.port-entry-card p{
+  margin:3px 0;
+  overflow-wrap:anywhere;
+}
+.port-entry-card .record-actions{
+  margin-top:5px;
+}
+.port-entry-card .port-ratings{
+  min-width:0;
+}
+.port-entry-card .port-rating-row{
+  min-width:0;
+}
+
+/* Form-Speichern/Leeren ebenfalls gleichmäßig */
+.form-actions-stable{
+  display:flex;
+  gap:8px;
+  align-items:center;
+}
+.form-actions-stable button{
+  min-width:150px;
+}
+
+/* sichtbare Aktionsbereiche, die noch aus älteren Versionen stammen */
+.fuel-entry{
+  padding-right:18px!important;
+}
+.day-entry-card{
+  padding-right:17px!important;
+}
+.maintenance-v8{
+  padding-right:14px!important;
+}
+
+/* Mobil: durchgehend eine Spalte und Aktionsfelder untereinander */
+@media(max-width:700px){
+  .port-form-section{
+    padding:12px;
+  }
+  .port-form-grid{
+    grid-template-columns:1fr;
+    gap:10px;
+  }
+  .field-span-2{
+    grid-column:1;
+  }
+  .port-name-search{
+    grid-template-columns:1fr;
+  }
+  .port-name-search button{
+    width:100%;
+  }
+  .rating-categories{
+    grid-template-columns:1fr!important;
+  }
+  .record-actions,
+  .fuel-entry-actions,
+  .maintenance-v8>.actions,
+  .deadline-row>.actions,
+  .form-actions-stable{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    width:100%;
+  }
+  .record-actions button,
+  .fuel-entry-actions button,
+  .maintenance-v8>.actions button,
+  .deadline-row>.actions button,
+  .form-actions-stable button{
+    width:100%;
+    min-width:0;
+  }
+}
+@media(max-width:430px){
+  .record-actions,
+  .fuel-entry-actions,
+  .maintenance-v8>.actions,
+  .deadline-row>.actions,
+  .form-actions-stable{
+    grid-template-columns:1fr;
+  }
+}
+
+/* Android/iOS: Feldhöhe und Textgröße identisch, kein Zoom/Abschneiden */
+@media(max-width:850px){
+  .port-form input,
+  .port-form select,
+  .port-form textarea{
+    font-size:16px;
+  }
+}
+
+
+/* ============================================================
+   LEEFKE 8.3 – Bilder vollständig und stimmig darstellen
+   ============================================================ */
+
+/* Startseite: kein großflächiger Bildbeschnitt mehr.
+   Das Foto steht als kleines vollständiges 16:9-Bild neben dem Titel. */
+.home-compact-header{
+  position:relative;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) minmax(230px,300px);
+  align-items:stretch;
+  height:132px;
+  min-height:132px;
+  overflow:hidden;
+  padding:0;
+  background:linear-gradient(135deg,var(--navy-900),#123748);
+}
+.home-compact-shade{display:none!important}
+.home-compact-copy{
+  position:static;
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  min-width:0;
+  padding:18px 22px;
+  color:#fff;
+  z-index:1;
+}
+.home-compact-copy h2{font-size:2rem}
+.home-compact-photo{
+  display:grid;
+  place-items:center;
+  min-width:0;
+  padding:8px 10px 8px 0;
+  background:linear-gradient(90deg,rgba(4,21,32,.15),rgba(4,21,32,.5));
+}
+.home-compact-header .home-compact-photo>img{
+  position:static!important;
+  inset:auto!important;
+  display:block;
+  width:100%;
+  height:100%;
+  max-height:116px;
+  object-fit:contain!important;
+  object-position:center!important;
+  border-radius:10px;
+  background:#dfe7ea;
+  opacity:0;
+  transition:opacity .2s ease;
+}
+.home-compact-header .home-compact-photo>img.boat-image-ready{opacity:1}
+
+/* Schiffspass: das komplette Startbild zeigen */
+.boat-photo-frame{
+  overflow:hidden;
+}
+.boat-photo-frame img,
+.photo-settings img{
+  width:100%;
+  height:auto!important;
+  aspect-ratio:16/9;
+  object-fit:contain!important;
+  object-position:center!important;
+  background:#e5ebed;
+  border-radius:14px;
+}
+
+/* Galerie: gleiche ruhige Rahmen, aber nie wieder Köpfe/Bootsteile abschneiden */
+.gallery .photo{
+  display:flex;
+  flex-direction:column;
+}
+.gallery .photo img,
+.photo img{
+  display:block;
+  width:100%;
+  height:230px!important;
+  object-fit:contain!important;
+  object-position:center!important;
+  background:linear-gradient(145deg,#e9eef0,#dce5e8);
+  cursor:zoom-in;
+}
+
+/* Törnarchiv: kleine Vorschau zeigt trotzdem das komplette Bild */
+.archive-day-card img{
+  width:92px;
+  height:64px;
+  object-fit:contain!important;
+  object-position:center!important;
+  background:#e7edef;
+  border:1px solid #d5dfe2;
+}
+
+/* Reisebericht: Titelbild nicht mehr radikal auf Panoramaformat beschneiden */
+.report-cover{
+  height:auto!important;
+  min-height:0;
+  display:grid;
+  overflow:hidden;
+  background:#e7edef;
+}
+.report-cover:after{display:none!important}
+.report-cover img{
+  position:static;
+  display:block;
+  width:100%;
+  height:auto!important;
+  max-height:440px;
+  aspect-ratio:auto;
+  object-fit:contain!important;
+  object-position:center!important;
+  background:#e7edef;
+}
+.report-cover>div{
+  position:static!important;
+  left:auto!important;
+  bottom:auto!important;
+  padding:16px 20px;
+  background:var(--navy-900);
+  color:#fff;
+}
+.report-cover h1{
+  font-size:clamp(1.8rem,5vw,2.5rem);
+}
+.report-cover p{
+  color:#e4edf0;
+}
+
+/* Tagesbilder im Bericht: zentriert, komplette Aufnahme sichtbar */
+.report-paper figure{
+  text-align:center;
+}
+.report-photo{
+  display:block;
+  width:auto;
+  max-width:100%;
+  height:auto;
+  max-height:560px;
+  margin:0 auto;
+  object-fit:contain!important;
+  background:#f0f3f4;
+}
+
+/* Vollbildansicht aus der Galerie */
+.photo-viewer-dialog{
+  width:min(96vw,1100px);
+  max-width:1100px;
+  max-height:94vh;
+  padding:0;
+  border:0;
+  border-radius:16px;
+  background:#0b202b;
+  box-shadow:0 28px 70px rgba(0,0,0,.45);
+}
+.photo-viewer-dialog::backdrop{
+  background:rgba(0,0,0,.78);
+}
+.photo-viewer-inner{
+  position:relative;
+  display:grid;
+  gap:0;
+  max-height:94vh;
+}
+.photo-viewer-inner>img{
+  display:block;
+  width:100%;
+  max-height:78vh;
+  object-fit:contain;
+  background:#06151d;
+}
+.photo-viewer-caption{
+  display:flex;
+  justify-content:space-between;
+  gap:16px;
+  padding:12px 16px;
+  color:#fff;
+  background:#0b202b;
+}
+.photo-viewer-caption span{
+  color:#b9cbd2;
+}
+.photo-viewer-close{
+  position:absolute!important;
+  top:10px;
+  right:10px;
+  z-index:4;
+  background:rgba(255,255,255,.92)!important;
+}
+.photo-viewer-inner>.dialog-actions{
+  margin:0;
+  padding:0 16px 14px;
+  background:#0b202b;
+}
+
+/* Auf Mobilgeräten bleibt das Startbild klein und vollständig. */
+@media(max-width:700px){
+  .home-compact-header{
+    grid-template-columns:minmax(0,1fr) 145px;
+    height:116px;
+    min-height:116px;
+  }
+  .home-compact-copy{
+    padding:12px 14px;
+  }
+  .home-compact-copy h2{
+    font-size:1.7rem;
+  }
+  .home-compact-copy p{
+    font-size:.68rem;
+  }
+  .home-compact-photo{
+    padding:7px 7px 7px 0;
+  }
+  .home-compact-header .home-compact-photo>img{
+    max-height:102px;
+  }
+  .gallery .photo img,.photo img{
+    height:240px!important;
+  }
+  .archive-day-card{
+    grid-template-columns:32px 72px minmax(0,1fr) auto;
+  }
+  .archive-day-card img{
+    display:block!important;
+    width:72px;
+    height:52px;
+  }
+}
+@media(max-width:430px){
+  .home-compact-header{
+    grid-template-columns:minmax(0,1fr) 125px;
+  }
+  .home-compact-copy h2{font-size:1.5rem}
+  .archive-day-card{
+    grid-template-columns:30px 58px minmax(0,1fr);
+  }
+  .archive-day-card img{
+    width:58px;
+    height:44px;
+  }
+  .archive-day-card>b{display:none}
+  .photo-viewer-caption{
+    flex-direction:column;
+    gap:2px;
+  }
+}
+
+/* Drucken: Titelbild ebenfalls vollständig sichtbar */
+@media print{
+  .report-cover{
+    height:auto!important;
+  }
+  .report-cover img{
+    max-height:330px;
+    object-fit:contain!important;
+  }
+}

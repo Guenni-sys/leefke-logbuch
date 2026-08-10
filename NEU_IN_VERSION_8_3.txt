@@ -1,0 +1,14 @@
+LEEFKE 8.3 – BILDERDARSTELLUNG
+
+Korrigiert:
+- Startbild auf der Übersicht wird nicht mehr als breites Panorama brutal beschnitten.
+- Das LEEFKE-Foto steht jetzt klein und vollständig neben dem Titel.
+- Schiffspass zeigt das komplette Startbild im 16:9-Rahmen.
+- Galerie zeigt komplette Fotos mit ruhigem Hintergrund statt object-fit: cover.
+- Galeriefotos können angeklickt und groß vollständig angesehen werden.
+- Törnarchiv zeigt vollständige Miniaturbilder.
+- Reisebericht-Titelbild wird vollständig dargestellt; Titel steht separat darunter.
+- Tagesfotos im Reisebericht bleiben vollständig sichtbar.
+- Mobilansicht wurde separat angepasst, damit das Foto nicht wieder zu dominant wird.
+
+Keine Supabase-Änderung erforderlich.

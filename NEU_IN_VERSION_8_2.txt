@@ -1,0 +1,22 @@
+LEEFKE 8.2 – FORMULAR- UND FELD-LAYOUT
+
+Korrigiert:
+- Hafen & Liegeplätze vollständig neu ausgerichtet
+- Hafen-Grunddaten in eigener sauberen Sektion
+- Zugangscodes / Ansteuerung / Notizen getrennt
+- Bewertung in eigener Sektion
+- alle Eingabefelder gleiche Breite und konsistente Höhe
+- Liegegeld mit sauberer €-Einheit
+- Hafen-Suchbutton läuft nicht mehr aus dem Raster
+- GPS-Vorschläge umbrechen sauber
+- Android/iPhone: einspaltiges Hafenformular ohne Überlappungen
+
+Bearbeiten/Löschen:
+- rote und blaue Aktionsfelder appweit geprüft
+- bei gespeicherten Hafen-, Tank-, Wartungs- und Fristeneinträgen statisch unter dem Inhalt
+- keine absolut positionierten Buttons mehr über Texten
+- auf Mobilgeräten gleichmäßig nebeneinander bzw. auf sehr kleinen Displays untereinander
+
+Supabase:
+- keine Änderung erforderlich
+- vorhandene Daten bleiben erhalten

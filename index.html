@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.1">
+  <link rel="stylesheet" href="style.css?v=8.3">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -32,7 +32,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.1</small>
+        <small>BORDTAGEBUCH · VERSION 8.3</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -69,9 +69,10 @@
     <main>
       <section id="home" class="view active">
         <article class="home-compact-header">
-          <img id="heroBoatImage" class="boat-image-pending" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="Die LEEFKE unterwegs">
-          <div class="home-compact-shade"></div>
           <div class="home-compact-copy"><small>AN BORD</small><h2>LEEFKE</h2><p id="homeTripLine">Aktueller Törn</p></div>
+          <div class="home-compact-photo">
+            <img id="heroBoatImage" class="boat-image-pending" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="Die LEEFKE">
+          </div>
         </article>
 
         <section class="home-actions" aria-label="Schnellzugriff">
@@ -290,59 +291,136 @@
         <div class="title"><small>HAFENBUCH</small><h2>Häfen & Liegeplätze</h2><p>Persönliche Hafenerfahrungen der LEEFKE – jetzt mit echten Sternbewertungen.</p></div>
         <form id="portForm" class="card form port-form">
           <input type="hidden" name="id">
+
           <div class="wide port-gps-assistant">
             <div class="port-gps-copy">
               <span class="port-gps-icon" aria-hidden="true">⌖</span>
-              <div><strong>Hafen per GPS vorschlagen</strong><small>Die App bestimmt deinen Standort und sucht passende Häfen, Marinas oder Segelvereine in der Nähe. Du entscheidest anschließend selbst, welcher Vorschlag übernommen wird.</small></div>
+              <div><strong>Hafen per GPS vorschlagen</strong><small>Standort bestimmen und passende Häfen in der Umgebung anzeigen. Name und Koordinaten werden beim Übernehmen automatisch eingetragen.</small></div>
             </div>
-            <div class="port-gps-controls"><label>Suchumkreis<select id="portGpsRadius"><option value="10000">10 km</option><option value="25000" selected>25 km</option><option value="50000">50 km</option></select></label><button id="portGpsButton" type="button" class="port-gps-button">📍 Standort verwenden</button></div>
+            <div class="port-gps-controls">
+              <label>Suchumkreis
+                <select id="portGpsRadius">
+                  <option value="10000">10 km</option>
+                  <option value="25000" selected>25 km</option>
+                  <option value="50000">50 km</option>
+                </select>
+              </label>
+              <button id="portGpsButton" type="button" class="port-gps-button">📍 Standort verwenden</button>
+            </div>
             <div id="portGpsStatus" class="port-gps-status" aria-live="polite"></div>
             <div id="portGpsSuggestions" class="port-gps-suggestions" hidden></div>
-            <small class="port-gps-source">Für die Hafensuche wird die aktuelle Position einmalig an den OpenStreetMap-Abfragedienst übermittelt. Es findet keine dauerhafte Ortung statt.</small>
+            <small class="port-gps-source">Der Standort wird nur für die Hafensuche verwendet.</small>
           </div>
-          <div class="wide port-name-search"><label>Hafen<input required name="name" placeholder="Hafenname eingeben"></label><button id="portNameSearchButton" type="button">Hafen suchen</button></div><div id="portNameSuggestions" class="wide port-gps-suggestions" hidden></div>
-          <label>Datum<input type="date" name="date"></label>
-          <label>Liegeplatz<input name="berth"></label>
-          <label>Liegegeld (€)<input type="number" step="0.01" name="cost"></label><label>Duschkosten<input name="showerCost" placeholder="z. B. 10 DKK / 2 €"></label>
-          <label>Strom / Wasser<input name="services"></label>
-          <label>UKW / Telefon<input name="contact"></label>
-          <label>Koordinaten<input name="coords" readonly placeholder="werden automatisch übernommen"></label>
-          <label>Noch einmal anlaufen?<select name="returnVisit"><option value="yes">Ja, gerne</option><option value="maybe">Vielleicht</option><option value="no">Eher nicht</option></select></label>
 
-          <fieldset class="rating-field wide rating-overall">
-            <legend>Gesamtbewertung</legend>
-            <p class="rating-help">Einfach den gewünschten Stern anklicken. Alle Sterne bis dorthin werden gelb.</p>
-            <div class="rating-picker" data-rating-name="rating">
-              <input type="hidden" name="rating" value="">
-              <div class="rating-buttons" role="radiogroup" aria-label="Gesamtbewertung">
-                <button type="button" data-rating="1" aria-label="1 Stern">★</button>
-                <button type="button" data-rating="2" aria-label="2 Sterne">★</button>
-                <button type="button" data-rating="3" aria-label="3 Sterne">★</button>
-                <button type="button" data-rating="4" aria-label="4 Sterne">★</button>
-                <button type="button" data-rating="5" aria-label="5 Sterne">★</button>
-              </div>
-              <span class="rating-value">Noch nicht bewertet</span>
+          <section class="wide port-form-section">
+            <div class="port-form-section-head">
+              <span>⚓</span>
+              <div><small>HAFEN & LIEGEPLATZ</small><h3>Grunddaten</h3></div>
             </div>
-          </fieldset>
 
-          <div class="wide rating-categories">
-            <fieldset class="rating-field"><legend>Freundlichkeit</legend>
-              <div class="rating-picker compact" data-rating-name="ratingFriendly"><input type="hidden" name="ratingFriendly" value=""><div class="rating-buttons" role="radiogroup" aria-label="Freundlichkeit"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+            <div class="port-form-grid">
+              <div class="port-name-search field-span-2">
+                <label>Hafen
+                  <input required name="name" placeholder="Hafenname eingeben">
+                </label>
+                <button id="portNameSearchButton" type="button">Hafen suchen</button>
+              </div>
+              <div id="portNameSuggestions" class="port-gps-suggestions field-span-2" hidden></div>
+
+              <label>Datum
+                <input type="date" name="date">
+              </label>
+              <label>Liegeplatz / Steg
+                <input name="berth" placeholder="z. B. Steg C · Platz 14">
+              </label>
+
+              <label>Liegegeld
+                <div class="input-with-unit"><input type="number" min="0" step="0.01" inputmode="decimal" name="cost" placeholder="0,00"><span>€</span></div>
+              </label>
+              <label>Duschkosten
+                <input name="showerCost" placeholder="z. B. 10 DKK / 2 €">
+              </label>
+
+              <label>Strom / Wasser
+                <input name="services" placeholder="z. B. Strom inkl. · Wasser am Steg">
+              </label>
+              <label>UKW / Telefon
+                <input name="contact" placeholder="optional">
+              </label>
+
+              <label>Koordinaten
+                <input name="coords" readonly placeholder="werden automatisch übernommen">
+              </label>
+              <label>Noch einmal anlaufen?
+                <select name="returnVisit">
+                  <option value="yes">Ja, gerne</option>
+                  <option value="maybe">Vielleicht</option>
+                  <option value="no">Eher nicht</option>
+                </select>
+              </label>
+            </div>
+          </section>
+
+          <section class="wide port-form-section">
+            <div class="port-form-section-head">
+              <span>🔑</span>
+              <div><small>ZUGANG & HINWEISE</small><h3>Vor Ort wichtig</h3></div>
+            </div>
+            <div class="port-form-grid">
+              <label class="field-span-2">Zugangscodes
+                <textarea rows="3" name="accessCodes" placeholder="Stegtor · Toilette · Dusche · WLAN usw."></textarea>
+              </label>
+              <label class="field-span-2">Ansteuerung / Besonderheiten
+                <textarea rows="3" name="approach" placeholder="Ansteuerung, Wassertiefe, Strömung, Liegeplatzhinweise …"></textarea>
+              </label>
+              <label class="field-span-2">Notiz
+                <textarea rows="4" name="note" placeholder="Was sollte man beim nächsten Besuch wissen?"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="wide port-form-section port-rating-section">
+            <div class="port-form-section-head">
+              <span>★</span>
+              <div><small>BEWERTUNG</small><h3>Wie war der Hafen?</h3></div>
+            </div>
+
+            <fieldset class="rating-field rating-overall">
+              <legend>Gesamtbewertung</legend>
+              <p class="rating-help">Gewünschten Stern anklicken.</p>
+              <div class="rating-picker" data-rating-name="rating">
+                <input type="hidden" name="rating" value="">
+                <div class="rating-buttons" role="radiogroup" aria-label="Gesamtbewertung">
+                  <button type="button" data-rating="1" aria-label="1 Stern">★</button>
+                  <button type="button" data-rating="2" aria-label="2 Sterne">★</button>
+                  <button type="button" data-rating="3" aria-label="3 Sterne">★</button>
+                  <button type="button" data-rating="4" aria-label="4 Sterne">★</button>
+                  <button type="button" data-rating="5" aria-label="5 Sterne">★</button>
+                </div>
+                <span class="rating-value">Noch nicht bewertet</span>
+              </div>
             </fieldset>
-            <fieldset class="rating-field"><legend>Sanitäranlagen</legend>
-              <div class="rating-picker compact" data-rating-name="ratingSanitary"><input type="hidden" name="ratingSanitary" value=""><div class="rating-buttons" role="radiogroup" aria-label="Sanitäranlagen"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
-            </fieldset>
-            <fieldset class="rating-field"><legend>Versorgung</legend>
-              <div class="rating-picker compact" data-rating-name="ratingSupply"><input type="hidden" name="ratingSupply" value=""><div class="rating-buttons" role="radiogroup" aria-label="Versorgung"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
-            </fieldset>
-            <fieldset class="rating-field"><legend>Preis-Leistung</legend>
-              <div class="rating-picker compact" data-rating-name="ratingValue"><input type="hidden" name="ratingValue" value=""><div class="rating-buttons" role="radiogroup" aria-label="Preis-Leistung"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
-            </fieldset>
+
+            <div class="rating-categories">
+              <fieldset class="rating-field"><legend>Freundlichkeit</legend>
+                <div class="rating-picker compact" data-rating-name="ratingFriendly"><input type="hidden" name="ratingFriendly" value=""><div class="rating-buttons" role="radiogroup" aria-label="Freundlichkeit"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+              </fieldset>
+              <fieldset class="rating-field"><legend>Sanitäranlagen</legend>
+                <div class="rating-picker compact" data-rating-name="ratingSanitary"><input type="hidden" name="ratingSanitary" value=""><div class="rating-buttons" role="radiogroup" aria-label="Sanitäranlagen"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+              </fieldset>
+              <fieldset class="rating-field"><legend>Versorgung</legend>
+                <div class="rating-picker compact" data-rating-name="ratingSupply"><input type="hidden" name="ratingSupply" value=""><div class="rating-buttons" role="radiogroup" aria-label="Versorgung"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+              </fieldset>
+              <fieldset class="rating-field"><legend>Preis-Leistung</legend>
+                <div class="rating-picker compact" data-rating-name="ratingValue"><input type="hidden" name="ratingValue" value=""><div class="rating-buttons" role="radiogroup" aria-label="Preis-Leistung"><button type="button" data-rating="1" aria-label="1 Stern">★</button><button type="button" data-rating="2" aria-label="2 Sterne">★</button><button type="button" data-rating="3" aria-label="3 Sterne">★</button><button type="button" data-rating="4" aria-label="4 Sterne">★</button><button type="button" data-rating="5" aria-label="5 Sterne">★</button></div><span class="rating-value">Nicht bewertet</span></div>
+              </fieldset>
+            </div>
+          </section>
+
+          <div class="wide actions form-actions-stable">
+            <button class="primary">Hafen speichern</button>
+            <button type="reset">Leeren</button>
           </div>
-
-          <label class="wide">Zugangscodes<textarea rows="3" name="accessCodes" placeholder="z. B. Stegtor 4711# · Toilette 8294 · Dusche 1234"></textarea></label><label class="wide">Ansteuerung / Besonderheiten<textarea rows="3" name="approach"></textarea></label>
-          <label class="wide">Notiz<textarea rows="4" name="note"></textarea></label>
-          <div class="wide actions"><button class="primary">Hafen speichern</button><button type="reset">Leeren</button></div>
         </form>
         <div class="toolbar"><input id="portSearch" placeholder="Hafen suchen …"></div>
         <div id="portList" class="stack"></div>
@@ -436,7 +514,7 @@
 
         <article class="card photo-settings">
           <div><div class="card-kicker">STARTBILD</div><h3>Foto der LEEFKE</h3><p>Das mitgelieferte Foto kann jederzeit durch ein eigenes Startbild ersetzt werden. Nach Anmeldung wird es zusammen mit den Galeriefotos privat synchronisiert.</p><input id="boatPhotoInput" type="file" accept="image/*"><button id="boatPhotoReset" type="button">Mitgeliefertes Foto verwenden</button></div>
-          <figure class="boat-photo-frame"><img id="boatPhotoPreview" class="boat-image-pending" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="Vorschau Startbild"><figcaption>Vorschau des Startbildes · mittig und ruhiger zugeschnitten</figcaption></figure>
+          <figure class="boat-photo-frame"><img id="boatPhotoPreview" class="boat-image-pending" src="data:image/gif;base64,R0lGODlhAQABAAD/ACwAAAAAAQABAAACADs=" alt="Vorschau Startbild"><figcaption>Vorschau des Startbildes · vollständiges Bild ohne Beschnitt</figcaption></figure>
         </article>
 
         <form id="settingsForm" class="settings-sections">
@@ -644,9 +722,18 @@
     </div>
   </dialog>
 
+  <dialog id="photoViewerDialog" class="photo-viewer-dialog" aria-labelledby="photoViewerCaption">
+    <div class="photo-viewer-inner">
+      <form method="dialog"><button class="dialog-close photo-viewer-close" value="cancel" aria-label="Foto schließen">×</button></form>
+      <img id="photoViewerImage" alt="Foto in voller Ansicht">
+      <div id="photoViewerCaption" class="photo-viewer-caption"></div>
+      <form method="dialog" class="dialog-actions"><button value="ok">Schließen</button></form>
+    </div>
+  </dialog>
+
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=8.1"></script>
+  <script src="app.js?v=8.3"></script>
 </body>
 </html>

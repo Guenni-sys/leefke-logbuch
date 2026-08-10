@@ -1,4 +1,4 @@
-const APP_VERSION = '8.1';
+const APP_VERSION = '8.3';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1566,11 +1566,11 @@ async function refresh() {
 }
 
 function actionButtons(kind, id) {
-  return `<button class="edit" onclick="editItem('${kind}','${id}')">Bearbeiten</button><button class="delete" onclick="removeItem('${kind}','${id}')">Löschen</button>`;
+  return `<div class="record-actions"><button class="edit" type="button" onclick="editItem('${kind}','${id}')">Bearbeiten</button><button class="delete" type="button" onclick="removeItem('${kind}','${id}')">Löschen</button></div>`;
 }
 
 function card(item, kind, body, className = '') {
-  return `<article class="item ${className}" data-store="${esc(kind)}" data-record-id="${esc(item.id)}">${actionButtons(kind, item.id)}${body}</article>`;
+  return `<article class="item ${className}" data-store="${esc(kind)}" data-record-id="${esc(item.id)}">${body}${actionButtons(kind, item.id)}</article>`;
 }
 
 function ratingLabel(value) {
@@ -1780,7 +1780,7 @@ function renderTripArchive() {
   list.innerHTML=days.map((item,index)=>{
     const dayPhotos=photos.filter(photo=>photo.relatedType==='day' ? photo.relatedId===item.id || (!photo.relatedId && photo.date===item.date) : photo.date===item.date);
     const cover=dayPhotos[0]?.data;
-    return `<article class="archive-day-card" onclick="openSavedDay('${item.id}')" role="button" tabindex="0"><div class="archive-day-no">${index+1}</div>${cover?`<img src="${cover}" alt="${esc(item.title||'Tagestour')}">`:''}<div><small>${fmtDate(item.date)}</small><h3>${esc(item.title || `${item.fromPort||'Start'} → ${item.toPort||'Ziel'}`)}</h3><p>${esc(item.fromPort||'—')} → ${esc(item.toPort||'—')}${item.distance?` · ${dec(item.distance)} sm`:''}</p><span>${dayPhotos.length} Foto${dayPhotos.length===1?'':'s'}${item.seaFeel?` · ${esc(item.seaFeel)}`:''}</span></div><b>›</b></article>`;
+    return `<article class="archive-day-card" onclick="openSavedDay('${item.id}')" role="button" tabindex="0"><div class="archive-day-no">${index+1}</div>${cover?`<img src="${cover}" alt="${esc(item.title||'Tagestour')}" loading="lazy">`:''}<div><small>${fmtDate(item.date)}</small><h3>${esc(item.title || `${item.fromPort||'Start'} → ${item.toPort||'Ziel'}`)}</h3><p>${esc(item.fromPort||'—')} → ${esc(item.toPort||'—')}${item.distance?` · ${dec(item.distance)} sm`:''}</p><span>${dayPhotos.length} Foto${dayPhotos.length===1?'':'s'}${item.seaFeel?` · ${esc(item.seaFeel)}`:''}</span></div><b>›</b></article>`;
   }).join('') || '<div class="empty-state">Noch keine Tagestouren in diesem Törn.</div>';
 }
 
@@ -2273,7 +2273,7 @@ function renderPorts() {
       ${item.accessCodes ? `<div class="port-access-codes"><b>Zugangscodes</b><span>${esc(item.accessCodes).replace(/\n/g, '<br>')}</span></div>` : ''}
       ${item.services ? `<p><b>Versorgung:</b> ${esc(item.services)}</p>` : ''}
       ${item.approach ? `<p><b>Ansteuerung:</b> ${esc(item.approach).replace(/\n/g, '<br>')}</p>` : ''}
-      ${item.note ? `<p>${esc(item.note).replace(/\n/g, '<br>')}</p>` : ''}`);
+      ${item.note ? `<p>${esc(item.note).replace(/\n/g, '<br>')}</p>` : ''}`, 'port-entry-card');
   }).join('') || '<div class="card muted">Keine passenden Häfen.</div>';
 }
 
@@ -2303,7 +2303,7 @@ function renderChecks() {
 }
 
 function renderPhotos() {
-  $('#photoGrid').innerHTML = [...state.photos].sort((a, b) => (b.created || 0) - (a.created || 0)).map(item => `<figure class="photo"><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data}" alt="${esc(item.caption || 'Foto der LEEFKE')}"><figcaption><strong>${esc(item.caption || 'LEEFKE')}</strong><div class="meta">${fmtDate(item.date)}</div></figcaption></figure>`).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
+  $('#photoGrid').innerHTML = [...state.photos].sort((a, b) => (b.created || 0) - (a.created || 0)).map(item => `<figure class="photo"><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || 'LEEFKE')}</strong><div class="meta">${fmtDate(item.date)}</div></figcaption></figure>`).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
 }
 
 function renderSettings(settings) {
@@ -5183,12 +5183,27 @@ function photoRelationOptions() {
 
 function renderPhotos() {
   const photos = [...(state.photos || [])].sort((a,b) => (b.created || 0)-(a.created || 0));
-  $('#photoGrid').innerHTML = photos.map(item => `<figure class="photo ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}"><figcaption><strong>${esc(item.caption || 'LEEFKE')}</strong><div class="meta">${fmtDate(item.date)}</div></figcaption><div class="photo-actions"><button onclick="setFeaturedPhoto('${item.id}')">${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild'}</button><button onclick="syncPhotosNow()">Cloud abgleichen</button></div></figure>`).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
+  $('#photoGrid').innerHTML = photos.map(item => `<figure class="photo ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || 'LEEFKE')}</strong><div class="meta">${fmtDate(item.date)}</div></figcaption><div class="photo-actions"><button onclick="setFeaturedPhoto('${item.id}')">${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild'}</button><button onclick="syncPhotosNow()">Cloud abgleichen</button></div></figure>`).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
   const pending = photos.filter(item => !item.storagePath || item._cloudState === 'error').length;
   if ($('#photoCloudStatus')) $('#photoCloudStatus').textContent = currentSession ? (pending ? `${pending} Foto(s) warten auf den Cloud-Abgleich.` : 'Alle Fotos sind im privaten LEEFKE-Speicher verfügbar.') : 'Anmelden, um Fotos auf allen Geräten verfügbar zu machen.';
   if ($('#photoAutoSync')) $('#photoAutoSync').checked = getSettings().photoAutoSync !== false;
   photoRelationOptions();
 }
+
+function openPhotoViewer(id) {
+  const item = (state.photos || []).find(photo => photo.id === id);
+  if (!item?.data) return;
+  const dialog = $('#photoViewerDialog');
+  const image = $('#photoViewerImage');
+  const caption = $('#photoViewerCaption');
+  if (!dialog || !image) return;
+  image.src = item.data;
+  image.alt = item.caption || 'Foto der LEEFKE';
+  if (caption) caption.innerHTML = `<strong>${esc(item.caption || 'LEEFKE')}</strong>${item.date ? `<span>${fmtDate(item.date)}</span>` : ''}`;
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+}
+window.openPhotoViewer = openPhotoViewer;
 
 async function setFeaturedPhoto(id) {
   const target = await getOne('photos', id); if (!target) return;
