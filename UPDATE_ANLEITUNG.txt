@@ -1,4 +1,4 @@
-LEEFKE VERSION 8.0 – STABILITÄTSKORREKTUREN
+LEEFKE VERSION 8.1 – STABILITÄTSKORREKTUREN
 
 1. In der bisherigen App unter „Sicherung“ vorsichtshalber eine Urlaubssicherung exportieren.
 2. Diese ZIP-Datei vollständig entpacken.
@@ -7,9 +7,9 @@ LEEFKE VERSION 8.0 – STABILITÄTSKORREKTUREN
 5. Commit-Text: LEEFKE Version 7.6 Android-Synchronisierung
 6. „Commit changes“ drücken und etwa zwei bis drei Minuten warten.
 7. Danach öffnen:
-   https://guenni-sys.github.io/leefke-logbuch/index.html?v=8.0
+   https://guenni-sys.github.io/leefke-logbuch/index.html?v=8.1
 8. Unter Windows einmal Strg + F5 drücken. Auf iPhone, iPad und Android die App vollständig schließen und neu öffnen.
-9. Prüfen, ob oben „BORDTAGEBUCH · VERSION 8.0“ steht.
+9. Prüfen, ob oben „BORDTAGEBUCH · VERSION 8.1“ steht.
 10. Auf Android bei Bedarf unter „Konto & Synchronisierung“ auf „App-Aktualisierung prüfen“ tippen.
 
 WICHTIG

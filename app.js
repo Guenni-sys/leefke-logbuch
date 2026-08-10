@@ -1,4 +1,4 @@
-const APP_VERSION = '8.0';
+const APP_VERSION = '8.1';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -122,6 +122,7 @@ let reportMapReadyPromise = Promise.resolve();
 let weatherMap = null;
 let weatherMarker = null;
 let weatherSelectedLocation = null;
+let lastNamedGpsLocation = null;
 let activeWeatherSnapshot = null;
 let activeWeatherHourIndex = 0;
 let activeWeatherRouteId = '';
@@ -3424,10 +3425,99 @@ function renderWeatherLocationOptions() {
   else select.value = 'fixed:lemwerder';
 }
 
-async function currentGpsLocation(name = 'Aktueller Standort') {
-  if (!navigator.geolocation) throw new Error('Dieses Gerät unterstützt keine Standortbestimmung.');
-  const position = await new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 18000, maximumAge: 60000 }));
-  return { name, latitude: position.coords.latitude, longitude: position.coords.longitude, source: 'gps', zoom: 12, accuracy: position.coords.accuracy };
+function gpsErrorMessage(error) {
+  if (error?.code === 1) return 'Standortzugriff ist nicht erlaubt. Bitte in den Einstellungen des Handys für diese App/Website den Standort erlauben und erneut versuchen.';
+  if (error?.code === 2) return 'GPS-Position momentan nicht verfügbar. Bitte GPS/Standortdienste einschalten und erneut versuchen.';
+  if (error?.code === 3) return 'Die Standortbestimmung hat zu lange gedauert. Bitte erneut versuchen – möglichst mit freier Sicht zum Himmel.';
+  return error?.message || 'Der aktuelle Standort konnte nicht bestimmt werden.';
+}
+
+function getGpsPosition(options) {
+  return new Promise((resolve, reject) => navigator.geolocation.getCurrentPosition(resolve, reject, options));
+}
+
+async function reverseGpsPlace(location) {
+  // 1. Bereits bekannte Häfen der LEEFKE in unmittelbarer Nähe bevorzugen.
+  const localPorts = (allState.ports || []).map(port => {
+    const coords = parseCoordinateString(port.coords);
+    if (!coords) return null;
+    return { name: port.name, ...coords, distanceKm: haversineKm(location, coords) };
+  }).filter(Boolean).sort((a,b) => a.distanceKm - b.distanceKm);
+  if (localPorts[0]?.distanceKm <= 2.5) {
+    return { name: localPorts[0].name, detail: `Hafenbuch · ${localPorts[0].distanceKm < 1 ? `${Math.round(localPorts[0].distanceKm*1000)} m` : `${localPorts[0].distanceKm.toFixed(1)} km`} entfernt` };
+  }
+
+  // 2. Ortsname per Reverse-Geocoding bestimmen.
+  if (!navigator.onLine) return { name: 'Aktueller Standort', detail: 'offline – nur GPS-Koordinaten verfügbar' };
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&zoom=16&addressdetails=1&lat=${location.latitude}&lon=${location.longitude}`;
+    const response = await fetch(url, { headers: { 'Accept-Language': 'de' }, cache: 'no-store' });
+    if (!response.ok) throw new Error('Ortsname nicht verfügbar');
+    const data = await response.json();
+    const a = data.address || {};
+    const harbor = a.marina || a.harbour || a.port;
+    const locality = a.city || a.town || a.village || a.municipality || a.suburb || a.city_district || a.county;
+    const placeName = harbor || locality || data.name || String(data.display_name || '').split(',')[0] || 'Aktueller Standort';
+    const detailParts = [];
+    if (harbor && locality && harbor !== locality) detailParts.push(locality);
+    if (a.country_code) detailParts.push(String(a.country_code).toUpperCase());
+    return { name: placeName, detail: detailParts.join(' · ') || 'per GPS erkannt' };
+  } catch {
+    return { name: 'Aktueller Standort', detail: 'GPS erkannt · Ortsname konnte nicht geladen werden' };
+  }
+}
+
+function updateGpsLabels(location) {
+  const label = location?.name && location.name !== 'Aktueller Standort'
+    ? `📍 ${location.name} · aktueller Standort`
+    : '📍 Aktueller Standort';
+
+  const weatherOption = [...($('#weatherLocation')?.options || [])].find(option => option.value === 'gps:current');
+  if (weatherOption) weatherOption.textContent = label;
+
+  const passageOption = [...($('#passageStart')?.options || [])].find(option => option.value === 'gps:current');
+  if (passageOption) passageOption.textContent = label;
+
+  const resolved = $('#passageGpsResolved');
+  if (resolved && location) {
+    resolved.hidden = false;
+    resolved.innerHTML = `<strong>📍 Standort erkannt: ${esc(location.name || 'Aktueller Standort')}</strong><span>${location.detail ? `${esc(location.detail)} · ` : ''}${coordinateLabel(location.latitude, location.longitude)}${Number.isFinite(location.accuracy) ? ` · GPS ± ${Math.round(location.accuracy)} m` : ''}</span>`;
+  }
+}
+
+async function currentGpsLocation(name = 'Aktueller Standort', { force = false } = {}) {
+  if (!navigator.geolocation) throw new Error('Dieses Gerät oder dieser Browser unterstützt keine Standortbestimmung.');
+
+  if (!force && lastNamedGpsLocation?.capturedAt && Date.now() - lastNamedGpsLocation.capturedAt < 5 * 60 * 1000) {
+    updateGpsLabels(lastNamedGpsLocation);
+    return { ...lastNamedGpsLocation };
+  }
+
+  let position;
+  try {
+    position = await getGpsPosition({ enableHighAccuracy: true, timeout: 14000, maximumAge: force ? 0 : 30000 });
+  } catch (firstError) {
+    // Android liefert mit "hoher Genauigkeit" gelegentlich keinen Fix; dann bewusst noch einmal grob versuchen.
+    try {
+      position = await getGpsPosition({ enableHighAccuracy: false, timeout: 12000, maximumAge: 120000 });
+    } catch {
+      throw new Error(gpsErrorMessage(firstError));
+    }
+  }
+
+  const base = {
+    name,
+    latitude: position.coords.latitude,
+    longitude: position.coords.longitude,
+    source: 'gps',
+    zoom: 12,
+    accuracy: position.coords.accuracy,
+    capturedAt: Date.now()
+  };
+  const named = await reverseGpsPlace(base);
+  lastNamedGpsLocation = { ...base, ...named };
+  updateGpsLabels(lastNamedGpsLocation);
+  return { ...lastNamedGpsLocation };
 }
 
 function weatherMarkerIcon() {
@@ -3469,7 +3559,7 @@ function setWeatherLocation(location, options = {}) {
 }
 
 async function weatherLocationFromSelection(value = $('#weatherLocation')?.value) {
-  if (value === 'gps:current') return currentGpsLocation();
+  if (value === 'gps:current') return currentGpsLocation('Aktueller Standort');
   if (value?.startsWith('fixed:')) return { ...WEATHER_LOCATIONS[value.split(':')[1]], source: 'fixed' };
   if (value?.startsWith('route:')) {
     const [, id, side] = value.split(':');
@@ -3898,8 +3988,59 @@ function buildReport() {
 }
 
 
+async function resolveWeatherGpsNow({ forPassage = false } = {}) {
+  const weatherState = $('#weatherLoadState');
+  const passageState = $('#passageWeatherState');
+  const targetState = forPassage ? passageState : weatherState;
+  if (targetState) {
+    targetState.textContent = 'GPS-Position wird bestimmt …';
+    targetState.className = 'sync-message';
+  }
+  try {
+    const location = await currentGpsLocation('Aktueller Standort', { force: true });
+    updateGpsLabels(location);
+    if (!forPassage) {
+      if ($('#weatherLocation')) $('#weatherLocation').value = 'gps:current';
+      setWeatherLocation(location);
+    } else {
+      if ($('#passageStart')) $('#passageStart').value = 'gps:current';
+    }
+    if (targetState) {
+      targetState.textContent = `Standort erkannt: ${location.name}${location.detail ? ` · ${location.detail}` : ''}`;
+      targetState.className = 'sync-message success';
+    }
+    return location;
+  } catch (error) {
+    if (targetState) {
+      targetState.textContent = error.message || 'Standort konnte nicht bestimmt werden.';
+      targetState.className = 'sync-message error';
+    }
+    throw error;
+  }
+}
+
+$('#weatherGpsButton')?.addEventListener('click', () => resolveWeatherGpsNow().catch(()=>{}));
+$('#passageGpsButton')?.addEventListener('click', () => resolveWeatherGpsNow({ forPassage: true }).catch(()=>{}));
+$('#passageStart')?.addEventListener('change', event => {
+  if (event.target.value === 'gps:current') resolveWeatherGpsNow({ forPassage: true }).catch(()=>{});
+  else {
+    const fixed = event.target.value.startsWith('fixed:') ? WEATHER_LOCATIONS[event.target.value.split(':')[1]] : null;
+    const resolved = $('#passageGpsResolved');
+    if (resolved) {
+      resolved.hidden = !fixed;
+      if (fixed) resolved.innerHTML = `<strong>Startort: ${esc(fixed.name)}</strong><span>${coordinateLabel(fixed.latitude, fixed.longitude)}</span>`;
+    }
+  }
+});
+
 $('#weatherForm').onsubmit = event => { event.preventDefault(); loadWeatherForecast(); };
-$('#weatherLocation').onchange = () => updateWeatherSelection();
+$('#weatherLocation').onchange = event => {
+  if (event.target.value === 'gps:current') {
+    resolveWeatherGpsNow().catch(()=>{});
+  } else {
+    updateWeatherSelection();
+  }
+};
 $('#weatherMapPickButton').onclick = () => {
   view('weather');
   prepareWeatherView();
@@ -5265,7 +5406,7 @@ async function createMaintenanceTemplates() {
 
 async function resolvePlaceForPassage(value, { allowGps = false } = {}) {
   const raw=String(value||'').trim();
-  if(allowGps && raw==='gps:current') return currentGpsLocation();
+  if(allowGps && raw==='gps:current') return currentGpsLocation('Aktueller Standort');
   if(raw.startsWith('fixed:')) return { ...WEATHER_LOCATIONS[raw.split(':')[1]], source:'fixed' };
   const fixed=fixedLocationByName(raw); if(fixed)return {...fixed,source:'fixed'};
   const port=portByName(raw); const coords=parseCoordinateString(port?.coords); if(coords)return {name:port.name,...coords,source:'port'};
@@ -5290,7 +5431,10 @@ async function fetchPassageHour(location,date,time){
 async function loadPassageWeather(event){
   event?.preventDefault(); const box=$('#passageWeatherState'), result=$('#passageWeatherResult'); if(box){box.textContent='Standort, Ziel, Wind und Seegang werden geladen …';box.className='sync-message'} if(result)result.innerHTML='';
   try{
-    const start=await resolvePlaceForPassage($('#passageStart').value,{allowGps:true}); const target=await resolvePlaceForPassage($('#passageTarget').value); const date=$('#passageDate').value||dateInputValue(); const time=$('#passageTime').value||'08:00';
+    const start=await resolvePlaceForPassage($('#passageStart').value,{allowGps:true});
+    if ($('#passageStart').value === 'gps:current') updateGpsLabels(start);
+    const target=await resolvePlaceForPassage($('#passageTarget').value); const date=$('#passageDate').value||dateInputValue(); const time=$('#passageTime').value||'08:00';
+    if(box) box.textContent=`Standort erkannt: ${start.name} · Ziel: ${target.name}. Wetterdaten werden geladen …`;
     const course=bearingBetween([start.latitude,start.longitude],[target.latitude,target.longitude]); const [a,b]=await Promise.all([fetchPassageHour(start,date,time),fetchPassageHour(target,date,time)]); const sh=a.hour,th=b.hour;
     const tidesA=tideExtrema(a.snapshot.hours||[]).slice(0,4); const tidesB=tideExtrema(b.snapshot.hours||[]).slice(0,4);
     const card=(title,loc,h,tides)=>`<article><small>${title}</small><h4>${esc(loc.name)}</h4><div class="passage-facts"><div><span>Wind</span><strong>${windDirectionText(h.windDirection)} ${dec2(h.windSpeed)} kn · ${beaufortFromKnots(h.windSpeed)} Bft</strong></div><div><span>Böen</span><strong>${h.windGust===null?'—':`${dec2(h.windGust)} kn`}</strong></div><div><span>Welle</span><strong>${h.waveHeight===null?'—':`${dec2(h.waveHeight)} m aus ${windDirectionText(h.waveDirection)}`}</strong></div><div><span>Periode</span><strong>${h.wavePeriod===null?'—':`${dec2(h.wavePeriod)} s · ${dec2(60/h.wavePeriod)} Wellen/min`}</strong></div><div class="passage-tides"><span>Gezeiten</span><strong>${tides.length?tides.map(x=>`${x.type} ${formatTime(x.time)}`).join(' · '):'—'}</strong></div></div>${boatWindGraphic(course,h.windDirection,'wind')}${h.waveDirection!==null?boatWindGraphic(course,h.waveDirection,'wave'):''}</article>`;

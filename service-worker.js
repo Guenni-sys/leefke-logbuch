@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-0-schlank-20260810';
+const APP_CACHE = 'leefke-v8-1-gps-name-20260810';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.0',
+  './index.html?v=8.1',
   './style.css',
-  './style.css?v=8.0',
+  './style.css?v=8.1',
   './app.js',
-  './app.js?v=8.0',
+  './app.js?v=8.1',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',

@@ -1,0 +1,12 @@
+LEEFKE 8.1 – GPS-STANDORT KORRIGIERT
+
+- „Aktueller Standort“ wird jetzt aktiv per GPS bestimmt.
+- Nach erfolgreicher Ortung erscheint der erkannte Orts-/Hafenname sichtbar.
+- Die Auswahl wird z. B. zu „📍 Marstal · aktueller Standort“.
+- Zusätzlich werden Koordinaten und GPS-Genauigkeit angezeigt.
+- Bereits im LEEFKE-Hafenbuch bekannte Häfen in der Nähe werden bevorzugt benannt.
+- Sonst wird der Ortsname per Reverse-Geocoding ermittelt.
+- Android: fällt ein hochgenauer GPS-Fix aus, versucht die App automatisch einen zweiten, gröberen Fix.
+- Verständliche Hinweise bei fehlender Standortberechtigung.
+- Explizite Buttons „Standort prüfen“ und „Standort jetzt bestimmen“.
+- Keine Änderung an Supabase nötig.
