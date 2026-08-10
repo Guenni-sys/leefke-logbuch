@@ -1,4 +1,4 @@
-const APP_VERSION = '8.3';
+const APP_VERSION = '8.5';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1664,8 +1664,9 @@ function setStableBoatImage(element, source) {
 }
 
 function setBoatImage(settings) {
+  // Der Startseiten-Header ist in 8.4 ein fest vorbereitetes, echtes LEEFKE-Motiv.
+  // Dadurch gibt es weder Bildwechsel beim Laden noch zufällige Ausschnitte.
   const image = settings.boatPhoto || defaultHero;
-  setStableBoatImage($('#heroBoatImage'), image);
   setStableBoatImage($('#boatPhotoPreview'), image);
 }
 
@@ -1780,7 +1781,7 @@ function renderTripArchive() {
   list.innerHTML=days.map((item,index)=>{
     const dayPhotos=photos.filter(photo=>photo.relatedType==='day' ? photo.relatedId===item.id || (!photo.relatedId && photo.date===item.date) : photo.date===item.date);
     const cover=dayPhotos[0]?.data;
-    return `<article class="archive-day-card" onclick="openSavedDay('${item.id}')" role="button" tabindex="0"><div class="archive-day-no">${index+1}</div>${cover?`<img src="${cover}" alt="${esc(item.title||'Tagestour')}" loading="lazy">`:''}<div><small>${fmtDate(item.date)}</small><h3>${esc(item.title || `${item.fromPort||'Start'} → ${item.toPort||'Ziel'}`)}</h3><p>${esc(item.fromPort||'—')} → ${esc(item.toPort||'—')}${item.distance?` · ${dec(item.distance)} sm`:''}</p><span>${dayPhotos.length} Foto${dayPhotos.length===1?'':'s'}${item.seaFeel?` · ${esc(item.seaFeel)}`:''}</span></div><b>›</b></article>`;
+    return `<article class="archive-day-card" onclick="openSavedDay('${item.id}')" role="button" tabindex="0"><div class="archive-day-no">${index+1}</div>${cover?`<img class="archive-day-photo" src="${cover}" alt="${esc(item.title||'Tagestour')}" loading="lazy">`:''}<div><small>${fmtDate(item.date)}</small><h3>${esc(item.title || `${item.fromPort||'Start'} → ${item.toPort||'Ziel'}`)}</h3><p>${esc(item.fromPort||'—')} → ${esc(item.toPort||'—')}${item.distance?` · ${dec(item.distance)} sm`:''}</p><span>${dayPhotos.length} Foto${dayPhotos.length===1?'':'s'}${item.seaFeel?` · ${esc(item.seaFeel)}`:''}</span></div><b>›</b></article>`;
   }).join('') || '<div class="empty-state">Noch keine Tagestouren in diesem Törn.</div>';
 }
 
@@ -2303,7 +2304,7 @@ function renderChecks() {
 }
 
 function renderPhotos() {
-  $('#photoGrid').innerHTML = [...state.photos].sort((a, b) => (b.created || 0) - (a.created || 0)).map(item => `<figure class="photo"><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || 'LEEFKE')}</strong><div class="meta">${fmtDate(item.date)}</div></figcaption></figure>`).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
+  $('#photoGrid').innerHTML = [...state.photos].sort((a, b) => (b.created || 0) - (a.created || 0)).map(item => `<figure class="photo photo-natural"><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || 'LEEFKE')}</strong><div class="meta">${fmtDate(item.date)}</div></figcaption></figure>`).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
 }
 
 function renderSettings(settings) {
@@ -3974,7 +3975,7 @@ function buildReport() {
   const photos = [...state.photos];
   const totalNm = days.reduce((sum, item) => sum + num(item.distance), 0);
   const hours = days.reduce((sum, item) => sum + Math.max(0, num(item.engineEnd) - num(item.engineStart)), 0);
-  const cover = settings.boatPhoto || defaultHero;
+  const cover = photos.find(p => p.featured === true || p.featured === 'true')?.data || 'leefke-report-cover.jpg';
 
   $('#reportContent').innerHTML = `
     <div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle || 'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div>
@@ -5781,7 +5782,7 @@ function initReportRouteMap() {
 }
 
 function buildReport() {
-  const settings=getSettings();const days=[...state.days].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const photos=[...state.photos];const ports=[...state.ports].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const totalNm=days.reduce((s,i)=>s+num(i.distance),0);const hours=days.reduce((s,i)=>s+Math.max(0,num(i.engineEnd)-num(i.engineStart)),0);const fuelLiters=state.fuel.reduce((s,i)=>s+num(i.liters),0);const fuelCost=state.fuel.reduce((s,i)=>s+num(i.liters)*num(i.price),0);const portCost=ports.reduce((s,i)=>s+num(i.cost),0);const cover=settings.boatPhoto||photos.find(p=>p.featured)?.data||defaultHero;const includeWeather=$('#reportIncludeWeather')?.checked!==false,includePorts=$('#reportIncludePorts')?.checked!==false,includeCosts=$('#reportIncludeCosts')?.checked!==false,includeMaintenance=$('#reportIncludeMaintenance')?.checked===true;
+  const settings=getSettings();const days=[...state.days].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const photos=[...state.photos];const ports=[...state.ports].sort((a,b)=>String(a.date).localeCompare(String(b.date)));const totalNm=days.reduce((s,i)=>s+num(i.distance),0);const hours=days.reduce((s,i)=>s+Math.max(0,num(i.engineEnd)-num(i.engineStart)),0);const fuelLiters=state.fuel.reduce((s,i)=>s+num(i.liters),0);const fuelCost=state.fuel.reduce((s,i)=>s+num(i.liters)*num(i.price),0);const portCost=ports.reduce((s,i)=>s+num(i.cost),0);const cover=photos.find(p=>p.featured===true||p.featured==='true')?.data||'leefke-report-cover.jpg';const includeWeather=$('#reportIncludeWeather')?.checked!==false,includePorts=$('#reportIncludePorts')?.checked!==false,includeCosts=$('#reportIncludeCosts')?.checked!==false,includeMaintenance=$('#reportIncludeMaintenance')?.checked===true;
   $('#reportContent').innerHTML=`<div class="report-cover"><img src="${cover}" alt="${esc(settings.boatName)}"><div><h1>${esc(settings.tripTitle||'Reisebericht')}</h1><p>${esc(settings.boatName)} · ${esc(settings.boatType)} · ${fmtDate(settings.tripStart)} bis ${fmtDate(settings.tripEnd)}</p></div></div><div class="report-summary-grid"><div><span>Reisetage</span><strong>${days.length}</strong></div><div><span>Seemeilen</span><strong>${dec(totalNm)} sm</strong></div><div><span>Motorstunden</span><strong>${dec(hours)} h</strong></div><div><span>Häfen</span><strong>${ports.length}</strong></div></div><p class="meta">${esc(settings.boatName)} · Baujahr ${esc(settings.buildYear)} · ${dec2(settings.length)} × ${dec2(settings.beam)} m · ${esc(settings.engine)} · Heimathafen ${esc(settings.homePort)}</p><section class="report-map-section"><h2>Der Törn auf der Seekarte</h2>${reportRouteMapHtml()}</section>${state.route.length?`<section class="report-plan"><h2>Törnplan</h2>${[...state.route].sort((a,b)=>String(a.date).localeCompare(String(b.date))).map((stage,index)=>`<div><b>${index+1}. ${fmtDate(stage.date)} · ${esc(stage.from||'—')} → ${esc(stage.to||'—')}</b><span>${dec(stage.nm)} sm${stage.departTime?` · Ablegen ${esc(stage.departTime)} Uhr`:''}${includeWeather&&stage.wind?` · ${esc(stage.wind)}`:''}${includeWeather&&stage.wave?` · Welle ${esc(stage.wave)}`:''}${includeWeather&&stage.tide?` · ${esc(stage.tide)}`:''}</span></div>`).join('')}</section>`:''}${days.map(day=>{const dayPhotos=photos.filter(photo=>photo.relatedId===day.id||(!photo.relatedId&&photo.date===day.date)).sort((a,b)=>Number(b.featured===true||b.featured==='true')-Number(a.featured===true||a.featured==='true'));return `<section class="report-day"><h2>${fmtDate(day.date)} · ${esc(day.title||`${day.fromPort||''} → ${day.toPort||''}`)}</h2><p class="meta">${esc(day.fromPort||'')} → ${esc(day.toPort||'')} · ${dec(day.distance)} sm${includeWeather?` · ${esc(day.wind||'')} · ${esc(day.wave||'')}`:''}</p><p>${esc(day.summary||'').replace(/\n/g,'<br>')}</p>${day.moment?`<blockquote>„${esc(day.moment)}“</blockquote>`:''}${dayPhotos.map(photo=>photo.data?`<figure><img class="report-photo" src="${photo.data}" alt="${esc(photo.caption||'')}"><figcaption>${esc(photo.caption||'')}</figcaption></figure>`:'').join('')}</section>`;}).join('')||'<p>Noch keine Tagesberichte vorhanden.</p>'}${includePorts&&ports.length?`<section><h2>Hafenbuch</h2><table class="report-port-table"><thead><tr><th>Hafen</th><th>Bewertung</th><th>Liegeplatz</th><th>Kosten</th></tr></thead><tbody>${ports.map(port=>`<tr><td>${esc(port.name)}</td><td>${'★'.repeat(Math.round(num(port.rating)))}${'☆'.repeat(5-Math.round(num(port.rating)))}</td><td>${esc(port.berth||'—')}</td><td>${port.cost?eur(port.cost):'—'}</td></tr>`).join('')}</tbody></table></section>`:''}${includeCosts?`<section class="report-finance-section"><div class="report-section-heading"><div><small>KOSTENÜBERSICHT</small><h2>Diesel & Reisekosten</h2></div><p>Zusammenfassung der im aktuellen Törn erfassten Tank- und Liegeplatzkosten.</p></div><div class="report-costs"><div class="report-cost-card"><span class="report-cost-icon">⛽</span><div><span>Getankt</span><strong>${dec(fuelLiters)} <em>Liter</em></strong></div></div><div class="report-cost-card"><span class="report-cost-icon">€</span><div><span>Dieselkosten</span><strong>${eur(fuelCost)}</strong></div></div><div class="report-cost-card"><span class="report-cost-icon">⚓</span><div><span>Liegeplätze</span><strong>${eur(portCost)}</strong></div></div><div class="report-cost-card report-cost-total"><span class="report-cost-icon">Σ</span><div><span>Gesamtkosten</span><strong>${eur(fuelCost+portCost)}</strong></div></div></div></section>`:''}${includeMaintenance&&state.maintenance.length?`<section><h2>Technik & Wartung</h2>${state.maintenance.map(item=>`<p><b>${fmtDate(item.date)} · ${esc(item.title)}</b><br>${esc(item.note||'')}${item.cost?` · ${eur(item.cost)}`:''}</p>`).join('')}</section>`:''}`;
   reportMapReadyPromise = new Promise(resolve => {
     window.requestAnimationFrame(() => window.requestAnimationFrame(() => {

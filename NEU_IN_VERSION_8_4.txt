@@ -1,0 +1,36 @@
+LEEFKE 8.4 – MARITIME FOTOGESTALTUNG
+
+Grundlage:
+Die neuen Bildbereiche basieren auf den echten, vom Nutzer bereitgestellten Fotos der LEEFKE.
+
+Startseite
+- echtes LEEFKE-Sonnenuntergangsfoto als vorbereitetes Panorama
+- separates Mobilmotiv für Smartphones
+- Header bleibt kompakt
+- kein Wechsel zwischen altem und neuem Schiffsfoto beim Laden
+- kein zufälliger Ausschnitt aus dem im Schiffspass gespeicherten Foto
+
+Galerie
+- natürliche Bildproportionen
+- Hochformat bleibt Hochformat, Querformat bleibt Querformat
+- Masonry-/Fotowand-Darstellung
+- keine grauen Letterbox-Kästen
+- Großansicht per Klick bleibt erhalten
+
+Törnarchiv
+- kleine Fotos werden nicht mehr in starre Ausschnitte gezwungen
+- natürliche Proportion, maximal begrenzte Vorschauhöhe
+
+Reisebericht
+- bewusst als Titelbild markiertes Törnfoto wird bevorzugt
+- sonst wird ein vorbereitetes echtes LEEFKE-Titelbild genutzt
+- natürliche Tagesfotos, keine künstlichen grauen Hintergründe
+
+Schiffspass
+- echtes LEEFKE-Standardfoto
+- freie natürliche Proportion
+
+Technik
+- neue Bildassets sind im Offline-Cache enthalten
+- keine Änderung in Supabase erforderlich
+- bestehende Fotos und Daten bleiben erhalten

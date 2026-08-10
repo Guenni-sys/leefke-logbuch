@@ -1872,3 +1872,475 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
     object-fit:contain!important;
   }
 }
+
+
+/* ============================================================
+   LEEFKE 8.4 – maritime Fotogestaltung mit echten LEEFKE-Fotos
+   ============================================================ */
+
+/* Startseite: echtes vorbereitetes Panoramafoto, kein Zufallscrop aus Nutzerdaten */
+.home-compact-header{
+  position:relative;
+  display:block;
+  width:100%;
+  height:210px;
+  min-height:210px;
+  padding:0;
+  overflow:hidden;
+  border-radius:17px;
+  background:#0b2432;
+  box-shadow:0 10px 24px rgba(4,31,44,.13);
+}
+.home-hero-picture{
+  position:absolute;
+  inset:0;
+  display:block;
+  width:100%;
+  height:100%;
+}
+.home-hero-picture img{
+  display:block;
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  object-position:center center;
+}
+.home-hero-overlay{
+  position:absolute;
+  inset:0;
+  background:
+    linear-gradient(90deg,
+      rgba(5,24,35,.90) 0%,
+      rgba(5,24,35,.72) 24%,
+      rgba(5,24,35,.28) 50%,
+      rgba(5,24,35,.03) 76%);
+}
+.home-compact-copy{
+  position:absolute;
+  z-index:2;
+  left:0;
+  top:0;
+  bottom:0;
+  width:min(45%,430px);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  padding:24px 26px;
+  color:white;
+}
+.home-compact-copy small{
+  color:#e5bd6a;
+  letter-spacing:.16em;
+}
+.home-compact-copy h2{
+  margin:4px 0 4px;
+  font-family:Georgia,serif;
+  font-size:clamp(2rem,4vw,3rem);
+  letter-spacing:.05em;
+  line-height:1;
+}
+.home-compact-copy>span{
+  font-size:.76rem;
+  font-weight:750;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  color:#f2e7ce;
+}
+.home-compact-copy p{
+  margin:8px 0 0;
+  font-size:.82rem;
+  color:#edf4f6;
+}
+
+/* Galerie: keine festen Kästen und kein Abschneiden mehr.
+   Hochformat bleibt Hochformat, Querformat bleibt Querformat. */
+#photoGrid.gallery{
+  display:block!important;
+  columns:3 260px;
+  column-gap:14px;
+}
+#photoGrid .photo{
+  position:relative;
+  display:inline-block!important;
+  width:100%;
+  margin:0 0 14px;
+  break-inside:avoid;
+  overflow:hidden;
+  border-radius:14px;
+  background:#fff;
+  border:1px solid rgba(29,66,81,.13);
+  box-shadow:0 5px 15px rgba(4,31,44,.07);
+  vertical-align:top;
+}
+#photoGrid .photo img{
+  display:block;
+  width:100%;
+  height:auto!important;
+  max-height:none!important;
+  aspect-ratio:auto!important;
+  object-fit:initial!important;
+  object-position:initial!important;
+  background:transparent!important;
+  border-radius:0;
+  cursor:zoom-in;
+}
+#photoGrid .photo figcaption{
+  padding:10px 11px 11px;
+  background:#fff;
+}
+#photoGrid .photo figcaption strong{
+  display:block;
+  color:var(--navy-900);
+}
+#photoGrid .photo .delete{
+  position:absolute!important;
+  top:8px!important;
+  right:8px!important;
+  left:auto!important;
+  z-index:4;
+  width:32px;
+  min-width:32px;
+  height:32px;
+  padding:0;
+  border-radius:50%;
+  background:rgba(255,250,248,.94);
+  box-shadow:0 3px 10px rgba(0,0,0,.16);
+}
+#photoGrid .photo-badges{
+  position:absolute;
+  left:8px;
+  top:8px;
+  z-index:3;
+}
+#photoGrid .photo-actions{
+  display:flex;
+  gap:7px;
+  flex-wrap:wrap;
+  padding:0 11px 11px;
+}
+#photoGrid .photo-actions button{
+  flex:1 1 120px;
+}
+
+/* Törnarchiv: Vorschau in echter Proportion statt fest abgeschnittenem Rechteck */
+.archive-day-card{
+  grid-template-columns:36px minmax(90px,140px) minmax(0,1fr) auto;
+  align-items:center;
+}
+.archive-day-card img.archive-day-photo,
+.archive-day-card img{
+  display:block!important;
+  width:100%;
+  max-width:140px;
+  height:auto!important;
+  max-height:100px;
+  object-fit:contain!important;
+  object-position:center!important;
+  background:transparent!important;
+  border:0!important;
+  border-radius:9px;
+}
+
+/* Reisebericht: Titelbild wie eine echte Fotoseite statt grauer Fotokasten */
+.report-cover{
+  overflow:hidden;
+  border-radius:16px;
+  background:#0b2432!important;
+}
+.report-cover img{
+  display:block;
+  width:100%;
+  height:auto!important;
+  max-height:none!important;
+  object-fit:cover!important;
+  aspect-ratio:16/9;
+  background:transparent!important;
+}
+.report-cover>div{
+  padding:15px 19px 17px!important;
+  background:linear-gradient(135deg,#0b2432,#16394a)!important;
+}
+.report-cover h1{
+  margin-bottom:3px;
+}
+.report-photo{
+  display:block;
+  width:auto;
+  max-width:100%;
+  height:auto!important;
+  max-height:none!important;
+  margin:0 auto;
+  border-radius:12px;
+  background:transparent!important;
+  box-shadow:0 5px 15px rgba(4,31,44,.08);
+}
+
+/* Schiffspass: Foto darf natürlich wirken, keine künstliche graue Einfassung */
+.boat-photo-frame,
+.photo-settings{
+  background:transparent!important;
+}
+.boat-photo-frame img,
+.photo-settings img{
+  display:block;
+  width:100%;
+  height:auto!important;
+  aspect-ratio:auto!important;
+  object-fit:initial!important;
+  background:transparent!important;
+  border-radius:13px;
+}
+
+/* Vollbild bleibt neutral dunkel – dort zählt nur das Foto */
+.photo-viewer-inner>img{
+  width:100%;
+  height:auto;
+  max-height:80vh;
+  object-fit:contain;
+  background:#06151d;
+}
+
+/* Smartphone: Header klein halten, eigenes vorbereitetes Mobilmotiv */
+@media(max-width:700px){
+  .home-compact-header{
+    height:138px;
+    min-height:138px;
+    border-radius:14px;
+  }
+  .home-hero-overlay{
+    background:
+      linear-gradient(90deg,
+        rgba(5,24,35,.87) 0%,
+        rgba(5,24,35,.62) 39%,
+        rgba(5,24,35,.12) 68%);
+  }
+  .home-compact-copy{
+    width:58%;
+    padding:13px 14px;
+  }
+  .home-compact-copy h2{
+    font-size:1.65rem;
+  }
+  .home-compact-copy>span{
+    font-size:.56rem;
+  }
+  .home-compact-copy p{
+    font-size:.63rem;
+    margin-top:5px;
+  }
+
+  #photoGrid.gallery{
+    columns:2 150px;
+    column-gap:9px;
+  }
+  #photoGrid .photo{
+    margin-bottom:9px;
+    border-radius:11px;
+  }
+
+  .archive-day-card{
+    grid-template-columns:30px 72px minmax(0,1fr);
+    gap:9px;
+  }
+  .archive-day-card img.archive-day-photo,
+  .archive-day-card img{
+    display:block!important;
+    width:72px;
+    max-width:72px;
+    height:auto!important;
+    max-height:74px;
+  }
+  .archive-day-card>b{
+    display:none;
+  }
+}
+@media(max-width:430px){
+  #photoGrid.gallery{
+    columns:1;
+  }
+  .home-compact-copy{
+    width:62%;
+  }
+}
+
+/* Drucken: keine unnötigen Bildrahmen */
+@media print{
+  .report-cover{
+    border-radius:0;
+  }
+  .report-cover img{
+    aspect-ratio:16/9;
+    max-height:none!important;
+  }
+  .report-photo{
+    box-shadow:none;
+  }
+}
+
+
+/* ============================================================
+   LEEFKE 8.5 – iOS / Android Mobile-Audit
+   ============================================================ */
+
+/* Safari darf Text nicht ungefragt skalieren; Browserbreite bleibt stabil. */
+html{
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+}
+body{
+  -webkit-tap-highlight-color:transparent;
+}
+
+/* iPhone/iPad Safari zoomt beim Fokus auf Eingaben unter 16 px.
+   Deshalb auf ALLEN mobilen Formularen 16 px – nicht nur im Hafenbuch. */
+@media(max-width:850px){
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  textarea,
+  select{
+    font-size:16px!important;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+  select{
+    min-height:44px;
+  }
+
+  textarea{
+    min-height:96px;
+  }
+
+  /* Saubere Touch-Ziele für iOS und Android. */
+  form button,
+  .actions button,
+  .record-actions button,
+  .mobile-tabbar button,
+  .menu-button,
+  .text-button,
+  .port-gps-button,
+  .port-gps-suggestion,
+  .home-actions button{
+    min-height:44px;
+  }
+
+  /* Notch / Dynamic Island / abgerundete Displaykanten – auch seitlich im Querformat. */
+  .topbar{
+    padding-left:max(10px,env(safe-area-inset-left,0px));
+    padding-right:max(10px,env(safe-area-inset-right,0px));
+  }
+
+  main{
+    padding-left:max(8px,env(safe-area-inset-left,0px));
+    padding-right:max(8px,env(safe-area-inset-right,0px));
+  }
+
+  .mobile-tabbar{
+    padding-left:max(7px,env(safe-area-inset-left,0px));
+    padding-right:max(7px,env(safe-area-inset-right,0px));
+  }
+
+  .mobile-action-dock{
+    left:max(10px,env(safe-area-inset-left,0px));
+    right:max(10px,env(safe-area-inset-right,0px));
+  }
+
+  #nav{
+    padding-left:max(11px,env(safe-area-inset-left,0px));
+  }
+
+  /* Verhindert abgeschnittene native Datum-/Zeitfelder auf Safari. */
+  input[type="date"],
+  input[type="time"],
+  input[type="datetime-local"],
+  input[type="number"]{
+    line-height:1.2;
+  }
+
+  /* iOS Safari rendert Inputs sonst teilweise mit eigenem Schatten/Rundungen. */
+  input,
+  textarea,
+  select{
+    background-clip:padding-box;
+  }
+
+  /* Karten/Tabellen dürfen horizontal scrollen, aber nie die ganze Seite verbreitern. */
+  .view,
+  .card,
+  .item,
+  .form,
+  .compact-form,
+  .weather-layout,
+  .weather-detail-grid,
+  .port-form,
+  .v8-day-form,
+  .v8-maintenance-form{
+    min-width:0;
+    max-width:100%;
+  }
+}
+
+/* iPhone/iPad Standalone-Modus: zusätzliche sichere Höhe für Bottom-Bar/Home-Indikator. */
+@media(display-mode:standalone) and (max-width:850px){
+  body{
+    padding-bottom:calc(var(--mobile-tab-height,64px) + env(safe-area-inset-bottom,0px));
+  }
+  .mobile-tabbar{
+    padding-bottom:max(7px,env(safe-area-inset-bottom,0px));
+  }
+}
+
+/* iOS Safari Fallback: 100dvh ist modern, ältere WebViews erhalten 100vh. */
+@media(max-width:850px){
+  dialog{
+    max-height:calc(100vh - 22px);
+    max-height:calc(100dvh - 22px);
+  }
+  .trip-dialog-inner,
+  .field-help-dialog-inner,
+  .day-view-dialog-inner,
+  .check-history-dialog-inner{
+    max-height:calc(100vh - 26px);
+    max-height:calc(100dvh - 26px);
+  }
+}
+
+/* Querformat: seitliche Safe-Areas besonders wichtig bei iPhones mit Notch/Dynamic Island. */
+@media(orientation:landscape) and (max-height:520px) and (max-width:950px){
+  main{
+    padding-left:max(10px,env(safe-area-inset-left,0px));
+    padding-right:max(10px,env(safe-area-inset-right,0px));
+  }
+  .mobile-tabbar{
+    padding-left:max(10px,env(safe-area-inset-left,0px));
+    padding-right:max(10px,env(safe-area-inset-right,0px));
+  }
+}
+
+/* Sehr schmale Geräte: Buttons nicht mit Text überfüllen. */
+@media(max-width:390px){
+  .mobile-tabbar button small{
+    font-size:.6rem;
+  }
+  .home-actions button{
+    min-width:0;
+  }
+  .home-actions button strong,
+  .home-actions button small{
+    overflow-wrap:anywhere;
+  }
+}
+
+/* Android: native Auswahlfelder bleiben gut bedienbar, ohne übergroße WebView-Ränder. */
+.android-device select,
+.android-device input,
+.android-device textarea{
+  max-width:100%;
+}
+
+/* iOS: Verhindert, dass lange Zugangscodes/URLs das Layout verbreitern. */
+.port-access-codes,
+.day-view-text,
+.report-paper,
+.photo-viewer-caption{
+  overflow-wrap:anywhere;
+  word-break:break-word;
+}

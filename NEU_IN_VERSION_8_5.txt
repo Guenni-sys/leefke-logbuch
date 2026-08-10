@@ -1,0 +1,29 @@
+LEEFKE 8.5 – iOS / ANDROID OPTIMIERUNG
+
+Beim erneuten Mobile-Audit wurden noch Punkte gefunden, die in 8.4 nicht vollständig abgedeckt waren.
+
+iOS / iPhone / iPad:
+- alle Eingabefelder auf Mobilgeräten mindestens 16 px -> kein Safari-Autozoom mehr
+- Apple Touch Icon hinterlegt
+- Safe Areas oben, unten, links und rechts berücksichtigt
+- Dynamic Island / Notch / Home-Indikator auch im Querformat berücksichtigt
+- Dialoge mit 100vh-Fallback und 100dvh für moderne Safari-Versionen
+- Datum-, Zeit- und Zahlenfelder auf mobile Mindesthöhe vereinheitlicht
+- automatische Telefonnummer-Erkennung deaktiviert, damit Zugangscodes nicht verfälscht werden
+
+Android:
+- separate echte Maskable Icons erzeugt
+- Touch-Ziele mindestens 44 px
+- Auswahl-/Eingabefelder auf 16 px und volle Breite vereinheitlicht
+- Service-Worker-Update und Offline-Cache auf Version 8.5 aktualisiert
+
+Beide Plattformen:
+- Safe-Area-Padding der unteren Navigation
+- horizontale Überläufe in Formularen begrenzt
+- lange Texte/Zugangscodes dürfen umbrechen
+- Hoch-/Querformat berücksichtigt
+
+WICHTIG:
+Das ist eine statische Code-/Layoutprüfung. Die endgültige Bestätigung muss immer auf echten iOS- und Android-Geräten erfolgen, da GPS-Berechtigungen, Safari-PWA und Android-WebView vom jeweiligen Gerät/Betriebssystem abhängen.
+
+Keine Supabase-Änderung erforderlich.
