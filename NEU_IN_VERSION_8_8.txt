@@ -1,0 +1,12 @@
+LEEFKE 8.8 – SONNENUNTERGANGS-ÜBERSICHT
+
+- Das echte Sonnenuntergangsfoto der LEEFKE ist wieder das Hauptmotiv.
+- Neue goldene Kompassrose/Stern als echte skalierbare SVG-Grafik.
+- LEEFKE, GROENEVELD KOTTER · 1996 und „Unser Logbuch“ bleiben echte HTML-Schrift.
+- Desktop und Smartphone verwenden getrennte Fotoausschnitte.
+- Keine Bildverzerrung: Fotos werden nur proportional zugeschnitten.
+- „Aktueller Törn“ stört das Bild nicht mehr.
+- Ein Törn wird nur angezeigt, wenn tatsächlich ein Törnname hinterlegt ist.
+- Dann erscheint er klein und dezent unten rechts.
+- iOS Apple-Touch-Icon und Android Maskable Icons aus 8.5 bleiben vollständig erhalten.
+- Keine Supabase-Änderung erforderlich.

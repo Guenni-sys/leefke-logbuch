@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.7">
+  <link rel="stylesheet" href="style.css?v=8.8">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -34,7 +34,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.7</small>
+        <small>BORDTAGEBUCH · VERSION 8.8</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -70,20 +70,32 @@
 
     <main>
       <section id="home" class="view active">
-        <article class="home-compact-header home-overview-hero">
+        <article class="home-compact-header home-overview-hero home-sunset-hero">
           <picture class="home-hero-picture" aria-hidden="true">
-            <source media="(max-width: 700px)" srcset="leefke-overview-real-mobile.jpg">
-            <img id="heroBoatImage" src="leefke-overview-real-desktop.jpg" alt="" loading="eager" fetchpriority="high">
+            <source media="(max-width: 700px)" srcset="leefke-overview-sunset-mobile.jpg">
+            <img id="heroBoatImage" src="leefke-overview-sunset-desktop.jpg" alt="" loading="eager" fetchpriority="high">
           </picture>
+
+          <div class="home-sunset-shade" aria-hidden="true"></div>
+
           <div class="home-hero-title">
-            <div class="home-hero-mark">✦</div>
+            <svg class="home-compass-star" viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="23" fill="none" stroke="currentColor" stroke-width="2"/>
+              <circle cx="50" cy="50" r="4" fill="currentColor"/>
+              <path d="M50 3 L58 42 L50 50 L42 42 Z" fill="currentColor"/>
+              <path d="M97 50 L58 58 L50 50 L58 42 Z" fill="currentColor" opacity=".82"/>
+              <path d="M50 97 L42 58 L50 50 L58 58 Z" fill="currentColor" opacity=".62"/>
+              <path d="M3 50 L42 42 L50 50 L42 58 Z" fill="currentColor" opacity=".82"/>
+              <path d="M50 18V4M50 96V82M18 50H4M96 50H82" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
+            </svg>
             <h2>LEEFKE</h2>
             <div class="home-hero-sub">GROENEVELD KOTTER · 1996</div>
             <div class="home-hero-script">Unser Logbuch</div>
-            <div class="home-hero-trip">
-              <span>Aktueller Törn</span>
-              <strong id="homeTripLine">Aktueller Törn</strong>
-            </div>
+          </div>
+
+          <div class="home-trip-corner" id="homeTripCorner" hidden>
+            <span>TÖRN</span>
+            <strong id="homeTripLine"></strong>
           </div>
         </article>
 
@@ -746,6 +758,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=8.7"></script>
+  <script src="app.js?v=8.8"></script>
 </body>
 </html>

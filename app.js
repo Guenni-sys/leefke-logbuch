@@ -1,4 +1,4 @@
-const APP_VERSION = '8.7';
+const APP_VERSION = '8.8';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1678,7 +1678,11 @@ function render() {
   $('#headerBoatLine').textContent = `${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` · ${settings.model}` : ''} · ${settings.homePort || 'Lemwerder'}`;
   $('#tripTitle').textContent = settings.tripTitle || 'Aktueller Törn';
   $('#tripDates').textContent = [fmtDate(settings.tripStart), fmtDate(settings.tripEnd)].filter(Boolean).join(' – ');
-  if ($('#homeTripLine')) $('#homeTripLine').textContent = `${settings.tripTitle || 'Aktueller Törn'}${settings.tripStart ? ` · ab ${fmtDate(settings.tripStart)}` : ''}`;
+  if ($('#homeTripLine')) {
+    const hasNamedTrip = Boolean((settings.tripTitle || '').trim());
+    $('#homeTripLine').textContent = hasNamedTrip ? `${settings.tripTitle}${settings.tripStart ? ` · ab ${fmtDate(settings.tripStart)}` : ''}` : '';
+    if ($('#homeTripCorner')) $('#homeTripCorner').hidden = !hasNamedTrip;
+  }
   $('#leefkeStory').textContent = `${settings.boatName || 'LEEFKE'} ist unser ${settings.buildYear || 1996} gebauter ${settings.boatType || 'Groeneveld Kotter'}${settings.model ? ` der Baureihe ${settings.model}` : ''}: ein ${dec2(settings.length)} Meter langer Verdränger aus ${settings.hullMaterial || 'Stahl'} mit klassischem Spitzgatt. Der ${settings.engine || 'Perkins M135'} bringt uns mit ruhigen ${settings.cruiseSpeed || '6,5 kn'} vom ${settings.homePort || 'Heimathafen'} hinaus auf Nord- und Ostsee.`;
 
   $('#vLength').textContent = `${dec2(settings.length)} m`;

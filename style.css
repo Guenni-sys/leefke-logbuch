@@ -2584,3 +2584,215 @@ body{
     font-size:.96rem;
   }
 }
+
+
+/* ============================================================
+   LEEFKE 8.8 – Sonnenuntergangs-Übersicht
+   ============================================================ */
+
+.home-sunset-hero{
+  position:relative!important;
+  width:100%!important;
+  aspect-ratio:16/7!important;
+  min-height:0!important;
+  overflow:hidden!important;
+  border-radius:18px!important;
+  background:#10293a!important;
+  box-shadow:0 12px 30px rgba(5,29,42,.16)!important;
+}
+
+.home-sunset-hero .home-hero-picture{
+  position:absolute!important;
+  inset:0!important;
+  width:100%!important;
+  height:100%!important;
+}
+
+.home-sunset-hero .home-hero-picture img{
+  display:block!important;
+  width:100%!important;
+  height:100%!important;
+  object-fit:cover!important;
+  object-position:center center!important;
+  transform:none!important;
+}
+
+/* alte 8.7-Überblendung ausschalten */
+.home-sunset-hero::after{display:none!important}
+
+.home-sunset-shade{
+  position:absolute;
+  inset:0;
+  z-index:1;
+  pointer-events:none;
+  background:
+    linear-gradient(90deg,
+      rgba(7,28,43,.72) 0%,
+      rgba(7,28,43,.44) 23%,
+      rgba(7,28,43,.10) 43%,
+      rgba(7,28,43,0) 60%),
+    linear-gradient(0deg,
+      rgba(5,23,35,.18) 0%,
+      rgba(5,23,35,0) 35%);
+}
+
+.home-sunset-hero .home-hero-title{
+  position:absolute!important;
+  z-index:2!important;
+  left:30px!important;
+  top:50%!important;
+  transform:translateY(-50%)!important;
+  width:min(39%,430px)!important;
+  color:#fff!important;
+  text-shadow:0 2px 9px rgba(0,0,0,.28)!important;
+}
+
+.home-compass-star{
+  display:block;
+  width:58px;
+  height:58px;
+  margin:0 0 7px 3px;
+  color:#e2ad49;
+  filter:drop-shadow(0 2px 4px rgba(0,0,0,.22));
+}
+
+.home-sunset-hero .home-hero-title h2{
+  margin:0!important;
+  font-family:Georgia,"Times New Roman",serif!important;
+  font-size:clamp(2.3rem,5.5vw,4.6rem)!important;
+  line-height:.92!important;
+  letter-spacing:.105em!important;
+  color:#fff!important;
+  font-weight:700!important;
+}
+
+.home-sunset-hero .home-hero-sub{
+  margin-top:10px!important;
+  color:#f4dfb4!important;
+  font-size:clamp(.62rem,1.25vw,.9rem)!important;
+  font-weight:800!important;
+  letter-spacing:.13em!important;
+}
+
+.home-sunset-hero .home-hero-script{
+  margin-top:7px!important;
+  color:#e8b750!important;
+  font-family:"Segoe Script","Brush Script MT",cursive!important;
+  font-size:clamp(1.25rem,2.6vw,2.05rem)!important;
+  line-height:1.05!important;
+}
+
+.home-trip-corner{
+  position:absolute;
+  z-index:3;
+  right:12px;
+  bottom:10px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  max-width:48%;
+  padding:5px 8px;
+  border-radius:9px;
+  background:rgba(5,27,42,.60);
+  color:#fff;
+  backdrop-filter:blur(4px);
+  -webkit-backdrop-filter:blur(4px);
+  box-shadow:0 2px 8px rgba(0,0,0,.12);
+}
+
+.home-trip-corner[hidden]{display:none!important}
+
+.home-trip-corner span{
+  color:#e9ba57;
+  font-size:.54rem;
+  font-weight:900;
+  letter-spacing:.08em;
+}
+
+.home-trip-corner strong{
+  min-width:0;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  color:#fff;
+  font-size:.64rem;
+  font-weight:700;
+}
+
+/* Tablet */
+@media(max-width:900px){
+  .home-sunset-hero .home-hero-title{
+    left:20px!important;
+    width:42%!important;
+  }
+  .home-compass-star{width:48px;height:48px}
+}
+
+/* Handy: eigenes 4:3-Foto, Titel bleibt vollständig sichtbar */
+@media(max-width:700px){
+  .home-sunset-hero{
+    aspect-ratio:4/3!important;
+    border-radius:14px!important;
+  }
+
+  .home-sunset-hero .home-hero-picture img{
+    object-fit:cover!important;
+    object-position:center center!important;
+  }
+
+  .home-sunset-shade{
+    background:
+      linear-gradient(180deg,
+        rgba(5,25,39,.74) 0%,
+        rgba(5,25,39,.47) 30%,
+        rgba(5,25,39,.08) 55%,
+        rgba(5,25,39,0) 70%);
+  }
+
+  .home-sunset-hero .home-hero-title{
+    left:14px!important;
+    right:14px!important;
+    top:15px!important;
+    width:auto!important;
+    transform:none!important;
+  }
+
+  .home-compass-star{
+    width:34px;
+    height:34px;
+    margin:0 0 3px 1px;
+  }
+
+  .home-sunset-hero .home-hero-title h2{
+    font-size:clamp(1.9rem,10vw,2.7rem)!important;
+  }
+
+  .home-sunset-hero .home-hero-sub{
+    margin-top:4px!important;
+    font-size:.58rem!important;
+    letter-spacing:.095em!important;
+  }
+
+  .home-sunset-hero .home-hero-script{
+    margin-top:3px!important;
+    font-size:1.08rem!important;
+  }
+
+  .home-trip-corner{
+    right:8px;
+    bottom:8px;
+    max-width:72%;
+    padding:4px 6px;
+    background:rgba(5,27,42,.55);
+  }
+
+  .home-trip-corner span{font-size:.48rem}
+  .home-trip-corner strong{font-size:.57rem}
+}
+
+@media(max-width:390px){
+  .home-sunset-hero{aspect-ratio:1/1!important}
+  .home-sunset-hero .home-hero-title{top:11px!important;left:11px!important}
+  .home-compass-star{width:30px;height:30px}
+  .home-sunset-hero .home-hero-title h2{font-size:1.9rem!important}
+}

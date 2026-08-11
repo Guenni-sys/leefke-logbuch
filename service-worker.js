@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-7-responsive-overview-20260811';
+const APP_CACHE = 'leefke-v8-8-sunset-overview-20260811';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.7',
+  './index.html?v=8.8',
   './style.css',
-  './style.css?v=8.7',
+  './style.css?v=8.8',
   './app.js',
-  './app.js?v=8.7',
+  './app.js?v=8.8',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
@@ -21,7 +21,9 @@ const ASSETS = [
   './leefke-overview-hero.jpg',
   './leefke-overview-hero-mobile.jpg',
   './leefke-overview-real-desktop.jpg',
-  './leefke-overview-real-mobile.jpg'
+  './leefke-overview-real-mobile.jpg',
+  './leefke-overview-sunset-desktop.jpg',
+  './leefke-overview-sunset-mobile.jpg'
 ];
 
 self.addEventListener('install', event => {
