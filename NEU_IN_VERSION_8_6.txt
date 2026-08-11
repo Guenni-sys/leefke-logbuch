@@ -1,0 +1,7 @@
+LEEFKE 8.6 – NEUES ÜBERSICHTSBILD
+
+- Neues freigegebenes LEEFKE-Motiv als Titelbild der Übersicht.
+- Desktop und Mobil verwenden getrennte Ausschnitte.
+- iOS-/Android-Optimierungen aus 8.5 bleiben erhalten.
+- Neue Bildassets liegen im Offline-Cache.
+- Keine Supabase-Änderung erforderlich.

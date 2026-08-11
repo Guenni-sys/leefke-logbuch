@@ -2344,3 +2344,14 @@ body{
   overflow-wrap:anywhere;
   word-break:break-word;
 }
+
+/* LEEFKE 8.6 – neues Übersichtsmotiv */
+.home-overview-hero{position:relative;display:block;width:100%;height:auto;min-height:0;aspect-ratio:8/3;padding:0;overflow:hidden;border-radius:18px;background:#0a2230;box-shadow:0 12px 28px rgba(5,29,42,.14)}
+.home-overview-hero .home-hero-picture{position:absolute;inset:0;width:100%;height:100%}
+.home-overview-hero .home-hero-picture img{display:block;width:100%;height:100%;object-fit:cover;object-position:center center}
+.home-overview-hero .home-compact-copy,.home-overview-hero .home-hero-overlay{display:none!important}
+.home-trip-caption{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:8px 2px 14px;padding:0 3px}
+.home-trip-caption span{color:var(--muted);font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;font-weight:750}
+.home-trip-caption strong{min-width:0;color:var(--navy-900);font-size:.86rem;text-align:right;overflow-wrap:anywhere}
+@media(max-width:700px){.home-overview-hero{aspect-ratio:2.35/1;border-radius:14px}.home-trip-caption{align-items:flex-start;flex-direction:column;gap:2px;margin-top:7px}.home-trip-caption strong{text-align:left}}
+@media(max-width:430px){.home-overview-hero{aspect-ratio:2.05/1}}

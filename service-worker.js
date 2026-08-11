@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-5-ios-android-20260810';
+const APP_CACHE = 'leefke-v8-6-overview-hero-20260811';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.5',
+  './index.html?v=8.6',
   './style.css',
-  './style.css?v=8.5',
+  './style.css?v=8.6',
   './app.js',
-  './app.js?v=8.5',
+  './app.js?v=8.6',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
@@ -17,7 +17,9 @@ const ASSETS = [
   './leefke-hero.jpg',
   './leefke-header-wide.jpg',
   './leefke-header-mobile.jpg',
-  './leefke-report-cover.jpg'
+  './leefke-report-cover.jpg',
+  './leefke-overview-hero.jpg',
+  './leefke-overview-hero-mobile.jpg'
 ];
 
 self.addEventListener('install', event => {

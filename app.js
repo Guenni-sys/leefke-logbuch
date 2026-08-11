@@ -1,4 +1,4 @@
-const APP_VERSION = '8.5';
+const APP_VERSION = '8.6';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
