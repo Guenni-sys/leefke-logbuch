@@ -1,0 +1,13 @@
+LEEFKE 8.7 – RESPONSIVE ÜBERSICHT
+
+Korrekturen:
+- Das generierte Mockup-Boot wird NICHT mehr als Übersichtsfoto benutzt.
+- Stattdessen wird ein echtes Originalfoto der LEEFKE verwendet.
+- Das Boot wird nur proportional zugeschnitten und niemals gestreckt.
+- Desktop erhält einen 2:1-Ausschnitt.
+- Smartphone erhält einen eigenen 16:10-Ausschnitt.
+- LEEFKE, GROENEVELD KOTTER · 1996 und „Unser Logbuch“ sind wieder als echte HTML-Schrift vorhanden.
+- Die Schrift kann daher auf iOS/Android nicht aus dem Bild herausgeschnitten werden.
+- Der aktuelle Törn bleibt dynamisch.
+- Alle iOS-/Android-Optimierungen aus 8.5 bleiben erhalten.
+- Keine Supabase-Änderung erforderlich.
