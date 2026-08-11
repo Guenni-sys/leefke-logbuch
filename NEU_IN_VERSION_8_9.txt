@@ -1,0 +1,21 @@
+LEEFKE 8.9 – AUTOMATISCHER SCHÄTZ-TANKSTAND
+
+Grundlage:
+- geschätzter Verbrauch: 4,0 Liter pro Fahrstunde
+- Tankkapazität aus dem Schiffspass, bei LEEFKE 400 Liter
+
+So funktioniert die Berechnung:
+1. Ein bekannter Tankstand (%) dient als Ausgangspunkt.
+   Das kann der aktuelle Bordstand im Schiffspass oder ein Tankstand nach einem Tankvorgang sein.
+2. Für jede danach eingetragene Tagestour wird der Tankstand automatisch reduziert.
+3. Vorrangig werden Motorstunden Start/Ende verwendet.
+4. Sind keine Motorstunden eingetragen, wird aus Ablegen/Anlegen die Fahrzeit berechnet.
+5. Verbrauch = Fahrstunden × 4,0 l/h.
+6. Wird zwischendurch getankt, werden die getankten Liter chronologisch zum Schätzstand addiert.
+7. Wird beim Tanken zusätzlich „Tankstand danach (%)“ angegeben, gilt dieser Wert als neue exakte Kalibrierung.
+8. Änderungen oder Löschen von Tagestouren/Tankvorgängen führen automatisch zu einer Neuberechnung.
+
+Wichtig:
+- Die Berechnung läuft schiffsweit über alle Törns, nicht nur im aktuell geöffneten Törn.
+- Der bisherige reale Verbrauch aus Tankintervallen bleibt separat erhalten.
+- Keine Supabase-Änderung erforderlich.

@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.8">
+  <link rel="stylesheet" href="style.css?v=8.9">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -34,7 +34,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.8</small>
+        <small>BORDTAGEBUCH · VERSION 8.9</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -108,7 +108,7 @@
 
         <div class="home-status-grid">
           <article class="card"><div class="card-kicker">LETZTER TAG</div><div id="latest" class="muted">Noch kein Eintrag.</div></article>
-          <article class="card tank-card compact-tank"><div class="card-kicker">DIESEL</div><div class="tank-gauge"><div id="tankFill" class="tank-fill"></div></div><div class="tank-value"><strong id="tankPercent">—</strong><span id="tankLiters">Tankstand nicht eingetragen</span></div></article>
+          <article class="card tank-card compact-tank"><div class="card-kicker">DIESEL · SCHÄTZSTAND</div><div class="tank-gauge"><div id="tankFill" class="tank-fill"></div></div><div class="tank-value"><strong id="tankPercent">—</strong><span id="tankLiters">Tankstand nicht eingetragen</span></div></article>
           <article class="card"><div class="card-kicker">FRISTEN & SERVICE</div><h3>Nächste Erinnerung</h3><div id="openMaint" class="muted">Keine fälligen Punkte.</div><button data-open="maintenance" class="text-button">Wartung & Fristen →</button></article>
           <article class="card"><div class="card-kicker">TÖRN</div><h3 id="tripTitle">Aktueller Törn</h3><span id="tripDates" class="meta"></span><label class="home-trip-switcher"><span>Törn wechseln</span><select id="globalTripSelect"></select></label><button data-open="route" class="text-button">Törnarchiv öffnen →</button></article>
         </div>
@@ -451,8 +451,13 @@
       </section>
 
       <section id="fuel" class="view">
-        <div class="title"><small>TANKBUCH</small><h2>Diesel & Verbrauch</h2><p>Tankvorgänge und Verbrauchswerte der LEEFKE mit 400-Liter-Tank.</p></div>
-        <div class="stats compact"><article><span>Getankt</span><strong id="fuelLiters">0 l</strong></article><article><span>Kosten</span><strong id="fuelCost">0 €</strong></article><article><span>Ø Preis</span><strong id="fuelPrice">—</strong></article><article><span>Ø seit Tankstopps</span><strong id="fuelPerHour">—</strong></article></div><p class="meta fuel-calculation-note">Der Verbrauch wird jeweils aus <strong>nachgetankten Litern ÷ gefahrenen Motorstunden seit dem vorherigen Tankvorgang</strong> berechnet. Vergleichbare Füllstände liefern den genauesten Wert.</p>
+        <div class="title"><small>TANKBUCH</small><h2>Diesel & Verbrauch</h2><p>Tankvorgänge, tatsächlicher Verbrauch und automatisch geschätzter Tankstand der LEEFKE.</p></div>
+        <div class="stats compact"><article><span>Getankt</span><strong id="fuelLiters">0 l</strong></article><article><span>Kosten</span><strong id="fuelCost">0 €</strong></article><article><span>Ø Preis</span><strong id="fuelPrice">—</strong></article><article><span>Ø seit Tankstopps</span><strong id="fuelPerHour">—</strong></article></div>
+        <article class="card fuel-estimate-card">
+          <div><div class="card-kicker">AUTOMATISCHER TANKSTAND</div><h3 id="fuelEstimateHeadline">Noch kein Ausgangsstand</h3><p id="fuelEstimateDetail" class="meta">Grundlage: 4,0 Liter pro Fahrstunde. Ein bekannter Tankstand dient als Ausgangspunkt.</p></div>
+          <div class="fuel-estimate-value"><strong id="fuelEstimatePercent">—</strong><span id="fuelEstimateLiters">—</span></div>
+        </article>
+        <p class="meta fuel-calculation-note">Der <strong>Schätz-Tankstand</strong> rechnet mit 4,0 l/h und berücksichtigt alle gespeicherten Tagestouren sowie jeden Tankvorgang – auch über mehrere Törns hinweg. Der tatsächliche Durchschnittsverbrauch wird weiterhin separat aus <strong>nachgetankten Litern ÷ Motorstunden seit dem vorherigen Tankvorgang</strong> berechnet.</p>
         <form id="fuelForm" class="card form fuel-form" novalidate>
           <input type="hidden" name="id">
           <div class="wide section-heading"><span>⛽</span><div><small>TANKVORGANG</small><h3 id="fuelFormTitle">Tanken dokumentieren</h3></div></div>
@@ -462,7 +467,7 @@
           <label>Getankte Liter<input type="text" inputmode="decimal" name="liters" autocomplete="off" placeholder="z. B. 120,5"><small>Komma oder Punkt möglich</small></label>
           <label>Preis je Liter (€)<input type="text" inputmode="decimal" name="price" autocomplete="off" placeholder="z. B. 1,699"><small>Der Gesamtpreis wird automatisch berechnet</small></label>
           <label>Motorstunden beim Tanken<input type="text" inputmode="decimal" name="engineHours" autocomplete="off" placeholder="z. B. 954,3"></label>
-          <label>Tankstand danach (%)<input type="text" inputmode="decimal" name="tankPercent" autocomplete="off" placeholder="0 bis 100"></label>
+          <label>Tankstand danach (%)<input type="text" inputmode="decimal" name="tankPercent" autocomplete="off" placeholder="optional, 0 bis 100"><small>Wenn bekannt, kalibriert dieser Wert die Schätzung exakt. Sonst werden die getankten Liter zum Schätzstand addiert.</small></label>
           <label class="wide">Notiz<textarea rows="3" name="note" placeholder="z. B. vollgetankt, Additiv ergänzt …"></textarea></label>
           <div id="fuelFormStatus" class="form-status wide" hidden></div>
           <div class="wide actions fuel-form-actions"><button id="fuelSaveButton" class="primary">Tankvorgang speichern</button><button id="fuelCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="reset">Leeren</button></div>
@@ -758,6 +763,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=8.8"></script>
+  <script src="app.js?v=8.9"></script>
 </body>
 </html>

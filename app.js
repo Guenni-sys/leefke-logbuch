@@ -1,4 +1,4 @@
-const APP_VERSION = '8.8';
+const APP_VERSION = '8.9';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -152,6 +152,7 @@ const dec2 = value => new Intl.NumberFormat('de-DE', { minimumFractionDigits: 0,
 const eur = value => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(num(value));
 const fmtDate = value => value ? new Intl.DateTimeFormat('de-DE').format(new Date(`${value}T12:00:00`)) : '';
 const defaultHero = 'leefke-hero.jpg';
+const ESTIMATED_FUEL_RATE_LPH = 4;
 
 function openDB() {
   return new Promise((resolve, reject) => {
@@ -1800,25 +1801,218 @@ function renderDeadlines() {
   }).join('') || '<div class="empty-state">Noch keine Fristen angelegt.</div>';
 }
 
+
+function fuelClockMinutes(value) {
+  const match = String(value || '').match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 23 || minutes > 59) return null;
+  return hours * 60 + minutes;
+}
+
+function dateMidnightTimestamp(value) {
+  const stamp = Date.parse(`${String(value || '')}T00:00:00`);
+  return Number.isFinite(stamp) ? stamp : 0;
+}
+
+function dayFuelEstimate(item) {
+  const engineStart = item?.engineStart !== '' && item?.engineStart !== null && item?.engineStart !== undefined ? Number(item.engineStart) : NaN;
+  const engineEnd = item?.engineEnd !== '' && item?.engineEnd !== null && item?.engineEnd !== undefined ? Number(item.engineEnd) : NaN;
+  const engineHours = Number.isFinite(engineStart) && Number.isFinite(engineEnd) && engineEnd >= engineStart
+    ? engineEnd - engineStart
+    : NaN;
+
+  const departMinutes = fuelClockMinutes(item?.depart);
+  const arriveMinutes = fuelClockMinutes(item?.arrive);
+  let clockHours = NaN;
+  if (departMinutes !== null && arriveMinutes !== null) {
+    let minutes = arriveMinutes - departMinutes;
+    if (minutes < 0) minutes += 24 * 60;
+    clockHours = minutes / 60;
+  }
+
+  const hours = Number.isFinite(engineHours) && engineHours > 0
+    ? engineHours
+    : (Number.isFinite(clockHours) && clockHours > 0 ? clockHours : 0);
+
+  const base = dateMidnightTimestamp(item?.date);
+  let timestamp = base;
+  if (base) {
+    if (arriveMinutes !== null) {
+      const overnight = departMinutes !== null && arriveMinutes < departMinutes ? 24 * 60 : 0;
+      timestamp = base + (arriveMinutes + overnight) * 60 * 1000;
+    } else {
+      // Ohne Anlegezeit wird die Fahrt ans Ende des Tages gelegt.
+      timestamp = base + (23 * 60 + 59) * 60 * 1000;
+    }
+  }
+
+  return {
+    hours,
+    liters: hours * ESTIMATED_FUEL_RATE_LPH,
+    timestamp,
+    source: Number.isFinite(engineHours) && engineHours > 0 ? 'Motorstunden' : 'Fahrzeit'
+  };
+}
+
+function fuelEventTimestamp(item) {
+  const base = dateMidnightTimestamp(item?.date);
+  if (!base) return 0;
+  const minutes = fuelClockMinutes(item?.time);
+  return base + (minutes !== null ? minutes : 12 * 60) * 60 * 1000;
+}
+
+function calculateEstimatedTank(settings = getSettings()) {
+  const capacity = Math.max(1, num(settings?.tankCapacity) || 400);
+  const allDays = [...(allState.days || state.days || [])];
+  const allFuel = [...(allState.fuel || state.fuel || [])];
+
+  const candidates = [];
+
+  const settingsPercentRaw = settings?.currentTankPercent;
+  const settingsHasPercent = settingsPercentRaw !== '' && settingsPercentRaw !== null && settingsPercentRaw !== undefined && Number.isFinite(Number(settingsPercentRaw));
+  if (settingsHasPercent) {
+    const settingsTimestamp = Date.parse(settings?._fieldUpdatedAt?.currentTankPercent || settings?._updatedAt || 0) || 0;
+    candidates.push({
+      kind: 'settings',
+      id: 'settings-current-tank',
+      timestamp: settingsTimestamp,
+      liters: capacity * clamp(Number(settingsPercentRaw), 0, 100) / 100,
+      label: 'manuell eingetragener Bordstand'
+    });
+  }
+
+  for (const item of allFuel) {
+    const raw = item?.tankPercent;
+    if (raw === '' || raw === null || raw === undefined || !Number.isFinite(Number(raw))) continue;
+    candidates.push({
+      kind: 'fuel',
+      id: item.id,
+      timestamp: fuelEventTimestamp(item),
+      liters: capacity * clamp(Number(raw), 0, 100) / 100,
+      label: `Tankstand nach Tanken am ${fmtDate(item.date)}`
+    });
+  }
+
+  candidates.sort((a, b) => a.timestamp - b.timestamp);
+  const anchor = candidates[candidates.length - 1] || null;
+
+  if (!anchor) {
+    return {
+      hasEstimate: false,
+      capacity,
+      rate: ESTIMATED_FUEL_RATE_LPH,
+      liters: 0,
+      percent: 0,
+      anchor: null,
+      consumedLiters: 0,
+      consumedHours: 0,
+      addedLiters: 0,
+      fuelStates: new Map()
+    };
+  }
+
+  let liters = clamp(anchor.liters, 0, capacity);
+  let consumedLiters = 0;
+  let consumedHours = 0;
+  let addedLiters = 0;
+  const fuelStates = new Map();
+
+  const events = [];
+
+  for (const day of allDays) {
+    const estimate = dayFuelEstimate(day);
+    if (!estimate.timestamp || estimate.timestamp <= anchor.timestamp || estimate.hours <= 0) continue;
+    events.push({
+      type: 'day',
+      priority: 0,
+      timestamp: estimate.timestamp,
+      id: day.id,
+      hours: estimate.hours,
+      liters: estimate.liters
+    });
+  }
+
+  for (const fuel of allFuel) {
+    const timestamp = fuelEventTimestamp(fuel);
+    if (!timestamp || timestamp < anchor.timestamp) continue;
+    if (anchor.kind === 'fuel' && fuel.id === anchor.id) {
+      fuelStates.set(fuel.id, { liters, percent: liters / capacity * 100, calibrated: true });
+      continue;
+    }
+    events.push({
+      type: 'fuel',
+      priority: 1, // bei exakt gleicher Zeit: erst Fahrt beenden, dann tanken
+      timestamp,
+      id: fuel.id,
+      litersAdded: fuel?.liters !== '' && fuel?.liters !== null && fuel?.liters !== undefined && Number.isFinite(Number(fuel.liters)) ? Math.max(0, Number(fuel.liters)) : 0,
+      tankPercent: fuel?.tankPercent !== '' && fuel?.tankPercent !== null && fuel?.tankPercent !== undefined && Number.isFinite(Number(fuel.tankPercent)) ? clamp(Number(fuel.tankPercent), 0, 100) : null
+    });
+  }
+
+  events.sort((a, b) => a.timestamp - b.timestamp || a.priority - b.priority);
+
+  for (const event of events) {
+    if (event.type === 'day') {
+      liters = Math.max(0, liters - event.liters);
+      consumedLiters += event.liters;
+      consumedHours += event.hours;
+      continue;
+    }
+
+    if (event.tankPercent !== null) {
+      liters = capacity * event.tankPercent / 100;
+      fuelStates.set(event.id, { liters, percent: event.tankPercent, calibrated: true });
+    } else {
+      liters = Math.min(capacity, liters + event.litersAdded);
+      addedLiters += event.litersAdded;
+      fuelStates.set(event.id, { liters, percent: liters / capacity * 100, calibrated: false });
+    }
+  }
+
+  return {
+    hasEstimate: true,
+    capacity,
+    rate: ESTIMATED_FUEL_RATE_LPH,
+    liters: clamp(liters, 0, capacity),
+    percent: clamp(liters / capacity * 100, 0, 100),
+    anchor,
+    consumedLiters,
+    consumedHours,
+    addedLiters,
+    fuelStates
+  };
+}
+
 function renderTank(settings) {
-  // Der Tankstand gehört zum Schiff und nicht nur zum gerade geöffneten Törn.
-  // Deshalb werden Tankvorgänge aus allen Törns berücksichtigt.
-  const fuelLevels = (allState.fuel || state.fuel || []).filter(item => item.tankPercent !== '' && item.tankPercent !== undefined && item.tankPercent !== null);
-  const latestFuelWithLevel = fuelLevels.sort((a, b) => syncTimestamp(b) - syncTimestamp(a))[0] || null;
-  const settingsTime = Date.parse(settings._fieldUpdatedAt?.currentTankPercent || settings._updatedAt || 0) || 0;
-  const fuelTime = syncTimestamp(latestFuelWithLevel);
-  const settingsHasValue = settings.currentTankPercent !== '' && settings.currentTankPercent !== undefined && settings.currentTankPercent !== null;
-  const useFuelLevel = latestFuelWithLevel && (!settingsHasValue || fuelTime > settingsTime);
-  const rawPercent = useFuelLevel ? latestFuelWithLevel.tankPercent : settings.currentTankPercent;
-  const hasValue = rawPercent !== '' && rawPercent !== undefined && rawPercent !== null;
-  const percent = hasValue ? clamp(num(rawPercent), 0, 100) : 0;
-  const capacity = num(settings.tankCapacity) || 400;
-  const liters = capacity * percent / 100;
-  $('#tankFill').style.width = `${percent}%`;
-  $('#tankPercent').textContent = hasValue ? `${dec2(percent)} %` : '—';
-  $('#tankLiters').textContent = hasValue
-    ? `etwa ${dec2(liters)} von ${dec2(capacity)} Litern · ${useFuelLevel ? 'aus dem letzten Tankbucheintrag' : 'aktueller Bordstand'}`
-    : `Tankkapazität ${dec2(capacity)} Liter · Stand noch nicht eingetragen`;
+  const estimate = calculateEstimatedTank(settings);
+  const capacity = estimate.capacity;
+
+  if (!estimate.hasEstimate) {
+    $('#tankFill').style.width = '0%';
+    $('#tankPercent').textContent = '—';
+    $('#tankLiters').textContent = `Tankkapazität ${dec2(capacity)} Liter · bitte einmal einen aktuellen Tankstand eintragen`;
+    if ($('#fuelEstimateHeadline')) $('#fuelEstimateHeadline').textContent = 'Ausgangsstand erforderlich';
+    if ($('#fuelEstimateDetail')) $('#fuelEstimateDetail').textContent = `Bitte einmal den aktuellen Tankstand (%) im Schiffspass oder bei einem Tankvorgang eintragen. Danach rechnet die App automatisch mit ${dec2(ESTIMATED_FUEL_RATE_LPH)} l/h weiter.`;
+    if ($('#fuelEstimatePercent')) $('#fuelEstimatePercent').textContent = '—';
+    if ($('#fuelEstimateLiters')) $('#fuelEstimateLiters').textContent = '—';
+    return;
+  }
+
+  $('#tankFill').style.width = `${estimate.percent}%`;
+  $('#tankPercent').textContent = `≈ ${dec2(estimate.percent)} %`;
+  $('#tankLiters').textContent = `geschätzt etwa ${dec2(estimate.liters)} von ${dec2(capacity)} Litern · Basis ${dec2(estimate.rate)} l/h`;
+
+  if ($('#fuelEstimateHeadline')) $('#fuelEstimateHeadline').textContent = `Geschätzter Stand: ${dec2(estimate.percent)} %`;
+  if ($('#fuelEstimateDetail')) {
+    const consumed = estimate.consumedHours > 0
+      ? `Seit dem letzten bekannten Tankstand: ${dec2(estimate.consumedHours)} h Fahrt ≈ ${dec2(estimate.consumedLiters)} l Verbrauch.`
+      : 'Seit dem letzten bekannten Tankstand ist noch keine Fahrzeit mit Verbrauch erfasst.';
+    $('#fuelEstimateDetail').textContent = `${consumed} Tankvorgänge werden chronologisch berücksichtigt. Grundlage ${dec2(estimate.rate)} l/h.`;
+  }
+  if ($('#fuelEstimatePercent')) $('#fuelEstimatePercent').textContent = `≈ ${dec2(estimate.percent)} %`;
+  if ($('#fuelEstimateLiters')) $('#fuelEstimateLiters').textContent = `ca. ${dec2(estimate.liters)} l`;
 }
 
 function renderDays() {
@@ -1843,6 +2037,7 @@ function renderDays() {
         <div><span>Zeit</span><strong>${esc(item.depart || '—')} – ${esc(item.arrive || '—')}</strong></div>
         <div><span>Tatsächlich</span><strong>${esc(item.weather || '—')}${item.seaFeel ? ` · ${esc(item.seaFeel)}` : ''}</strong></div>
         <div><span>Wind / Welle</span><strong>${esc(item.wind || '—')}${item.wave ? ` · ${esc(item.wave)}` : ''}</strong></div>
+        ${dayFuelEstimate(item).hours > 0 ? `<div><span>Diesel geschätzt</span><strong>≈ ${dec2(dayFuelEstimate(item).liters)} l · ${dec2(dayFuelEstimate(item).hours)} h</strong></div>` : ''}
       </div>
       ${item.tide || item.crew ? `<div class="day-facts">${item.tide ? `<span>↕ ${esc(item.tide)}</span>` : ''}${item.crew ? `<span>⚓ ${esc(item.crew)}</span>` : ''}</div>` : ''}
       ${summaryPreview ? `<p class="day-summary-preview">${esc(summaryPreview).replace(/\n/g, '<br>')}</p>` : ''}
@@ -1902,6 +2097,7 @@ function calculateFuelConsumption() {
 }
 
 function renderFuel() {
+  const tankEstimate = calculateEstimatedTank(getSettings());
   const liters = state.fuel.reduce((sum, item) => sum + num(item.liters), 0);
   const cost = state.fuel.reduce((sum, item) => sum + num(item.liters) * num(item.price), 0);
   const consumption = calculateFuelConsumption();
@@ -1927,7 +2123,13 @@ function renderFuel() {
         <div><span>Getankt</span><strong>${item.liters !== '' && item.liters !== undefined ? `${formatFuelDecimal(item.liters)} l` : '—'}</strong></div>
         <div><span>Preis je Liter</span><strong>${item.price !== '' && item.price !== undefined ? `${formatFuelDecimal(item.price, 3)} €` : '—'}</strong></div>
         <div><span>Motorstunden</span><strong>${item.engineHours !== '' && item.engineHours !== undefined ? `${formatFuelDecimal(item.engineHours)} h` : '—'}</strong></div>
-        <div><span>Tankstand danach</span><strong>${item.tankPercent !== '' && item.tankPercent !== undefined ? `${formatFuelDecimal(item.tankPercent)} %` : '—'}</strong></div>
+        <div><span>Tankstand danach</span><strong>${
+          item.tankPercent !== '' && item.tankPercent !== undefined && item.tankPercent !== null
+            ? `${formatFuelDecimal(item.tankPercent)} % · kalibriert`
+            : (tankEstimate.fuelStates.get(item.id)
+                ? `≈ ${formatFuelDecimal(tankEstimate.fuelStates.get(item.id).percent)} % · berechnet`
+                : '—')
+        }</strong></div>
       </div>
       ${intervalHtml}
       ${item.note ? `<p class="fuel-entry-note">${esc(item.note).replace(/\n/g, '<br>')}</p>` : ''}

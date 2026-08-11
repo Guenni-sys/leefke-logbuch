@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-8-sunset-overview-20260811';
+const APP_CACHE = 'leefke-v8-9-auto-fuel-20260811';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.8',
+  './index.html?v=8.9',
   './style.css',
-  './style.css?v=8.8',
+  './style.css?v=8.9',
   './app.js',
-  './app.js?v=8.8',
+  './app.js?v=8.9',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
