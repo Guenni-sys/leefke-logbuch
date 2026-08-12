@@ -1,0 +1,9 @@
+LEEFKE 8.11 – neue Übersicht
+
+- Neues Sonnenuntergangs-Titelbild auf Basis des freigegebenen Entwurfs.
+- Leefke im Titelbild mit natürlicheren, langgestreckten Proportionen.
+- Eigenes Desktop- und Mobilmotiv: keine Bildverzerrung durch unterschiedliche Displayformate.
+- „Aktueller Törn“ aus dem Titelbild entfernt; Törninformationen bleiben in der Statuskarte.
+- Sechs neue maritime Schnellzugriff-Kacheln: Tageslogbuch, Wetter & Gezeiten, Hafenbuch, Tankbuch, Törnarchiv und Mehr.
+- Kacheln passen sich auf Desktop, Tablet und Smartphone automatisch an.
+- Neue Bildassets werden vom Service Worker für Offlinebetrieb vorgeladen.

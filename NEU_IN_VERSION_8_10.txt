@@ -1,0 +1,15 @@
+LEEFKE 8.10 – TEILBETANKUNGEN KLAR BERÜCKSICHTIGT
+
+Tanklogik:
+- Ein Tankvorgang bedeutet NICHT automatisch 100 %.
+- Ohne eingetragenen tatsächlichen Tankstand danach werden nur die wirklich getankten Liter zum vorher berechneten Tankstand addiert.
+- Beispiel: vorher ca. 140 l + 80 l getankt = danach ca. 220 l (55 % bei 400 l Tank).
+- Wird ein tatsächlicher Tankstand danach in Prozent eingetragen, kalibriert dieser Wert die Berechnung ab diesem Zeitpunkt.
+- 100 % gelten nur, wenn 100 % ausdrücklich eingetragen werden.
+- Fahrten danach reduzieren den Tankstand weiterhin automatisch mit 4,0 l/h.
+- Änderungen und Löschungen von Fahrten oder Tankvorgängen werden chronologisch neu berechnet.
+
+Bedienung:
+- Beschriftung und Hilfetexte im Tankbuch wurden eindeutiger formuliert, damit Teilbetankungen nicht mit Volltanken verwechselt werden.
+
+Keine Supabase-Änderung erforderlich.

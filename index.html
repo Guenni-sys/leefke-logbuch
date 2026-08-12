@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.9">
+  <link rel="stylesheet" href="style.css?v=8.11">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -34,7 +34,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.9</small>
+        <small>BORDTAGEBUCH · VERSION 8.11</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -99,11 +99,31 @@
           </div>
         </article>
 
-        <section class="home-actions" aria-label="Schnellzugriff">
-          <button class="primary" data-open="day"><span>✎</span><strong>Tagestour eintragen</strong><small>nach dem Anlegen</small></button>
-          <button data-open="weather"><span>☀</span><strong>Wetter & Gezeiten</strong><small>Start → Ziel</small></button>
-          <button data-open="ports"><span>⚓</span><strong>Hafen eintragen</strong><small>Liegeplatz & Codes</small></button>
-          <button data-open="fuel"><span>⛽</span><strong>Tanken</strong><small>Verbrauch berechnen</small></button>
+        <section class="home-actions home-dashboard-actions" aria-label="Schnellzugriff">
+          <button data-open="day" class="home-dashboard-tile">
+            <span class="home-tile-head"><b aria-hidden="true">▤</b><strong>Tageslogbuch</strong></span>
+            <img src="home-tile-day.jpg" alt="" loading="eager">
+          </button>
+          <button data-open="weather" class="home-dashboard-tile">
+            <span class="home-tile-head"><b aria-hidden="true">☀</b><strong>Wetter &amp; Gezeiten</strong></span>
+            <img src="home-tile-weather.jpg" alt="" loading="eager">
+          </button>
+          <button data-open="ports" class="home-dashboard-tile">
+            <span class="home-tile-head"><b aria-hidden="true">⚓</b><strong>Hafenbuch</strong></span>
+            <img src="home-tile-ports.jpg" alt="" loading="lazy">
+          </button>
+          <button data-open="fuel" class="home-dashboard-tile">
+            <span class="home-tile-head"><b aria-hidden="true">⛽</b><strong>Tankbuch</strong></span>
+            <img src="home-tile-fuel.jpg" alt="" loading="lazy">
+          </button>
+          <button data-open="route" class="home-dashboard-tile">
+            <span class="home-tile-head"><b aria-hidden="true">⌁</b><strong>Törnarchiv</strong></span>
+            <img src="home-tile-route.jpg" alt="" loading="lazy">
+          </button>
+          <button id="homeMoreButton" type="button" class="home-dashboard-tile">
+            <span class="home-tile-head"><b aria-hidden="true">•••</b><strong>Mehr</strong></span>
+            <img src="home-tile-more.jpg" alt="" loading="lazy">
+          </button>
         </section>
 
         <div class="home-status-grid">
@@ -457,7 +477,7 @@
           <div><div class="card-kicker">AUTOMATISCHER TANKSTAND</div><h3 id="fuelEstimateHeadline">Noch kein Ausgangsstand</h3><p id="fuelEstimateDetail" class="meta">Grundlage: 4,0 Liter pro Fahrstunde. Ein bekannter Tankstand dient als Ausgangspunkt.</p></div>
           <div class="fuel-estimate-value"><strong id="fuelEstimatePercent">—</strong><span id="fuelEstimateLiters">—</span></div>
         </article>
-        <p class="meta fuel-calculation-note">Der <strong>Schätz-Tankstand</strong> rechnet mit 4,0 l/h und berücksichtigt alle gespeicherten Tagestouren sowie jeden Tankvorgang – auch über mehrere Törns hinweg. Der tatsächliche Durchschnittsverbrauch wird weiterhin separat aus <strong>nachgetankten Litern ÷ Motorstunden seit dem vorherigen Tankvorgang</strong> berechnet.</p>
+        <p class="meta fuel-calculation-note">Der <strong>Schätz-Tankstand</strong> rechnet mit 4,0 l/h und berücksichtigt alle gespeicherten Tagestouren sowie jeden Tankvorgang – auch über mehrere Törns hinweg. Beim Tanken werden nur die <strong>tatsächlich eingefüllten Liter</strong> zum vorherigen Stand addiert; <strong>100 % werden niemals automatisch angenommen</strong>. Der tatsächliche Durchschnittsverbrauch wird weiterhin separat aus <strong>nachgetankten Litern ÷ Motorstunden seit dem vorherigen Tankvorgang</strong> berechnet.</p>
         <form id="fuelForm" class="card form fuel-form" novalidate>
           <input type="hidden" name="id">
           <div class="wide section-heading"><span>⛽</span><div><small>TANKVORGANG</small><h3 id="fuelFormTitle">Tanken dokumentieren</h3></div></div>
@@ -467,7 +487,7 @@
           <label>Getankte Liter<input type="text" inputmode="decimal" name="liters" autocomplete="off" placeholder="z. B. 120,5"><small>Komma oder Punkt möglich</small></label>
           <label>Preis je Liter (€)<input type="text" inputmode="decimal" name="price" autocomplete="off" placeholder="z. B. 1,699"><small>Der Gesamtpreis wird automatisch berechnet</small></label>
           <label>Motorstunden beim Tanken<input type="text" inputmode="decimal" name="engineHours" autocomplete="off" placeholder="z. B. 954,3"></label>
-          <label>Tankstand danach (%)<input type="text" inputmode="decimal" name="tankPercent" autocomplete="off" placeholder="optional, 0 bis 100"><small>Wenn bekannt, kalibriert dieser Wert die Schätzung exakt. Sonst werden die getankten Liter zum Schätzstand addiert.</small></label>
+          <label>Tatsächlicher Tankstand danach (%)<input type="text" inputmode="decimal" name="tankPercent" autocomplete="off" placeholder="optional, z. B. 72"><small>Nur eintragen, wenn du den Stand wirklich kennst. Leer lassen = bisheriger Schätzstand + tatsächlich getankte Liter. Die App setzt einen Tankvorgang niemals automatisch auf 100 %.</small></label>
           <label class="wide">Notiz<textarea rows="3" name="note" placeholder="z. B. vollgetankt, Additiv ergänzt …"></textarea></label>
           <div id="fuelFormStatus" class="form-status wide" hidden></div>
           <div class="wide actions fuel-form-actions"><button id="fuelSaveButton" class="primary">Tankvorgang speichern</button><button id="fuelCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="reset">Leeren</button></div>
@@ -763,6 +783,6 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=8.9"></script>
+  <script src="app.js?v=8.11"></script>
 </body>
 </html>

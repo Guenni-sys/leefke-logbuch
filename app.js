@@ -1,4 +1,4 @@
-const APP_VERSION = '8.9';
+const APP_VERSION = '8.11';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -2009,7 +2009,7 @@ function renderTank(settings) {
     const consumed = estimate.consumedHours > 0
       ? `Seit dem letzten bekannten Tankstand: ${dec2(estimate.consumedHours)} h Fahrt ≈ ${dec2(estimate.consumedLiters)} l Verbrauch.`
       : 'Seit dem letzten bekannten Tankstand ist noch keine Fahrzeit mit Verbrauch erfasst.';
-    $('#fuelEstimateDetail').textContent = `${consumed} Tankvorgänge werden chronologisch berücksichtigt. Grundlage ${dec2(estimate.rate)} l/h.`;
+    $('#fuelEstimateDetail').textContent = `${consumed} Tankvorgänge werden chronologisch berücksichtigt. Teilbetankungen erhöhen den Stand nur um die tatsächlich getankten Liter; 100 % gelten nur bei ausdrücklich eingetragenem Tankstand. Grundlage ${dec2(estimate.rate)} l/h.`;
   }
   if ($('#fuelEstimatePercent')) $('#fuelEstimatePercent').textContent = `≈ ${dec2(estimate.percent)} %`;
   if ($('#fuelEstimateLiters')) $('#fuelEstimateLiters').textContent = `ca. ${dec2(estimate.liters)} l`;
@@ -4332,6 +4332,12 @@ $('#portForm').addEventListener('reset', () => window.setTimeout(() => {
 
 $('#menu').onclick = () => setMobileMenu(!$('#nav').classList.contains('open'));
 $$('nav button').forEach(button => button.onclick = () => view(button.dataset.view));
+if ($('#homeMoreButton')) $('#homeMoreButton').onclick = () => {
+  const moreGroup = $('#navMoreGroup');
+  if (moreGroup) moreGroup.open = true;
+  if (window.innerWidth <= 850) setMobileMenu(true);
+};
+
 $$('[data-open]').forEach(button => button.onclick = () => view(button.dataset.open));
 $$('[data-mobile-view]').forEach(button => button.onclick = () => view(button.dataset.mobileView));
 $('#mobileMoreButton')?.addEventListener('click', () => setMobileMenu(!$('#nav').classList.contains('open')));

@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-9-auto-fuel-20260811';
+const APP_CACHE = 'leefke-v8-11-dashboard-20260812';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.9',
+  './index.html?v=8.11',
   './style.css',
-  './style.css?v=8.9',
+  './style.css?v=8.11',
   './app.js',
-  './app.js?v=8.9',
+  './app.js?v=8.11',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
@@ -23,7 +23,13 @@ const ASSETS = [
   './leefke-overview-real-desktop.jpg',
   './leefke-overview-real-mobile.jpg',
   './leefke-overview-sunset-desktop.jpg',
-  './leefke-overview-sunset-mobile.jpg'
+  './leefke-overview-sunset-mobile.jpg',
+  './home-tile-day.jpg',
+  './home-tile-weather.jpg',
+  './home-tile-ports.jpg',
+  './home-tile-fuel.jpg',
+  './home-tile-route.jpg',
+  './home-tile-more.jpg'
 ];
 
 self.addEventListener('install', event => {
