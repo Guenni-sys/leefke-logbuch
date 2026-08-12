@@ -1,4 +1,4 @@
-const APP_VERSION = '8.11';
+const APP_VERSION = '8.12';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1266,6 +1266,43 @@ async function updateVacationUi(context = {}) {
   applyHolidayMode();
 }
 
+let mobileDayFormOpen = false;
+
+function dayFormIsEditing() {
+  const form = $('#dayForm');
+  return Boolean(editingDayId || form?.elements?.id?.value);
+}
+
+function syncMobileDayEntryUi(options = {}) {
+  const form = $('#dayForm');
+  const button = $('#newDayEntryButton');
+  if (!form || !button) return;
+
+  const mobile = window.innerWidth <= 850;
+  const editing = dayFormIsEditing();
+  button.closest('.day-mobile-entry-bar')?.classList.toggle('is-editing', editing);
+  if (!mobile) {
+    form.classList.remove('mobile-day-form-collapsed');
+    button.setAttribute('aria-expanded', 'true');
+    return;
+  }
+
+  if (editing || options.open === true) mobileDayFormOpen = true;
+  if (!editing && options.open === false) mobileDayFormOpen = false;
+
+  form.classList.toggle('mobile-day-form-collapsed', !mobileDayFormOpen);
+  button.setAttribute('aria-expanded', String(mobileDayFormOpen));
+  button.innerHTML = mobileDayFormOpen
+    ? '<span aria-hidden="true">−</span> Erfassung schließen'
+    : '<span aria-hidden="true">＋</span> Neuer Eintrag';
+
+  if (options.scroll && mobileDayFormOpen) {
+    window.requestAnimationFrame(() => form.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+  }
+
+  if (document.querySelector('.view.active')?.id === 'day') updateMobileChrome('day');
+}
+
 const MOBILE_SAVE_TARGETS = {
   day: ['dayForm', 'Tagestour speichern'],
   ports: ['portForm', 'Hafen speichern'],
@@ -1298,20 +1335,33 @@ function updateMobileChrome(id) {
     return;
   }
   const [formId, label] = target;
+  if (id === 'day' && window.innerWidth <= 850 && !mobileDayFormOpen && !dayFormIsEditing()) {
+    dock.hidden = true;
+    saveButton.dataset.form = '';
+    return;
+  }
   saveButton.dataset.form = formId;
   const text = saveButton.querySelector('strong');
   if (text) text.textContent = label;
   dock.hidden = false;
 }
 
-function view(id) {
+function view(id, options = {}) {
   $$('.view').forEach(section => section.classList.toggle('active', section.id === id));
   $$('nav button').forEach(button => button.classList.toggle('active', button.dataset.view === id));
   closeMobileMenu();
   updateMobileChrome(id);
   if (id === 'report') buildReport();
   if (id === 'sync') updateSyncUI();
-  if (id === 'day') prepareDayForm();
+  if (id === 'day') {
+    prepareDayForm();
+    if (window.innerWidth <= 850) {
+      const shouldOpen = Boolean(options.openDayForm || dayFormIsEditing());
+      syncMobileDayEntryUi({ open: shouldOpen });
+    } else {
+      syncMobileDayEntryUi({ open: true });
+    }
+  }
   if (id === 'weather') {
     window.setTimeout(() => {
       prepareWeatherView();
@@ -2684,7 +2734,8 @@ if (dayForm) {
       const cloudNote = currentSession
         ? (navigator.onLine ? 'Cloud-Abgleich läuft automatisch.' : 'Offline gespeichert; der Cloud-Abgleich folgt bei Internetverbindung.')
         : 'Lokal gespeichert; für den Abgleich mit anderen Geräten bitte anmelden.';
-      setDayFormStatus(`Tagestour gespeichert. Sie steht unten bei den gespeicherten Tagestouren. ${cloudNote}`, 'success');
+      setDayFormStatus(`Tagestour gespeichert. Sie steht bei den gespeicherten Tagestouren. ${cloudNote}`, 'success');
+      if (window.innerWidth <= 850) syncMobileDayEntryUi({ open: false });
       toast('Tagestour gespeichert');
       window.setTimeout(() => {
         const savedCard = document.querySelector(`[data-store="days"][data-record-id="${saved.id}"]`);
@@ -2713,6 +2764,7 @@ if (dayForm) {
     window.setTimeout(() => {
       setDayFormStatus('Bearbeiten beendet. Der gespeicherte Eintrag wurde nicht verändert.', 'info');
       prepareDayForm();
+      if (window.innerWidth <= 850) syncMobileDayEntryUi({ open: false });
     }, 0);
   });
 }
@@ -3238,7 +3290,7 @@ function routeToDay(routeId) {
   form.elements.tide.value = stage.tide || '';
   form.elements.crew.value = getSettings().defaultCrew || '';
   form.elements.summary.value = [stage.berth ? `Geplanter Liegeplatz: ${stage.berth}` : '', stage.note || ''].filter(Boolean).join('\n\n');
-  view('day');
+  view('day', { openDayForm: true });
   setDayFormStatus('Die geplante Etappe wurde in das Formular übernommen. Ergänze die tatsächlichen Werte und tippe anschließend auf „Tagestour speichern“.', 'info');
   form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   toast('Etappe in die Tagestour übernommen');
@@ -3271,6 +3323,15 @@ $('#addMaterialRow')?.addEventListener('click',()=>addMaterialRow());
 $('#maintenanceForm')?.addEventListener('reset',()=>window.setTimeout(()=>{renderMaterialEditor();updateNextServicePreview()},0));
 
 $('#daySearch').oninput = renderDays;
+$('#newDayEntryButton')?.addEventListener('click', () => {
+  if (window.innerWidth > 850) return;
+  if (mobileDayFormOpen) {
+    syncMobileDayEntryUi({ open: false });
+    $('#savedDaysSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    return;
+  }
+  syncMobileDayEntryUi({ open: true, scroll: true });
+});
 $('#showSavedDaysButton')?.addEventListener('click', () => $('#savedDaysSection')?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
 $('#dayViewEditButton')?.addEventListener('click', () => {
   const id = dayViewRecordId;
@@ -4338,7 +4399,7 @@ if ($('#homeMoreButton')) $('#homeMoreButton').onclick = () => {
   if (window.innerWidth <= 850) setMobileMenu(true);
 };
 
-$$('[data-open]').forEach(button => button.onclick = () => view(button.dataset.open));
+$$('[data-open]').forEach(button => button.onclick = () => view(button.dataset.open, { openDayForm: button.dataset.newDay === 'true' }));
 $$('[data-mobile-view]').forEach(button => button.onclick = () => view(button.dataset.mobileView));
 $('#mobileMoreButton')?.addEventListener('click', () => setMobileMenu(!$('#nav').classList.contains('open')));
 $('#navBackdrop')?.addEventListener('click', closeMobileMenu);
@@ -4351,6 +4412,9 @@ $('#mobileSaveButton')?.addEventListener('click', () => {
 });
 window.addEventListener('resize', () => {
   if (window.innerWidth > 850) closeMobileMenu();
+  const activeView = document.querySelector('.view.active')?.id;
+  if (activeView === 'day') syncMobileDayEntryUi();
+  if (activeView) updateMobileChrome(activeView);
 });
 document.addEventListener('keydown', event => {
   if (event.key === 'Escape') closeMobileMenu();

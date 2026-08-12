@@ -1,0 +1,9 @@
+LEEFKE 8.12 – Mobiles Tageslog kompakter
+
+- In der mobilen Ansicht werden gespeicherte Tagestouren sofort sichtbar.
+- Das lange leere Erfassungsformular ist beim Öffnen des Tageslogbuchs eingeklappt.
+- Ein kompakter Button „+ Neuer Eintrag“ öffnet die Erfassung erst bei Bedarf.
+- Nach dem Speichern klappt das Formular auf dem Handy wieder zu und der neue Eintrag wird direkt angezeigt.
+- Beim Bearbeiten eines vorhandenen Eintrags öffnet sich das Formular automatisch.
+- Die mobile Speichern-Leiste erscheint nur, wenn die Erfassung tatsächlich geöffnet ist.
+- Desktop-Verhalten bleibt unverändert.
