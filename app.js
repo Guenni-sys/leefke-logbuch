@@ -1349,6 +1349,16 @@ function syncMobileEntriesForView(viewId, options = {}) {
   }
 }
 
+function closeOtherMaintenanceEntry(key) {
+  if (!['maintenance', 'deadline'].includes(key)) return;
+  const otherKey = key === 'maintenance' ? 'deadline' : 'maintenance';
+  const otherConfig = MOBILE_ENTRY_CONFIG[otherKey];
+  const otherForm = otherConfig ? document.getElementById(otherConfig.formId) : null;
+  if (otherForm) otherForm.reset();
+  mobileEntryOpen[otherKey] = false;
+  syncMobileEntryUi(otherKey, { open: false });
+}
+
 function mobilePrimaryEntryIsOpen(viewId) {
   if (window.innerWidth > 850) return true;
   if (viewId === 'day') return mobileDayFormOpen || dayFormIsEditing();
@@ -2861,6 +2871,33 @@ function updateFuelFormMode(editing = false) {
   if (cancel) cancel.hidden = !editing;
 }
 
+function updatePortFormMode(editing = false) {
+  const title = $('#portFormTitle');
+  const save = $('#portSaveButton');
+  const cancel = $('#portCancelEditButton');
+  if (title) title.textContent = editing ? 'Hafen bearbeiten' : 'Hafen erfassen';
+  if (save) save.textContent = editing ? 'Änderungen speichern' : 'Hafen speichern';
+  if (cancel) cancel.hidden = !editing;
+}
+
+function updateMaintenanceFormMode(editing = false) {
+  const title = $('#maintenanceFormTitle');
+  const save = $('#maintenanceSaveButton');
+  const cancel = $('#maintenanceCancelEditButton');
+  if (title) title.textContent = editing ? 'Wartung bearbeiten' : 'Wartung erfassen';
+  if (save) save.textContent = editing ? 'Änderungen speichern' : 'Wartung speichern';
+  if (cancel) cancel.hidden = !editing;
+}
+
+function updateDeadlineFormMode(editing = false) {
+  const title = $('#deadlineFormTitle');
+  const save = $('#deadlineSaveButton');
+  const cancel = $('#deadlineCancelEditButton');
+  if (title) title.textContent = editing ? 'Erinnerung bearbeiten' : 'Prüfungen & Ablaufdaten';
+  if (save) save.textContent = editing ? 'Änderungen speichern' : 'Erinnerung speichern';
+  if (cancel) cancel.hidden = !editing;
+}
+
 const fuelForm = $('#fuelForm');
 if (fuelForm) {
   fuelForm.onsubmit = async event => {
@@ -2960,6 +2997,8 @@ if (legacyRouteForm) legacyRouteForm.onsubmit = async event => { event.preventDe
 
 const portFormV8=$('#portForm');
 if(portFormV8) portFormV8.onsubmit=async event=>{event.preventDefault();const item=formObject(portFormV8);if(!String(item.name||'').trim())return;try{if(!String(item.coords||'').trim())await geocodePortIntoForm(portFormV8);const current=item.id?await getOne('ports',item.id):null;const finalItem={...(current||{}),...formObject(portFormV8),id:item.id||uid(),created:current?.created||Date.now()};await put('ports',finalItem);portFormV8.reset();resetPortGpsAssistant();syncRatingPickers(portFormV8);await refresh();syncMobileEntryUi('ports',{open:false});toast(finalItem.coords?'Hafen mit Position gespeichert':'Hafen gespeichert – Koordinaten konnten nicht automatisch gefunden werden');window.setTimeout(()=>document.querySelector(`[data-store="ports"][data-record-id="${finalItem.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),120);}catch(error){console.error(error);alert('Der Hafen konnte nicht gespeichert werden. '+(error.message||''));}};
+if(portFormV8) portFormV8.addEventListener('reset',()=>window.setTimeout(()=>updatePortFormMode(false),0));
+$('#portCancelEditButton')?.addEventListener('click',()=>{portFormV8.reset();updatePortFormMode(false);syncMobileEntryUi('ports',{open:false});toast('Bearbeiten beendet. Der gespeicherte Hafen wurde nicht verändert.');});
 
 function maintenanceMaterialsFromEditor(){return [...document.querySelectorAll('#materialRows .material-row')].map(row=>({name:row.querySelector('[data-material-name]')?.value.trim()||'',quantity:row.querySelector('[data-material-qty]')?.value.trim()||'',cost:parseFuelDecimal(row.querySelector('[data-material-cost]')?.value)||0})).filter(x=>x.name||x.cost);}
 function renderMaterialEditor(materials=[]){const box=$('#materialRows');if(!box)return;box.innerHTML='';(materials.length?materials:[{name:'',quantity:'',cost:''}]).forEach(add=>addMaterialRow(add));updateMaterialTotal();}
@@ -2968,6 +3007,8 @@ function updateMaterialTotal(){const total=maintenanceMaterialsFromEditor().redu
 function updateNextServicePreview(){const form=$('#maintenanceForm');if(!form)return;const date=form.elements.date.value;const h=parseFuelDecimal(form.elements.engineHours.value);const days=parseFuelDecimal(form.elements.intervalDays.value);const hours=parseFuelDecimal(form.elements.intervalHours.value);const parts=[];if(date&&days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+Number(days));parts.push(`spätestens ${fmtDate(dateInputValue(d))}`)}if(h!==''&&hours)parts.push(`bei ${dec2(Number(h)+Number(hours))} Motorstunden`);$('#nextServicePreview').textContent=parts.length?`Nächster Service: ${parts.join(' oder ')}`:'Nächster Termin wird aus Datum und/oder Motorstunden berechnet.';}
 const maintenanceFormV8=$('#maintenanceForm');
 if(maintenanceFormV8) maintenanceFormV8.onsubmit=async event=>{event.preventDefault();const values=formObject(maintenanceFormV8);const existing=values.id?await getOne('maintenance',values.id):null;const engine=parseFuelDecimal(values.engineHours);const intervalDays=parseFuelDecimal(values.intervalDays);const intervalHours=parseFuelDecimal(values.intervalHours);let dueDate='';if(values.date&&intervalDays){const d=new Date(`${values.date}T12:00:00`);d.setDate(d.getDate()+Number(intervalDays));dueDate=dateInputValue(d)}const dueHours=engine!==''&&intervalHours?Number(engine)+Number(intervalHours):'';const materials=maintenanceMaterialsFromEditor();const cost=materials.reduce((s,x)=>s+num(x.cost),0);const saved=await put('maintenance',{...(existing||{}),id:values.id||uid(),date:values.date,category:values.category,title:values.title,engineHours:engine,intervalDays,intervalHours,dueDate,dueHours,cost,materials,note:values.note||'',done:true,created:existing?.created||Date.now()});maintenanceFormV8.reset();renderMaterialEditor();updateNextServicePreview();await refresh();syncMobileEntryUi('maintenance',{open:false});toast('Wartung gespeichert');window.setTimeout(()=>document.querySelector(`[data-store="maintenance"][data-record-id="${saved.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),120);};
+if(maintenanceFormV8) maintenanceFormV8.addEventListener('reset',()=>window.setTimeout(()=>updateMaintenanceFormMode(false),0));
+$('#maintenanceCancelEditButton')?.addEventListener('click',()=>{maintenanceFormV8.reset();renderMaterialEditor();updateNextServicePreview();updateMaintenanceFormMode(false);syncMobileEntryUi('maintenance',{open:false});toast('Bearbeiten beendet. Die gespeicherte Wartung wurde nicht verändert.');});
 
 $('#settingsForm').onsubmit = async event => {
   event.preventDefault();
@@ -3301,9 +3342,12 @@ async function editItem(kind, id) {
   view(map[kind] === 'port' ? 'ports' : map[kind]);
   fillForm(form, item);
   if (kind === 'maintenance') {
+    closeOtherMaintenanceEntry('maintenance');
     renderMaterialEditor(Array.isArray(item.materials) ? item.materials : []);
     updateNextServicePreview();
+    updateMaintenanceFormMode(true);
   }
+  if (kind === 'ports') updatePortFormMode(true);
   if (kind === 'fuel') {
     updateFuelFormMode(true);
     setFuelFormStatus('Der Tankvorgang ist vollständig geladen. Änderungen werden erst mit „Änderungen speichern“ übernommen.', 'info');
@@ -3390,6 +3434,7 @@ for (const [key, config] of Object.entries(MOBILE_ENTRY_CONFIG)) {
   document.getElementById(config.buttonId)?.addEventListener('click', () => {
     if (mobileEntryIsEditing(key)) return;
     const nextOpen = !mobileEntryOpen[key];
+    if (nextOpen) closeOtherMaintenanceEntry(key);
     syncMobileEntryUi(key, { open: nextOpen, scroll: nextOpen });
     if (!nextOpen) {
       const listTarget = key === 'ports' ? $('#portList')
@@ -6733,7 +6778,9 @@ window.addEventListener('load', () => {
 
 const deadlineForm=$('#deadlineForm');
 if(deadlineForm) deadlineForm.onsubmit=async event=>{event.preventDefault();const v=formObject(deadlineForm);let due=v.dueDate||'';const interval=parseFuelDecimal(v.intervalDays);if(!due&&v.lastCheck&&interval){const d=new Date(`${v.lastCheck}T12:00:00`);d.setDate(d.getDate()+Number(interval));due=dateInputValue(d)}const existing=v.id?await getOne('safety',v.id):null;await put('safety',{...(existing||{}),id:v.id||uid(),name:v.name,lastCheck:v.lastCheck||'',intervalDays:interval,dueDate:due,remindDays:parseFuelDecimal(v.remindDays)||60,status:'ok',note:v.note||''});deadlineForm.reset();await refresh();syncMobileEntryUi('deadline',{open:false});toast('Erinnerung gespeichert');};
-window.editDeadline=async id=>{const item=await getOne('safety',id);if(!item)return;fillForm($('#deadlineForm'),item);syncMobileEntryUi('deadline',{open:true});$('#deadlineForm').scrollIntoView({behavior:'smooth',block:'center'});};
+deadlineForm?.addEventListener('reset',()=>window.setTimeout(()=>updateDeadlineFormMode(false),0));
+$('#deadlineCancelEditButton')?.addEventListener('click',()=>{deadlineForm.reset();updateDeadlineFormMode(false);syncMobileEntryUi('deadline',{open:false});toast('Bearbeiten beendet. Die gespeicherte Erinnerung wurde nicht verändert.');});
+window.editDeadline=async id=>{const item=await getOne('safety',id);if(!item)return;closeOtherMaintenanceEntry('deadline');fillForm($('#deadlineForm'),item);updateDeadlineFormMode(true);syncMobileEntryUi('deadline',{open:true});$('#deadlineForm').scrollIntoView({behavior:'smooth',block:'center'});};
 
 // Formulare für Bordbetrieb
 for (const [store, formId] of [['inventory','inventoryForm'],['safety','safetyForm']]) {
