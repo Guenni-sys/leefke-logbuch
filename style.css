@@ -2994,3 +2994,39 @@ body{
   #day>.title p{font-size:.82rem;line-height:1.45;margin-bottom:0}
   #day>.day-mobile-entry-bar{margin-bottom:10px}
 }
+
+/* ========================================================================== 
+   LEEFKE 8.13 – mobile Erfassung: Listen zuerst, Formulare nur auf Wunsch
+   ========================================================================== */
+.mobile-entry-bar{display:none}
+.mobile-entry-bar.is-editing{display:none!important}
+
+@media(max-width:850px){
+  .mobile-entry-bar{display:flex;margin:0 0 12px}
+  .mobile-entry-bar button{width:100%;min-height:48px;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:800}
+  .mobile-entry-bar button span{font-size:1.2rem;line-height:1}
+  .mobile-entry-form-collapsed{display:none!important}
+
+  #ports>.mobile-entry-bar,
+  #fuel>.mobile-entry-bar,
+  #maintenance>.mobile-entry-bar,
+  #photos>.mobile-entry-bar{margin-top:0}
+
+  #ports>#portForm,
+  #fuel>#fuelForm,
+  #maintenance>#maintenanceForm,
+  #photos>#photoForm{margin-bottom:14px}
+
+  .deadline-card .nested-entry-bar{margin:12px 0 10px}
+  .deadline-card #deadlineForm{margin:0 0 12px}
+
+  #ports>.toolbar{margin-top:6px}
+  #fuel>.fuel-saved-heading{margin-top:10px}
+  #maintenance>#maintenanceList{margin-top:4px}
+  #photos>#photoGrid{margin-top:8px}
+}
+
+@media(max-width:430px){
+  .mobile-entry-bar{margin-bottom:10px}
+  .mobile-entry-bar button{min-height:46px}
+}

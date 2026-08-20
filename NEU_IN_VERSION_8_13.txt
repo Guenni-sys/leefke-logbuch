@@ -1,0 +1,16 @@
+LEEFKE 8.13 – MOBILE ERFASSUNG ÜBERSICHTLICHER
+
+Die mobilen Eingabebereiche folgen jetzt einheitlich dem Prinzip „Einträge zuerst, Erfassung auf Wunsch“.
+
+Neu:
+- Hafenbuch: „Neuer Hafen“ öffnet erst dann die komplette Hafenerfassung.
+- Tankbuch: „Neuer Tankvorgang“ öffnet erst dann das Tankformular.
+- Wartung: „Neue Wartung“ öffnet die Wartungserfassung.
+- Erinnerungen/Fristen: „Neue Erinnerung“ öffnet das Formular innerhalb der Fristenkarte.
+- Fotos: „Foto hinzufügen“ öffnet erst dann die Fotoerfassung.
+- Beim Bearbeiten eines bestehenden Hafen-, Tank-, Wartungs- oder Erinnerungseintrags öffnet sich das passende Formular automatisch.
+- Nach dem Speichern klappt das Formular auf Handy/Tablet wieder zu; die gespeicherten Einträge stehen wieder im Vordergrund.
+- Die feste mobile Speichern-Leiste erscheint nur, wenn das jeweilige Hauptformular tatsächlich geöffnet ist.
+- Desktop bleibt bewusst wie bisher: Auf großen Bildschirmen sind die Formulare weiterhin direkt sichtbar.
+
+Nicht geändert wurden Wetter, Einstellungen, Bericht, Synchronisierung und Backup, weil es sich dort nicht um fortlaufende Listen mit „neuen Einträgen“ handelt.
