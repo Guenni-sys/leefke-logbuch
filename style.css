@@ -3095,3 +3095,41 @@ body{
   .passage-diary-forecast{grid-template-columns:1fr}
   .passage-diary-section button,.passage-diary-actions button{width:100%}
 }
+
+/* LEEFKE 8.16 · intelligente Foto-Galerie */
+.photo-import-form{align-items:start}
+.photo-import-intro h3{margin:4px 0 5px}
+.photo-import-intro p{margin:0;max-width:820px}
+.photo-file-picker{display:grid!important;gap:8px}
+.photo-file-picker input[type="file"]{width:100%;min-height:52px;padding:10px;border:1px dashed rgba(29,66,81,.28);border-radius:12px;background:#fff}
+.photo-file-picker small{font-weight:500;color:var(--muted)}
+.photo-import-status{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;padding:11px 13px;border-radius:12px;border:1px solid var(--line);background:#f7f4ec}
+.photo-import-status strong{color:var(--navy-900)}
+.photo-import-status span{color:var(--muted)}
+.photo-import-status.working{background:#eef4f6;border-color:rgba(29,66,81,.18)}
+.photo-import-status.success{background:#edf6ef;border-color:#c8dfcf}
+.photo-import-status.error{background:#fff1ef;border-color:#e2c3be}
+#photoGrid.gallery.photo-gallery{display:grid!important;columns:auto!important;gap:20px}
+.photo-day-group{display:block;min-width:0}
+.photo-day-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:2px 0 10px;padding:0 2px 8px;border-bottom:1px solid rgba(29,66,81,.14)}
+.photo-day-heading>div{display:flex;align-items:baseline;justify-content:space-between;gap:12px;width:100%;min-width:0}
+.photo-day-heading strong{font-family:Georgia,'Times New Roman',serif;font-size:1.12rem;color:var(--navy-900);text-transform:capitalize}
+.photo-day-heading span{font-size:.78rem;color:var(--muted);white-space:nowrap}
+.photo-day-photos{columns:3 260px;column-gap:14px}
+.photo-day-photos .photo{break-inside:avoid}
+#photoGrid .photo-location{margin-top:4px;font-weight:800;font-size:.82rem;color:#315f70;line-height:1.25}
+#photoGrid .photo figcaption .meta{margin-top:4px;line-height:1.35}
+.photo-edit-dialog .compact-form{margin-top:12px}
+.photo-edit-dialog .dialog-actions{margin-top:4px}
+
+@media(max-width:850px){
+  .photo-day-photos{columns:2 190px;column-gap:10px}
+  .photo-import-status{display:grid;gap:3px}
+}
+@media(max-width:560px){
+  .photo-day-heading>div{align-items:flex-start;flex-direction:column;gap:2px}
+  .photo-day-heading strong{font-size:1rem}
+  .photo-day-photos{columns:1!important}
+  #photoGrid.gallery.photo-gallery{gap:16px}
+  .photo-file-picker input[type="file"]{font-size:16px}
+}

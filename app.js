@@ -1,4 +1,4 @@
-const APP_VERSION = '8.15';
+const APP_VERSION = '8.16';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1302,7 +1302,7 @@ const MOBILE_ENTRY_CONFIG = {
   fuel: { view: 'fuel', formId: 'fuelForm', buttonId: 'newFuelEntryButton', closed: 'Neuer Tankvorgang', open: 'Erfassung schließen' },
   maintenance: { view: 'maintenance', formId: 'maintenanceForm', buttonId: 'newMaintenanceEntryButton', closed: 'Neue Wartung', open: 'Erfassung schließen' },
   deadline: { view: 'maintenance', formId: 'deadlineForm', buttonId: 'newDeadlineEntryButton', closed: 'Neue Erinnerung', open: 'Erfassung schließen' },
-  photos: { view: 'photos', formId: 'photoForm', buttonId: 'newPhotoEntryButton', closed: 'Foto hinzufügen', open: 'Erfassung schließen' }
+  photos: { view: 'photos', formId: 'photoForm', buttonId: 'newPhotoEntryButton', closed: 'Fotos hinzufügen', open: 'Erfassung schließen' }
 };
 
 const mobileEntryOpen = Object.fromEntries(Object.keys(MOBILE_ENTRY_CONFIG).map(key => [key, false]));
@@ -5520,18 +5520,215 @@ async function openDocument(id) {
 }
 window.openDocument = openDocument;
 
+const photoPlaceCache = new Map();
+let lastPhotoReverseGeocodeAt = 0;
+
+function photoDateParts(value, fallbackTimestamp = 0) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    const pad = number => String(number).padStart(2, '0');
+    return {
+      date: `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}`,
+      time: `${pad(value.getHours())}:${pad(value.getMinutes())}`,
+      dateTime: `${value.getFullYear()}-${pad(value.getMonth() + 1)}-${pad(value.getDate())}T${pad(value.getHours())}:${pad(value.getMinutes())}:${pad(value.getSeconds())}`
+    };
+  }
+  const text = String(value || '').trim();
+  const match = text.match(/(\d{4})[:\-](\d{2})[:\-](\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (match) {
+    const [, year, month, day, hour, minute, second = '00'] = match;
+    return { date: `${year}-${month}-${day}`, time: `${hour}:${minute}`, dateTime: `${year}-${month}-${day}T${hour}:${minute}:${second}` };
+  }
+  if (fallbackTimestamp) return photoDateParts(new Date(fallbackTimestamp));
+  return { date: dateInputValue(), time: '', dateTime: `${dateInputValue()}T12:00:00` };
+}
+
+async function readPhotoMetadata(file) {
+  let metadata = {};
+  let source = 'Dateidatum';
+  if (window.exifr?.parse) {
+    try {
+      metadata = await window.exifr.parse(file, { tiff: true, ifd0: true, exif: true, gps: true, xmp: true, mergeOutput: true, sanitize: true }) || {};
+      source = metadata.DateTimeOriginal || metadata.CreateDate || metadata.DateTimeDigitized ? 'EXIF' : 'Dateidatum';
+    } catch (error) {
+      console.warn('EXIF-Daten konnten nicht gelesen werden:', file.name, error);
+    }
+  }
+  const originalDate = metadata.DateTimeOriginal || metadata.CreateDate || metadata.DateTimeDigitized || metadata.ModifyDate || null;
+  const parts = photoDateParts(originalDate, file.lastModified || Date.now());
+  const latitude = Number(metadata.latitude ?? metadata.Latitude);
+  const longitude = Number(metadata.longitude ?? metadata.Longitude);
+  return {
+    ...parts,
+    source,
+    latitude: Number.isFinite(latitude) && Math.abs(latitude) <= 90 ? latitude : null,
+    longitude: Number.isFinite(longitude) && Math.abs(longitude) <= 180 ? longitude : null,
+    hasGps: Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180
+  };
+}
+
+function photoTimeMinutes(value) {
+  const match = String(value || '').match(/^(\d{1,2}):(\d{2})/);
+  if (!match) return null;
+  return Number(match[1]) * 60 + Number(match[2]);
+}
+
+function photoPlaceCoords(name) {
+  if (!name) return null;
+  const fixed = fixedLocationByName(name);
+  if (fixed) return { latitude: fixed.latitude, longitude: fixed.longitude };
+  const port = portByName(name);
+  const portCoords = parseCoordinateString(port?.coords);
+  if (portCoords) return portCoords;
+  const known = REPORT_PLACE_COORDS[normalizePlaceName(name)];
+  return known ? { latitude: known[0], longitude: known[1] } : null;
+}
+
+function findPhotoDay(date, captureTime = '', location = null) {
+  const candidates = (state.days || []).filter(day => day.date === date);
+  if (!candidates.length) return null;
+  if (candidates.length === 1) return candidates[0];
+  const minute = photoTimeMinutes(captureTime);
+  if (minute !== null) {
+    const timed = candidates.filter(day => {
+      const depart = photoTimeMinutes(day.depart);
+      const arrive = photoTimeMinutes(day.arrive);
+      if (depart === null || arrive === null) return false;
+      return minute >= Math.max(0, depart - 60) && minute <= Math.min(1439, arrive + 60);
+    });
+    if (timed.length === 1) return timed[0];
+  }
+  if (location?.hasGps) {
+    const ranked = candidates.map(day => {
+      const endpoints = [photoPlaceCoords(day.fromPort), photoPlaceCoords(day.toPort)].filter(Boolean);
+      const distance = endpoints.length ? Math.min(...endpoints.map(point => haversineKm(location, point))) : Infinity;
+      return { day, distance };
+    }).sort((a,b) => a.distance - b.distance);
+    if (ranked[0] && Number.isFinite(ranked[0].distance)) return ranked[0].day;
+  }
+  return [...candidates].sort((a,b) => num(a.dayNo) - num(b.dayNo))[0];
+}
+
+function inferPhotoLocationFromDiary(date, captureTime, day) {
+  const ports = (state.ports || []).filter(port => port.date === date);
+  if (ports.length === 1) return { name: ports[0].name, detail: 'aus dem Hafenbuch', source: 'Hafenbuch', portId: ports[0].id };
+  if (!day) return null;
+  const minute = photoTimeMinutes(captureTime);
+  const depart = photoTimeMinutes(day.depart);
+  const arrive = photoTimeMinutes(day.arrive);
+  if (minute !== null && depart !== null && minute <= depart + 45 && day.fromPort) return { name: day.fromPort, detail: 'aus dem Törntag abgeleitet', source: 'Tageslogbuch' };
+  if (minute !== null && arrive !== null && minute >= arrive - 45 && day.toPort) return { name: day.toPort, detail: 'aus dem Törntag abgeleitet', source: 'Tageslogbuch' };
+  const route = [day.fromPort, day.toPort].filter(Boolean).join(' → ');
+  return route ? { name: `Unterwegs · ${route}`, detail: 'kein GPS im Bild', source: 'Tageslogbuch' } : null;
+}
+
+function photoDelay(ms) { return new Promise(resolve => window.setTimeout(resolve, ms)); }
+
+async function resolvePhotoLocation(meta, day) {
+  if (!meta.hasGps) return inferPhotoLocationFromDiary(meta.date, meta.time, day);
+  const location = { latitude: meta.latitude, longitude: meta.longitude };
+  const nearestPort = (allState.ports || []).map(port => {
+    const coords = parseCoordinateString(port.coords);
+    return coords ? { port, distanceKm: haversineKm(location, coords) } : null;
+  }).filter(Boolean).sort((a,b) => a.distanceKm - b.distanceKm)[0];
+  if (nearestPort?.distanceKm <= 2.5) {
+    return { name: nearestPort.port.name, detail: `GPS · Hafenbuch · ${nearestPort.distanceKm < 1 ? `${Math.round(nearestPort.distanceKm * 1000)} m` : `${nearestPort.distanceKm.toFixed(1)} km`} entfernt`, source: 'GPS', portId: nearestPort.port.id };
+  }
+  const key = `${meta.latitude.toFixed(2)},${meta.longitude.toFixed(2)}`;
+  if (photoPlaceCache.has(key)) return photoPlaceCache.get(key);
+  if (!navigator.onLine) {
+    const result = { name: coordinateLabel(meta.latitude, meta.longitude), detail: 'GPS · offline', source: 'GPS' };
+    photoPlaceCache.set(key, result);
+    return result;
+  }
+  try {
+    const wait = Math.max(0, 1100 - (Date.now() - lastPhotoReverseGeocodeAt));
+    if (wait) await photoDelay(wait);
+    lastPhotoReverseGeocodeAt = Date.now();
+    const named = await reverseGpsPlace(location);
+    const result = { name: named?.name || coordinateLabel(meta.latitude, meta.longitude), detail: named?.detail || 'per GPS erkannt', source: 'GPS' };
+    photoPlaceCache.set(key, result);
+    return result;
+  } catch {
+    const result = { name: coordinateLabel(meta.latitude, meta.longitude), detail: 'GPS erkannt', source: 'GPS' };
+    photoPlaceCache.set(key, result);
+    return result;
+  }
+}
+
+function photoAutoCaption(place, day, meta) {
+  if (place?.name && !String(place.name).startsWith('Unterwegs ·')) return place.name;
+  if (day) return day.title || [day.fromPort, day.toPort].filter(Boolean).join(' → ') || 'Törntag';
+  if (place?.name) return place.name;
+  return `LEEFKE · ${fmtDate(meta.date)}`;
+}
+
+function photoRelationItems(type) {
+  if (type === 'day') return (state.days || []).map(item => ({ id: item.id, label: `${fmtDate(item.date)} · ${item.title || `${item.fromPort || ''} → ${item.toPort || ''}`}` }));
+  if (type === 'port') return (state.ports || []).map(item => ({ id: item.id, label: `${item.name}${item.date ? ` · ${fmtDate(item.date)}` : ''}` }));
+  if (type === 'trip') return (allState.trips || []).map(item => ({ id: item.id, label: item.title || 'Unbenannter Törn' }));
+  return [];
+}
+
+function fillPhotoRelationSelect(select, type, current = '') {
+  if (!select) return;
+  if (type === 'auto') {
+    select.innerHTML = '<option value="">Wird automatisch erkannt</option>';
+    select.disabled = true;
+    return;
+  }
+  select.disabled = false;
+  const items = photoRelationItems(type);
+  select.innerHTML = '<option value="">Ohne festen Bezug</option>' + items.map(item => `<option value="${esc(item.id)}">${esc(item.label)}</option>`).join('');
+  if (items.some(item => item.id === current)) select.value = current;
+}
+
 function photoRelationOptions() {
-  const select = $('#photoRelatedId'); if (!select) return;
-  const type = $('#photoForm')?.elements.relatedType?.value || 'day';
-  let items = [];
-  if (type === 'day') items = state.days.map(item => ({ id: item.id, label: `${fmtDate(item.date)} · ${item.title || `${item.fromPort || ''} → ${item.toPort || ''}`}` }));
-  if (type === 'port') items = state.ports.map(item => ({ id: item.id, label: item.name }));
-  select.innerHTML = '<option value="">Automatisch über Datum / ohne festen Bezug</option>' + items.map(item => `<option value="${item.id}">${esc(item.label)}</option>`).join('');
+  const form = $('#photoForm');
+  const select = $('#photoRelatedId');
+  if (!form || !select) return;
+  fillPhotoRelationSelect(select, form.elements.relatedType?.value || 'auto', select.value);
+}
+
+function photoDayHeading(date, count) {
+  if (!date) return `<div><strong>Datum unbekannt</strong><span>${count} Foto${count === 1 ? '' : 's'}</span></div>`;
+  const d = new Date(`${date}T12:00:00`);
+  const label = Number.isNaN(d.getTime()) ? fmtDate(date) : d.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
+  return `<div><strong>${esc(label)}</strong><span>${count} Foto${count === 1 ? '' : 's'}</span></div>`;
+}
+
+function photoSortKey(item) {
+  if (item.captureDateTime) return item.captureDateTime;
+  if (item.date) return `${item.date}T${item.captureTime || '12:00'}:00`;
+  return `0000-00-00T00:00:${String(item.created || 0).padStart(13, '0')}`;
+}
+
+function photoContextLabel(item) {
+  const day = (state.days || []).find(row => row.id === item.relatedId) || (allState.days || []).find(row => row.id === item.relatedId);
+  const port = (state.ports || []).find(row => row.id === item.relatedId) || (allState.ports || []).find(row => row.id === item.relatedId);
+  const trip = (allState.trips || []).find(row => row.id === item.tripId);
+  if (item.relatedType === 'day' && day) { const route = day.title || [day.fromPort, day.toPort].filter(Boolean).join(' → '); return [day.dayNo ? `Tag ${day.dayNo}` : '', route].filter(Boolean).join(' · '); }
+  if (item.relatedType === 'port' && port) return port.name;
+  return trip?.title || getActiveTrip()?.title || '';
 }
 
 function renderPhotos() {
-  const photos = [...(state.photos || [])].sort((a,b) => (b.created || 0)-(a.created || 0));
-  $('#photoGrid').innerHTML = photos.map(item => `<figure class="photo ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || 'LEEFKE')}</strong><div class="meta">${fmtDate(item.date)}</div></figcaption><div class="photo-actions"><button onclick="setFeaturedPhoto('${item.id}')">${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild'}</button><button onclick="syncPhotosNow()">Cloud abgleichen</button></div></figure>`).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
+  const photos = [...(state.photos || [])].sort((a,b) => photoSortKey(a).localeCompare(photoSortKey(b)) || (a.created || 0) - (b.created || 0));
+  const groups = new Map();
+  for (const photo of photos) {
+    const key = photo.date || 'unknown';
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(photo);
+  }
+  $('#photoGrid').innerHTML = [...groups.entries()].map(([date, items]) => {
+    const cards = items.map(item => {
+      const place = item.locationName || (item.latitude != null && item.longitude != null ? coordinateLabel(item.latitude, item.longitude) : 'Ort nicht erkannt');
+      const context = photoContextLabel(item);
+      const time = item.captureTime ? `${item.captureTime} Uhr` : '';
+      const source = item.captureSource === 'EXIF' ? 'Bilddatum' : item.captureSource === 'Dateidatum' ? 'Dateidatum' : '';
+      return `<figure class="photo ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || place || 'LEEFKE')}</strong><div class="photo-location">📍 ${esc(place)}</div><div class="meta">${[time, source, context].filter(Boolean).map(esc).join(' · ')}</div></figcaption><div class="photo-actions"><button onclick="editPhotoMeta('${item.id}')">Bearbeiten</button><button onclick="setFeaturedPhoto('${item.id}')">${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild'}</button></div></figure>`;
+    }).join('');
+    return `<section class="photo-day-group"><div class="photo-day-heading">${photoDayHeading(date === 'unknown' ? '' : date, items.length)}</div><div class="photo-day-photos">${cards}</div></section>`;
+  }).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
   const pending = photos.filter(item => !item.storagePath || item._cloudState === 'error').length;
   if ($('#photoCloudStatus')) $('#photoCloudStatus').textContent = currentSession ? (pending ? `${pending} Foto(s) warten auf den Cloud-Abgleich.` : 'Alle Fotos sind im privaten LEEFKE-Speicher verfügbar.') : 'Anmelden, um Fotos auf allen Geräten verfügbar zu machen.';
   if ($('#photoAutoSync')) $('#photoAutoSync').checked = getSettings().photoAutoSync !== false;
@@ -5547,11 +5744,37 @@ function openPhotoViewer(id) {
   if (!dialog || !image) return;
   image.src = item.data;
   image.alt = item.caption || 'Foto der LEEFKE';
-  if (caption) caption.innerHTML = `<strong>${esc(item.caption || 'LEEFKE')}</strong>${item.date ? `<span>${fmtDate(item.date)}</span>` : ''}`;
+  const details = [item.date ? fmtDate(item.date) : '', item.captureTime ? `${item.captureTime} Uhr` : '', item.locationName ? `📍 ${item.locationName}` : '', photoContextLabel(item)].filter(Boolean);
+  if (caption) caption.innerHTML = `<strong>${esc(item.caption || item.locationName || 'LEEFKE')}</strong>${details.length ? `<span>${details.map(esc).join(' · ')}</span>` : ''}`;
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else dialog.setAttribute('open', '');
 }
 window.openPhotoViewer = openPhotoViewer;
+
+function photoEditRelationOptions() {
+  const form = $('#photoEditForm');
+  const select = $('#photoEditRelatedId');
+  if (!form || !select) return;
+  fillPhotoRelationSelect(select, form.elements.relatedType.value || 'day', select.dataset.current || select.value);
+  delete select.dataset.current;
+}
+
+function editPhotoMeta(id) {
+  const item = (state.photos || []).find(photo => photo.id === id);
+  const form = $('#photoEditForm');
+  const dialog = $('#photoEditDialog');
+  if (!item || !form || !dialog) return;
+  form.elements.id.value = item.id;
+  form.elements.date.value = item.date || '';
+  form.elements.captureTime.value = item.captureTime || '';
+  form.elements.locationName.value = item.locationName || '';
+  form.elements.caption.value = item.caption || '';
+  form.elements.relatedType.value = ['day','port','trip'].includes(item.relatedType) ? item.relatedType : 'day';
+  $('#photoEditRelatedId').dataset.current = item.relatedId || '';
+  photoEditRelationOptions();
+  if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open','');
+}
+window.editPhotoMeta = editPhotoMeta;
 
 async function setFeaturedPhoto(id) {
   const target = await getOne('photos', id); if (!target) return;
@@ -6708,6 +6931,22 @@ window.addEventListener('load', () => {
   $('#syncPhotosButton')?.addEventListener('click',syncPhotosNow);
   $('#photoAutoSync')?.addEventListener('change',async event=>{await put('settings',{...getSettings(),photoAutoSync:event.target.checked,id:'main'});await refresh()});
   $('#photoForm')?.elements.relatedType?.addEventListener('change',photoRelationOptions);
+  $('#photoEditForm')?.elements.relatedType?.addEventListener('change',photoEditRelationOptions);
+  $('#photoEditCancel')?.addEventListener('click',()=>$('#photoEditDialog')?.close());
+  $('#photoEditForm')?.addEventListener('submit',async event=>{
+    event.preventDefault();
+    const form=event.currentTarget;
+    const id=form.elements.id.value;
+    const item=await getOne('photos',id);
+    if(!item)return;
+    const date=form.elements.date.value||item.date||dateInputValue();
+    const captureTime=form.elements.captureTime.value||'';
+    const captureDateTime=`${date}T${captureTime||'12:00'}:00`;
+    const relatedType=form.elements.relatedType.value||'trip'; const relatedId=form.elements.relatedId.value||''; await put('photos',{...item,tripId:relatedType==='trip'&&relatedId?relatedId:(item.tripId||activeTripId||''),date,captureTime,captureDateTime,locationName:form.elements.locationName.value.trim(),caption:form.elements.caption.value.trim()||form.elements.locationName.value.trim()||'LEEFKE',relatedType,relatedId,autoCaption:false,_mediaUpdatedAt:new Date().toISOString()});
+    $('#photoEditDialog')?.close();
+    await refresh();
+    toast('Foto-Zuordnung aktualisiert');
+  });
   $('#applyUpdateButton')?.addEventListener('click',applyServiceWorkerUpdate);
   $('#checkAppUpdateButton')?.addEventListener('click', () => checkForAppUpdate({ manual: true }));
   $('#dismissUpdateButton')?.addEventListener('click',()=>{$('#updateBanner').hidden=true});
@@ -6742,7 +6981,68 @@ for (const [store, formId] of [['inventory','inventoryForm'],['safety','safetyFo
 if($('#documentForm'))$('#documentForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;const data=formObject(form);const file=form.elements.file.files[0];let existing=data.id?await getOne('documents',data.id):null;let fileData=existing?.data||'';let mimeType=existing?.mimeType||'';let fileName=existing?.fileName||'';if(file){if(file.size>15e6)return alert('Die Datei ist größer als 15 MB. Bitte verkleinern.');fileData=file.type.startsWith('image/')?await compressImage(file,1800,.82):await blobToDataUrl(file);mimeType=file.type;fileName=file.name;}await put('documents',{...(existing||{}),...data,id:data.id||uid(),data:fileData,mimeType,fileName,size:file?.size||existing?.size||0,_mediaUpdatedAt:file?new Date().toISOString():existing?._mediaUpdatedAt||''});form.reset();await refresh();scheduleSync(200);toast('Dokument gespeichert')};
 
 // Medienhandler ersetzen
-if($('#photoForm'))$('#photoForm').onsubmit=async event=>{event.preventDefault();const form=event.currentTarget;const fd=new FormData(form);const file=fd.get('photo');if(!file||!file.size)return;if(file.size>15e6)return alert('Das Foto ist größer als 15 MB. Bitte vorher verkleinern.');const data=await compressImage(file,1800,.82);await put('photos',{id:uid(),date:fd.get('date'),caption:fd.get('caption'),relatedType:fd.get('relatedType')||'day',relatedId:fd.get('relatedId')||'',featured:fd.get('featured')==='true',data,mimeType:'image/jpeg',fileName:file.name,size:file.size,created:Date.now(),_mediaUpdatedAt:new Date().toISOString(),_cloudState:'pending'});form.reset();photoRelationOptions();await refresh();syncMobileEntryUi('photos',{open:false});scheduleSync(200);toast('Foto verkleinert und gespeichert')};
+if($('#photoForm'))$('#photoForm').onsubmit=async event=>{
+  event.preventDefault();
+  const form=event.currentTarget;
+  const files=[...(form.elements.photo?.files||[])];
+  if(!files.length)return;
+  if(files.length>50)return alert('Bitte höchstens 50 Fotos auf einmal auswählen. Danach kannst du direkt den nächsten Stapel importieren.');
+  const tooLarge=files.find(file=>file.size>15e6);
+  if(tooLarge)return alert(`„${tooLarge.name}“ ist größer als 15 MB. Bitte dieses Bild vorher verkleinern.`);
+  const fd=new FormData(form);
+  const relationType=fd.get('relatedType')||'auto';
+  const forcedRelatedId=fd.get('relatedId')||'';
+  const manualCaption=String(fd.get('caption')||'').trim();
+  const status=$('#photoImportStatus');
+  const button=$('#photoImportButton');
+  if(status){status.hidden=false;status.className='wide photo-import-status working';}
+  if(button)button.disabled=true;
+  let savedCount=0;
+  let gpsCount=0;
+  let exifCount=0;
+  let placeCount=0;
+  try{
+    for(let index=0;index<files.length;index+=1){
+      const file=files[index];
+      if(status)status.innerHTML=`<strong>${index+1} von ${files.length}</strong><span>${esc(file.name)} · Bilddaten und Ort werden erkannt …</span>`;
+      const meta=await readPhotoMetadata(file);
+      if(meta.source==='EXIF')exifCount+=1;
+      if(meta.hasGps)gpsCount+=1;
+      let day=findPhotoDay(meta.date,meta.time,meta);
+      const place=await resolvePhotoLocation(meta,day);
+      if(place?.name)placeCount+=1;
+      if(!day)day=findPhotoDay(meta.date,meta.time,meta);
+      let relatedType=relationType;
+      let relatedId=forcedRelatedId;
+      if(relationType==='auto'){
+        if(day){relatedType='day';relatedId=day.id;}
+        else if(place?.portId){relatedType='port';relatedId=place.portId;}
+        else{relatedType='trip';relatedId=activeTripId||'';}
+      }
+      const caption=(files.length===1&&manualCaption)?manualCaption:photoAutoCaption(place,day,meta);
+      const data=await compressImage(file,1800,.82);
+      await put('photos',{
+        id:uid(),tripId:activeTripId||'',date:meta.date,captureTime:meta.time,captureDateTime:meta.dateTime,captureSource:meta.source,
+        caption,autoCaption:!(files.length===1&&manualCaption),locationName:place?.name||'',locationDetail:place?.detail||'',locationSource:place?.source||'',
+        latitude:meta.hasGps?meta.latitude:null,longitude:meta.hasGps?meta.longitude:null,relatedType:relatedType||'trip',relatedId:relatedId||'',featured:false,
+        data,mimeType:'image/jpeg',fileName:file.name,size:file.size,created:Date.now()+index,_mediaUpdatedAt:new Date().toISOString(),_cloudState:'pending'
+      });
+      savedCount+=1;
+    }
+    form.reset();
+    if(form.elements.relatedType)form.elements.relatedType.value='auto';
+    photoRelationOptions();
+    await refresh();
+    syncMobileEntryUi('photos',{open:false});
+    scheduleSync(200);
+    toast(`${savedCount} Foto${savedCount===1?'':'s'} chronologisch einsortiert`);
+    if(status){status.hidden=false;status.className='wide photo-import-status success';status.innerHTML=`<strong>${savedCount} Foto${savedCount===1?'':'s'} importiert</strong><span>${exifCount} mit EXIF-Datum · ${gpsCount} mit GPS · ${placeCount} mit Ortsangabe</span>`;}
+  }catch(error){
+    console.error(error);
+    if(status){status.hidden=false;status.className='wide photo-import-status error';status.innerHTML=`<strong>Import unterbrochen</strong><span>${savedCount} Foto(s) wurden bereits gespeichert. ${esc(error.message||'Unbekannter Fehler')}</span>`;}
+    await refresh();
+  }finally{if(button)button.disabled=false;}
+};
 if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=event.target.files[0];if(!file)return;if(file.size>15e6)return alert('Das Startbild ist größer als 15 MB.');const data=await compressImage(file,2000,.86);await put('settings',{...getSettings(),boatPhoto:data,boatPhotoStoragePath:'',_mediaUpdatedAt:new Date().toISOString(),id:'main'});event.target.value='';await refresh();scheduleSync(200);toast('Startbild gespeichert')};
 
 
