@@ -1,4 +1,4 @@
-const APP_VERSION = '8.14';
+const APP_VERSION = '8.15';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -3276,7 +3276,7 @@ async function openSavedDay(id) {
 
     <section class="day-view-section">
       <div class="day-view-section-title"><span>≈</span><div><small>BEDINGUNGEN</small><h4>Wetter, Wind & Wasser</h4></div></div>
-      ${item.forecastWeather || item.forecastWind || item.forecastWave || item.forecastTide ? `<div class="day-forecast-block"><small>VORHERSAGE</small><div class="day-view-facts day-view-facts-weather"><div><span>Wetter</span><strong>${esc(item.forecastWeather || '—')}</strong></div><div><span>Wind</span><strong>${esc(item.forecastWind || '—')}</strong></div><div><span>Welle</span><strong>${esc(item.forecastWave || '—')}</strong></div><div><span>Tide / Strom</span><strong>${esc(item.forecastTide || '—')}</strong></div></div></div>` : ''}
+      ${item.forecastWeather || item.forecastWind || item.forecastWave || item.forecastTide ? `<div class="day-forecast-block"><small>VORHERSAGE${item.forecastTime ? ` · FÜR ${esc(item.forecastTime)} UHR` : ''}</small><div class="day-view-facts day-view-facts-weather"><div><span>Wetter</span><strong>${esc(item.forecastWeather || '—')}</strong></div><div><span>Wind</span><strong>${esc(item.forecastWind || '—')}</strong></div><div><span>Welle</span><strong>${esc(item.forecastWave || '—')}</strong></div><div><span>Tide / Strom</span><strong>${esc(item.forecastTide || '—')}</strong></div></div></div>` : ''}
       <div class="day-actual-block"><small>TATSÄCHLICH</small><div class="day-view-facts day-view-facts-weather">
         <div><span>Wetter</span><strong>${esc(item.weather || '—')}</strong></div>
         <div><span>Wind</span><strong>${esc(item.wind || '—')}</strong></div>
@@ -5791,6 +5791,240 @@ async function fetchPassageHour(location,date,time){
   const snapshot=await fetchWeatherData(location,date); if(!snapshot.hours?.length)throw new Error(`Keine Wetterdaten für ${location.name}.`);
   const target=`${date}T${time||'08:00'}`; let best=0,bestDiff=Infinity; snapshot.hours.forEach((h,i)=>{const d=Math.abs(Date.parse(h.time)-Date.parse(target));if(d<bestDiff){best=i;bestDiff=d}}); return {snapshot,hour:snapshot.hours[best]};
 }
+
+let pendingPassageDiaryForecast = null;
+
+function passageTripIncludesDate(trip, date) {
+  if (!trip || !date) return false;
+  const start = String(trip.startDate || '');
+  const end = String(trip.endDate || '');
+  if (start && end) return date >= start && date <= end;
+  if (start && !end && ['planned', 'active'].includes(trip.status || 'planned')) return date >= start;
+  if (!start && end) return date <= end;
+  return false;
+}
+
+function passageSamePlace(a, b) {
+  const left = normalizePlaceName(String(a || ''));
+  const right = normalizePlaceName(String(b || ''));
+  return Boolean(left && right && left === right);
+}
+
+function passageMatchingDay(tripId, forecast) {
+  return (allState.days || []).find(item =>
+    item.tripId === tripId &&
+    item.date === forecast.date &&
+    passageSamePlace(item.fromPort, forecast.start) &&
+    passageSamePlace(item.toPort, forecast.target)
+  ) || null;
+}
+
+function passageForecastDayNo(tripId) {
+  const highest = Math.max(0, ...(allState.days || []).filter(item => item.tripId === tripId).map(item => num(item.dayNo)));
+  return highest + 1;
+}
+
+function passageForecastSummary(start, target, date, time, sh, th, tidesA, tidesB) {
+  const condition = h => `${weatherCodeInfo(h.weatherCode)[1]}${h.temperature !== null ? `, ${round(h.temperature, 1).toLocaleString('de-DE')} °C` : ''}`;
+  const wind = h => `${windDirectionText(h.windDirection)} ${dec2(h.windSpeed)} kn (${beaufortFromKnots(h.windSpeed)} Bft)${h.windGust !== null ? ` · Böen ${dec2(h.windGust)} kn` : ''}`;
+  const wave = h => h.waveHeight === null ? '—' : `${dec2(h.waveHeight)} m aus ${windDirectionText(h.waveDirection)}${h.wavePeriod === null ? '' : ` · ${dec2(h.wavePeriod)} s`}`;
+  const tide = events => events.length ? events.map(x => `${x.type} ${formatTime(x.time)}`).join(' · ') : '—';
+  return {
+    date,
+    time,
+    start: start.name,
+    target: target.name,
+    weather: `Start ${condition(sh)} · Ziel ${condition(th)}`,
+    wind: `Start ${wind(sh)} · Ziel ${wind(th)}`,
+    wave: `Start ${wave(sh)} · Ziel ${wave(th)}`,
+    tide: `Start ${tide(tidesA)} · Ziel ${tide(tidesB)}`,
+    savedAt: new Date().toISOString()
+  };
+}
+
+function passageRecommendedTrip(forecast) {
+  const trips = allState.trips || [];
+  const exactDay = (allState.days || []).find(item =>
+    item.date === forecast.date &&
+    passageSamePlace(item.fromPort, forecast.start) &&
+    passageSamePlace(item.toPort, forecast.target)
+  );
+  if (exactDay) return trips.find(item => item.id === exactDay.tripId) || null;
+  const covering = trips.filter(item => passageTripIncludesDate(item, forecast.date));
+  return covering.find(item => item.id === activeTripId) || covering[0] || null;
+}
+
+function updatePassageDiaryExistingHint() {
+  const select = $('#passageDiaryTripSelect');
+  const hint = $('#passageDiaryExistingHint');
+  const button = $('#passageDiaryUseExisting');
+  const section = $('#passageExistingTripSection');
+  const forecast = pendingPassageDiaryForecast;
+  if (!select || !hint || !button || !forecast) return;
+  const tripId = select.value;
+  button.disabled = !tripId;
+  section?.classList.toggle('is-recommended', Boolean(tripId && passageTripIncludesDate((allState.trips || []).find(t => t.id === tripId), forecast.date)));
+  if (!tripId) {
+    hint.textContent = 'Bitte bewusst auswählen, in welchen bestehenden Törn die Vorhersage gehört.';
+    button.textContent = 'In bestehenden Törn übernehmen';
+    return;
+  }
+  const trip = (allState.trips || []).find(item => item.id === tripId);
+  const existingDay = passageMatchingDay(tripId, forecast);
+  if (existingDay) {
+    hint.textContent = `Für ${fmtDate(forecast.date)} besteht in „${trip?.title || 'diesem Törn'}“ bereits ${forecast.start} → ${forecast.target}. Nur die gespeicherte Vorhersage wird aktualisiert; tatsächliche Fahrtdaten bleiben erhalten.`;
+    button.textContent = 'Vorhersage im vorhandenen Tag aktualisieren';
+  } else {
+    hint.textContent = `Es wird ein vorbereiteter Tagebucheintrag ${forecast.start} → ${forecast.target} in „${trip?.title || 'diesem Törn'}“ angelegt. Die tatsächlichen Fahrtdaten bleiben zunächst leer.`;
+    button.textContent = 'Tagebucheintrag in diesen Törn anlegen';
+  }
+}
+
+function openPassageDiaryDialog(forecast) {
+  const dialog = $('#passageDiaryDialog');
+  const select = $('#passageDiaryTripSelect');
+  if (!dialog || !select || !forecast) return;
+  pendingPassageDiaryForecast = forecast;
+  window.__leefkeLastPassageForecast = { ...forecast };
+
+  const trips = [...(allState.trips || [])].sort((a, b) => {
+    const aMatch = passageTripIncludesDate(a, forecast.date) ? 1 : 0;
+    const bMatch = passageTripIncludesDate(b, forecast.date) ? 1 : 0;
+    if (aMatch !== bMatch) return bMatch - aMatch;
+    if ((a.id === activeTripId) !== (b.id === activeTripId)) return a.id === activeTripId ? -1 : 1;
+    return String(b.startDate || '').localeCompare(String(a.startDate || ''));
+  });
+  const recommended = passageRecommendedTrip(forecast);
+  const matchingTrips = trips.filter(item => passageTripIncludesDate(item, forecast.date));
+
+  const matchingDay = (allState.days || []).find(item =>
+    item.date === forecast.date &&
+    passageSamePlace(item.fromPort, forecast.start) &&
+    passageSamePlace(item.toPort, forecast.target)
+  );
+  const matchingDayTrip = matchingDay ? trips.find(item => item.id === matchingDay.tripId) : null;
+  $('#passageDiaryIntro').textContent = matchingDay
+    ? `Für ${fmtDate(forecast.date)} besteht bereits der Tagebucheintrag ${forecast.start} → ${forecast.target}${matchingDayTrip ? ` im Törn „${matchingDayTrip.title}“` : ''}. Du entscheidest, ob nur die Vorhersage dort aktualisiert oder bewusst ein neuer Törn angelegt wird.`
+    : matchingTrips.length
+      ? `Für ${fmtDate(forecast.date)} wurde bereits ${matchingTrips.length === 1 ? 'ein passender Törn gefunden' : 'mehr als ein möglicher Törn gefunden'}. Entscheide selbst, ob die Vorhersage dort hinein soll oder ein neuer Törn angelegt wird.`
+      : `Für ${fmtDate(forecast.date)} wurde kein Törn gefunden, dessen Zeitraum dieses Datum umfasst. Du kannst einen vorhandenen Törn bewusst auswählen oder einen neuen anlegen.`;
+  $('#passageDiaryForecast').innerHTML = `
+    <div><span>Fahrt</span><strong>${esc(forecast.start)} → ${esc(forecast.target)}</strong></div>
+    <div><span>Zeitpunkt</span><strong>${fmtDate(forecast.date)} · ${esc(forecast.time)} Uhr</strong></div>
+    <div><span>Wind</span><strong>${esc(forecast.wind)}</strong></div>
+    <div><span>Welle</span><strong>${esc(forecast.wave)}</strong></div>`;
+
+  const existingSection = $('#passageExistingTripSection');
+  existingSection.hidden = trips.length === 0;
+  select.innerHTML = '<option value="">Törn auswählen …</option>' + trips.map(trip => {
+    const tags = [passageTripIncludesDate(trip, forecast.date) ? 'passt zum Datum' : '', trip.id === activeTripId ? 'geöffnet' : ''].filter(Boolean).join(' · ');
+    return `<option value="${esc(trip.id)}">${esc(trip.title || 'Unbenannter Törn')}${tags ? ` — ${esc(tags)}` : ''}</option>`;
+  }).join('');
+  select.value = recommended?.id || '';
+  $('#passageDiaryNewTripTitle').value = `${forecast.start} → ${forecast.target}`;
+  const status = $('#passageDiaryStatus');
+  if (status) { status.textContent = ''; status.className = 'sync-message'; }
+  updatePassageDiaryExistingHint();
+  if (typeof dialog.showModal === 'function') dialog.showModal(); else dialog.setAttribute('open', '');
+}
+
+async function savePassageForecastToTrip(tripId, forecast) {
+  const trip = (allState.trips || []).find(item => item.id === tripId) || await getOne('trips', tripId);
+  if (!trip) throw new Error('Der ausgewählte Törn wurde nicht gefunden.');
+  const existing = passageMatchingDay(tripId, forecast);
+  if (existing) {
+    const updated = await put('days', {
+      ...existing,
+      forecastWeather: forecast.weather,
+      forecastWind: forecast.wind,
+      forecastWave: forecast.wave,
+      forecastTide: forecast.tide,
+      forecastTime: forecast.time,
+      forecastSavedAt: forecast.savedAt || new Date().toISOString(),
+      forecastSource: 'Fahrtwetter Start → Ziel'
+    });
+    return { trip, day: updated, updated: true };
+  }
+  const day = await put('days', {
+    id: uid(),
+    tripId,
+    date: forecast.date,
+    dayNo: passageForecastDayNo(tripId),
+    title: `${forecast.start} → ${forecast.target}`,
+    fromPort: forecast.start,
+    toPort: forecast.target,
+    crew: trip.crew || getSettings().defaultCrew || '',
+    forecastWeather: forecast.weather,
+    forecastWind: forecast.wind,
+    forecastWave: forecast.wave,
+    forecastTide: forecast.tide,
+    forecastTime: forecast.time,
+    forecastSavedAt: forecast.savedAt || new Date().toISOString(),
+    forecastSource: 'Fahrtwetter Start → Ziel',
+    created: Date.now()
+  });
+  return { trip, day, updated: false };
+}
+
+async function usePassageForecastInExistingTrip() {
+  const forecast = pendingPassageDiaryForecast;
+  const tripId = $('#passageDiaryTripSelect')?.value;
+  if (!forecast || !tripId) return;
+  const button = $('#passageDiaryUseExisting');
+  const status = $('#passageDiaryStatus');
+  button.disabled = true;
+  if (status) { status.textContent = 'Tagebucheintrag wird vorbereitet …'; status.className = 'sync-message'; }
+  try {
+    const result = await savePassageForecastToTrip(tripId, forecast);
+    await refresh();
+    $('#passageDiaryDialog')?.close();
+    toast(result.updated ? `Vorhersage in „${result.trip.title}“ aktualisiert` : `Tagebucheintrag in „${result.trip.title}“ vorbereitet`);
+  } catch (error) {
+    if (status) { status.textContent = error.message || 'Tagebucheintrag konnte nicht vorbereitet werden.'; status.className = 'sync-message error'; }
+  } finally {
+    button.disabled = false;
+    updatePassageDiaryExistingHint();
+  }
+}
+
+async function createPassageTripAndDay() {
+  const forecast = pendingPassageDiaryForecast;
+  if (!forecast) return;
+  const titleInput = $('#passageDiaryNewTripTitle');
+  const title = String(titleInput?.value || '').trim() || `${forecast.start} → ${forecast.target}`;
+  const button = $('#passageDiaryCreateNew');
+  const status = $('#passageDiaryStatus');
+  button.disabled = true;
+  if (status) { status.textContent = 'Neuer Törn und Tagebucheintrag werden angelegt …'; status.className = 'sync-message'; }
+  try {
+    const trip = await put('trips', {
+      id: uid(),
+      title,
+      startDate: forecast.date,
+      endDate: '',
+      crew: getSettings().defaultCrew || '',
+      status: 'planned',
+      notes: `Beim Abruf des Fahrtwetters für ${forecast.start} → ${forecast.target} vorbereitet.`,
+      createdAt: new Date().toISOString()
+    });
+    await refresh();
+    const result = await savePassageForecastToTrip(trip.id, forecast);
+    await refresh();
+    $('#passageDiaryDialog')?.close();
+    toast(`Törn „${trip.title}“ und Tagebucheintrag vorbereitet`);
+  } catch (error) {
+    if (status) { status.textContent = error.message || 'Törn konnte nicht angelegt werden.'; status.className = 'sync-message error'; }
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('#passageDiaryTripSelect')?.addEventListener('change', updatePassageDiaryExistingHint);
+$('#passageDiaryUseExisting')?.addEventListener('click', usePassageForecastInExistingTrip);
+$('#passageDiaryCreateNew')?.addEventListener('click', createPassageTripAndDay);
+$('#passageDiaryClose')?.addEventListener('click', () => $('#passageDiaryDialog')?.close());
+$('#passageDiaryLater')?.addEventListener('click', () => $('#passageDiaryDialog')?.close());
+
 async function loadPassageWeather(event){
   event?.preventDefault(); const box=$('#passageWeatherState'), result=$('#passageWeatherResult'); if(box){box.textContent='Standort, Ziel, Wind und Seegang werden geladen …';box.className='sync-message'} if(result)result.innerHTML='';
   try{
@@ -5801,9 +6035,12 @@ async function loadPassageWeather(event){
     const course=bearingBetween([start.latitude,start.longitude],[target.latitude,target.longitude]); const [a,b]=await Promise.all([fetchPassageHour(start,date,time),fetchPassageHour(target,date,time)]); const sh=a.hour,th=b.hour;
     const tidesA=tideExtrema(a.snapshot.hours||[]).slice(0,4); const tidesB=tideExtrema(b.snapshot.hours||[]).slice(0,4);
     const card=(title,loc,h,tides)=>`<article><small>${title}</small><h4>${esc(loc.name)}</h4><div class="passage-facts"><div><span>Wind</span><strong>${windDirectionText(h.windDirection)} ${dec2(h.windSpeed)} kn · ${beaufortFromKnots(h.windSpeed)} Bft</strong></div><div><span>Böen</span><strong>${h.windGust===null?'—':`${dec2(h.windGust)} kn`}</strong></div><div><span>Welle</span><strong>${h.waveHeight===null?'—':`${dec2(h.waveHeight)} m aus ${windDirectionText(h.waveDirection)}`}</strong></div><div><span>Periode</span><strong>${h.wavePeriod===null?'—':`${dec2(h.wavePeriod)} s · ${dec2(60/h.wavePeriod)} Wellen/min`}</strong></div><div class="passage-tides"><span>Gezeiten</span><strong>${tides.length?tides.map(x=>`${x.type} ${formatTime(x.time)}`).join(' · '):'—'}</strong></div></div>${boatWindGraphic(course,h.windDirection,'wind')}${h.waveDirection!==null?boatWindGraphic(course,h.waveDirection,'wave'):''}</article>`;
-    result.innerHTML=`<div class="passage-course"><span>Kurs zum Ziel</span><strong>${String(Math.round(course)).padStart(3,'0')}° · ${courseDirectionText(course)}</strong><small>Luftlinie – tatsächlicher Fahrwasserkurs kann abweichen.</small></div><div class="passage-point-grid">${card('START',start,sh,tidesA)}${card('ZIEL',target,th,tidesB)}</div><button id="savePassageForecast" type="button" class="primary">Vorhersage fürs Tageslog merken</button>`;
-    result.querySelector('#savePassageForecast')?.addEventListener('click',()=>{window.__leefkeLastPassageForecast={date,start:start.name,target:target.name,weather:`${weatherCodeInfo(sh.weatherCode)[1]} → ${weatherCodeInfo(th.weatherCode)[1]}`,wind:`Start ${windDirectionText(sh.windDirection)} ${dec2(sh.windSpeed)} kn (${beaufortFromKnots(sh.windSpeed)} Bft) · Ziel ${windDirectionText(th.windDirection)} ${dec2(th.windSpeed)} kn (${beaufortFromKnots(th.windSpeed)} Bft)`,wave:`Start ${sh.waveHeight===null?'—':`${dec2(sh.waveHeight)} m · ${dec2(sh.wavePeriod)} s`} · Ziel ${th.waveHeight===null?'—':`${dec2(th.waveHeight)} m · ${dec2(th.wavePeriod)} s`}`,tide:`Start ${tidesA.map(x=>`${x.type} ${formatTime(x.time)}`).join(' · ')} · Ziel ${tidesB.map(x=>`${x.type} ${formatTime(x.time)}`).join(' · ')}`};toast('Vorhersage für das Tageslog vorgemerkt')});
+    const forecast = passageForecastSummary(start,target,date,time,sh,th,tidesA,tidesB);
+    window.__leefkeLastPassageForecast = { ...forecast };
+    result.innerHTML=`<div class="passage-course"><span>Kurs zum Ziel</span><strong>${String(Math.round(course)).padStart(3,'0')}° · ${courseDirectionText(course)}</strong><small>Luftlinie – tatsächlicher Fahrwasserkurs kann abweichen.</small></div><div class="passage-point-grid">${card('START',start,sh,tidesA)}${card('ZIEL',target,th,tidesB)}</div><button id="savePassageForecast" type="button" class="primary">Tagebuch vorbereiten</button>`;
+    result.querySelector('#savePassageForecast')?.addEventListener('click',()=>openPassageDiaryDialog(forecast));
     if(box){box.textContent='Fahrtwetter geladen.';box.className='sync-message success'}
+    window.setTimeout(()=>openPassageDiaryDialog(forecast),120);
   }catch(error){if(box){box.textContent=error.message||'Fahrtwetter konnte nicht geladen werden.';box.className='sync-message error'}}
 }
 

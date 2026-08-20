@@ -3072,3 +3072,26 @@ body{
   .day-mobile-entry-bar button,
   .mobile-entry-bar button{min-height:48px}
 }
+
+/* LEEFKE 8.15 – Fahrtwetter bewusst einem Törn/Tagebuch zuordnen */
+.passage-diary-dialog{width:min(720px,calc(100vw - 24px))}
+.passage-diary-dialog-inner{position:relative;padding:26px;overflow:auto;max-height:calc(100dvh - 30px)}
+.passage-diary-dialog-inner>h3{margin:.25rem 0 .4rem}
+.passage-diary-forecast{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:14px 0}
+.passage-diary-forecast>div{padding:10px 11px;border:1px solid var(--line);border-radius:11px;background:#fff}
+.passage-diary-forecast span{display:block;color:var(--muted);font-size:.69rem;text-transform:uppercase;letter-spacing:.06em}
+.passage-diary-forecast strong{display:block;margin-top:3px;font-size:.86rem;overflow-wrap:anywhere}
+.passage-diary-section{display:grid;gap:9px;margin-top:12px;padding:14px;border:1px solid var(--line);border-radius:13px;background:#fff}
+.passage-diary-section small{font-weight:850;letter-spacing:.12em;color:var(--brass-dark)}
+.passage-diary-section h4{margin:2px 0 0}
+.passage-diary-section label{display:grid;gap:5px;font-weight:700}
+.passage-diary-section select,.passage-diary-section input{width:100%;min-width:0}
+.passage-diary-section button{justify-self:start}
+.passage-diary-section.is-recommended{border-color:var(--brass);box-shadow:inset 4px 0 0 var(--brass)}
+.passage-diary-actions{margin-top:13px}
+.passage-diary-dialog .sync-message:empty{display:none}
+@media(max-width:680px){
+  .passage-diary-dialog-inner{padding:22px 15px calc(18px + env(safe-area-inset-bottom,0px))}
+  .passage-diary-forecast{grid-template-columns:1fr}
+  .passage-diary-section button,.passage-diary-actions button{width:100%}
+}

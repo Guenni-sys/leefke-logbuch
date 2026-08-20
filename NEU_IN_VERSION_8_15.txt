@@ -1,0 +1,9 @@
+LEEFKE 8.15 – FAHRTWETTER INS TAGEBUCH ÜBERNEHMEN
+
+- Nach einer Fahrtwetter-Abfrage Start → Ziel fragt die App, ob die Vorhersage im Tagebuch gesichert werden soll.
+- Es wird nichts ungefragt angelegt oder zugeordnet.
+- Bestehende, zum Datum passende Törne werden vorgeschlagen; die Auswahl bleibt beim Nutzer.
+- Alternativ kann bewusst ein neuer geplanter Törn angelegt werden.
+- Beim neuen Törn wird gleichzeitig ein vorbereiteter Tagebucheintrag mit Datum, Start, Ziel und Wettervorhersage gespeichert.
+- Gibt es für denselben Törn, Tag und dieselbe Strecke bereits einen Tagebucheintrag, wird nur die Vorhersage aktualisiert. Tatsächliche Fahrdaten bleiben erhalten.
+- Die Bezugsuhrzeit der Vorhersage wird am gespeicherten Tageslog angezeigt.
