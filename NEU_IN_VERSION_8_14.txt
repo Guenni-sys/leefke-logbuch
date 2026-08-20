@@ -1,0 +1,8 @@
+LEEFKE 8.14 – EINHEITLICHE ERFASSUNG AUF ALLEN GERÄTEN
+
+- Windows: Tageslogbuch, Hafenbuch, Tankbuch, Wartung, Erinnerungen und Fotos zeigen die Erfassungsformulare nicht mehr dauerhaft.
+- Android und iPhone/iPad: gleiches Bedienprinzip wie auf Windows.
+- Vorhandene Einträge bleiben sofort sichtbar; ein Formular öffnet erst über „+ Neuer …“.
+- Bearbeiten öffnet das passende Formular automatisch.
+- Nach Speichern wird das Formular wieder geschlossen.
+- Android/PWA: responsive Darstellung, Standalone-Modus, Maskable Icons und touchfreundliche Schaltflächen bleiben aktiv.

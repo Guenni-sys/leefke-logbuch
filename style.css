@@ -3030,3 +3030,45 @@ body{
   .mobile-entry-bar{margin-bottom:10px}
   .mobile-entry-bar button{min-height:46px}
 }
+
+
+/* ========================================================================== 
+   LEEFKE 8.14 – einheitliche Datenerfassung auf Windows, Android und iOS
+   Listen zuerst; Formulare öffnen erst über „Neuer …“.
+   ========================================================================== */
+.day-mobile-entry-bar,
+.mobile-entry-bar{
+  display:flex;
+  margin:0 0 12px;
+  align-items:center;
+}
+.day-mobile-entry-bar.is-editing,
+.mobile-entry-bar.is-editing{display:none!important}
+.day-mobile-entry-bar button,
+.mobile-entry-bar button{
+  min-height:44px;
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  font-weight:800;
+}
+.mobile-day-form-collapsed,
+.mobile-entry-form-collapsed{display:none!important}
+
+/* Auf breiten Bildschirmen bleibt der „Neuer Eintrag“-Knopf kompakt. */
+@media(min-width:851px){
+  .day-mobile-entry-bar button,
+  .mobile-entry-bar button{width:auto;min-width:190px}
+  #day>.day-mobile-entry-bar,
+  #ports>.mobile-entry-bar,
+  #fuel>.mobile-entry-bar,
+  #maintenance>.mobile-entry-bar,
+  #photos>.mobile-entry-bar{margin-bottom:14px}
+}
+
+/* Android/iOS/Touch: große Trefferflächen ohne Desktop unnötig aufzublasen. */
+@media(max-width:850px), (pointer:coarse){
+  .day-mobile-entry-bar button,
+  .mobile-entry-bar button{min-height:48px}
+}
