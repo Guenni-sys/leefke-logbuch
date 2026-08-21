@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-20-dense-photo-stream-20260821';
+const APP_CACHE = 'leefke-v8-21-port-photos-20260821';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.20',
+  './index.html?v=8.21',
   './style.css',
-  './style.css?v=8.20',
+  './style.css?v=8.21',
   './app.js',
-  './app.js?v=8.20',
+  './app.js?v=8.21',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',

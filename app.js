@@ -1,4 +1,4 @@
-const APP_VERSION = '8.20';
+const APP_VERSION = '8.21';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -2560,6 +2560,23 @@ function returnLabel(value) {
   return ['Gerne wieder anlaufen', ''];
 }
 
+function photosForPort(portId) {
+  return (state.photos || [])
+    .filter(photo => photo.relatedType === 'port' && photo.relatedId === portId && photo.data)
+    .sort((a, b) => photoSortKey(a).localeCompare(photoSortKey(b)) || (a.created || 0) - (b.created || 0));
+}
+
+function portPhotosHtml(portId) {
+  const photos = photosForPort(portId);
+  if (!photos.length) return '';
+  return `<div class="port-photo-block">
+    <div class="port-photo-block-head"><strong>Hafenbilder</strong><span>${photos.length} Foto${photos.length === 1 ? '' : 's'}</span></div>
+    <div class="port-photo-strip" role="list" aria-label="Hafenbilder">
+      ${photos.map(photo => `<button class="port-photo-thumb" type="button" role="listitem" onclick="openPhotoViewer('${photo.id}')" title="${esc(photo.caption || 'Hafenbild')} groß ansehen"><img src="${photo.data || defaultHero}" alt="${esc(photo.caption || 'Hafenbild')}" loading="lazy"></button>`).join('')}
+    </div>
+  </div>`;
+}
+
 function renderPorts() {
   const query = ($('#portSearch')?.value || '').toLowerCase();
   const filtered = state.ports.filter(item => JSON.stringify(item).toLowerCase().includes(query));
@@ -2569,6 +2586,7 @@ function renderPorts() {
       <div class="port-head"><div><div class="meta">${fmtDate(item.date)}</div><h3>${esc(item.name)}</h3><div class="port-rating-summary">${stars(item.rating || 0, true)}<strong>${ratingLabel(item.rating || 0)}</strong></div></div></div>
       <div class="meta">Liegeplatz: ${esc(item.berth || '—')} · ${item.cost ? eur(item.cost) : 'Kosten —'}</div>
       <span class="return-badge ${returnClass}">${returnText}</span>
+      ${portPhotosHtml(item.id)}
       <div class="port-ratings">
         <div class="port-rating-row"><span>Freundlichkeit</span>${stars(item.ratingFriendly || 0)}</div>
         <div class="port-rating-row"><span>Sanitäranlagen</span>${stars(item.ratingSanitary || 0)}</div>
@@ -2958,8 +2976,167 @@ if (fuelForm) {
 const legacyRouteForm = $('#routeForm');
 if (legacyRouteForm) legacyRouteForm.onsubmit = async event => { event.preventDefault(); const item=formObject(legacyRouteForm); item.id=item.id||uid(); item.created=item.created||Date.now(); await put('route',item); legacyRouteForm.reset(); await refresh(); };
 
+function setPortPhotoStatus(message = '', kind = '') {
+  const status = $('#portPhotoStatus');
+  if (!status) return;
+  status.hidden = !message;
+  status.className = `port-photo-status${kind ? ` ${kind}` : ''}`;
+  status.textContent = message;
+}
+
+function updatePortPhotoSelection() {
+  const input = $('#portPhotoInput');
+  const selection = $('#portPhotoSelection');
+  if (!input || !selection) return;
+  const files = [...(input.files || [])];
+  selection.hidden = !files.length;
+  if (!files.length) {
+    selection.innerHTML = '';
+    return;
+  }
+  const visibleNames = files.slice(0, 3).map(file => `<span>${esc(file.name)}</span>`).join('');
+  selection.innerHTML = `<strong>${files.length} Bild${files.length === 1 ? '' : 'er'} ausgewählt</strong><div>${visibleNames}${files.length > 3 ? `<span>+ ${files.length - 3} weitere</span>` : ''}</div>`;
+}
+
+async function importPortPhotos(port, files) {
+  const portCoordinates = parseCoordinateText(port.coords);
+  let comparisonPhotos = [...(state.photos || [])];
+  let savedCount = 0;
+  let exactDuplicateCount = 0;
+  let similarSkippedCount = 0;
+  let replacedCount = 0;
+  let keptSimilarCount = 0;
+  for (let index = 0; index < files.length; index += 1) {
+    const file = files[index];
+    setPortPhotoStatus(`Bild ${index + 1} von ${files.length}: ${file.name} wird geprüft und vorbereitet …`, 'working');
+    const meta = await readPhotoMetadata(file);
+    const data = await compressImage(file, 1800, .82);
+    const fingerprint = await createPhotoFingerprint(data);
+    const match = await findPhotoDuplicate(fingerprint, comparisonPhotos);
+    if (match?.kind === 'exact') {
+      exactDuplicateCount += 1;
+      continue;
+    }
+    if (match?.kind === 'visual') {
+      const candidatePreview = { data, fileName: file.name, date: meta.date, captureTime: meta.time, caption: port.name || file.name };
+      const action = await reviewPhotoDuplicate(candidatePreview, match.photo, match);
+      if (action === 'keep-existing') {
+        similarSkippedCount += 1;
+        continue;
+      }
+      if (action === 'keep-new') {
+        await del('photos', match.photo.id);
+        photoFingerprintCache.delete(match.photo.id);
+        comparisonPhotos = comparisonPhotos.filter(photo => photo.id !== match.photo.id);
+        replacedCount += 1;
+      } else {
+        keptSimilarCount += 1;
+      }
+    }
+    const created = Date.now() + index;
+    const mediaUpdatedAt = new Date().toISOString();
+    const latitude = meta.hasGps ? meta.latitude : portCoordinates?.latitude ?? null;
+    const longitude = meta.hasGps ? meta.longitude : portCoordinates?.longitude ?? null;
+    const saved = await put('photos', {
+      id: uid(),
+      tripId: port.tripId || activeTripId || '',
+      date: meta.date || port.date || dateInputValue(),
+      captureTime: meta.time || '',
+      captureDateTime: meta.dateTime || `${meta.date || port.date || dateInputValue()}T12:00:00`,
+      captureSource: meta.source || '',
+      caption: files.length === 1 ? (port.name || 'Hafenbild') : `${port.name || 'Hafenbild'} · ${index + 1}`,
+      autoCaption: true,
+      locationName: port.name || '',
+      locationDetail: meta.hasGps ? 'GPS aus dem Bild' : (portCoordinates ? 'Position aus dem Hafenbuch' : 'Hafenbuch'),
+      locationSource: meta.hasGps ? 'GPS' : 'Hafenbuch',
+      latitude,
+      longitude,
+      relatedType: 'port',
+      relatedId: port.id,
+      featured: false,
+      data,
+      mimeType: 'image/jpeg',
+      fileName: file.name,
+      size: file.size,
+      created,
+      _mediaUpdatedAt: mediaUpdatedAt,
+      _cloudState: 'pending'
+    });
+    comparisonPhotos.push(saved);
+    photoFingerprintCache.set(saved.id, { cacheKey: `${data.length}:${saved._mediaUpdatedAt || saved.created || ''}`, fingerprint });
+    savedCount += 1;
+  }
+  return { savedCount, exactDuplicateCount, similarSkippedCount, replacedCount, keptSimilarCount };
+}
+
 const portFormV8=$('#portForm');
-if(portFormV8) portFormV8.onsubmit=async event=>{event.preventDefault();const item=formObject(portFormV8);if(!String(item.name||'').trim())return;try{if(!String(item.coords||'').trim())await geocodePortIntoForm(portFormV8);const current=item.id?await getOne('ports',item.id):null;const finalItem={...(current||{}),...formObject(portFormV8),id:item.id||uid(),created:current?.created||Date.now()};await put('ports',finalItem);portFormV8.reset();resetPortGpsAssistant();syncRatingPickers(portFormV8);await refresh();syncMobileEntryUi('ports',{open:false});toast(finalItem.coords?'Hafen mit Position gespeichert':'Hafen gespeichert – Koordinaten konnten nicht automatisch gefunden werden');window.setTimeout(()=>document.querySelector(`[data-store="ports"][data-record-id="${finalItem.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),120);}catch(error){console.error(error);alert('Der Hafen konnte nicht gespeichert werden. '+(error.message||''));}};
+if (portFormV8) portFormV8.onsubmit = async event => {
+  event.preventDefault();
+  setPortPhotoStatus();
+  const item = formObject(portFormV8);
+  const files = [...($('#portPhotoInput')?.files || [])];
+  if (!String(item.name || '').trim()) return;
+  if (files.length > 20) {
+    setPortPhotoStatus('Bitte höchstens 20 Hafenbilder auf einmal auswählen. Weitere Bilder können anschließend ergänzt werden.', 'error');
+    return;
+  }
+  const nonImage = files.find(file => file.type && !file.type.startsWith('image/'));
+  if (nonImage) {
+    setPortPhotoStatus(`„${nonImage.name}“ ist keine unterstützte Bilddatei.`, 'error');
+    return;
+  }
+  const tooLarge = files.find(file => file.size > 15e6);
+  if (tooLarge) {
+    setPortPhotoStatus(`„${tooLarge.name}“ ist größer als 15 MB. Bitte dieses Bild vorher verkleinern.`, 'error');
+    return;
+  }
+  const saveButton = $('#portSaveButton');
+  if (saveButton) {
+    saveButton.disabled = true;
+    saveButton.textContent = files.length ? 'Hafen und Bilder werden gespeichert …' : 'Hafen wird gespeichert …';
+  }
+  let savedPort = null;
+  try {
+    if (!String(item.coords || '').trim()) await geocodePortIntoForm(portFormV8);
+    const current = item.id ? await getOne('ports', item.id) : null;
+    const finalItem = { ...(current || {}), ...formObject(portFormV8), id: item.id || uid(), created: current?.created || Date.now() };
+    savedPort = await put('ports', finalItem);
+    let result = { savedCount: 0, exactDuplicateCount: 0, similarSkippedCount: 0, replacedCount: 0, keptSimilarCount: 0 };
+    if (files.length) {
+      try {
+        result = await importPortPhotos(savedPort, files);
+      } catch (photoError) {
+        console.error('Hafenbilder konnten nicht vollständig gespeichert werden.', photoError);
+        portFormV8.elements.id.value = savedPort.id;
+        await refresh();
+        setPortPhotoStatus(`Der Hafen ist gespeichert. Der Bildimport wurde unterbrochen: ${photoError.message || 'Unbekannter Fehler'}. Die Auswahl bleibt erhalten; beim erneuten Speichern werden bereits importierte Dubletten erkannt.`, 'error');
+        toast('Hafen gespeichert – Bildimport unterbrochen');
+        return;
+      }
+    }
+    if (result.savedCount || result.replacedCount) scheduleSync(200);
+    portFormV8.reset();
+    resetPortGpsAssistant();
+    syncRatingPickers(portFormV8);
+    await refresh();
+    syncMobileEntryUi('ports', { open: false });
+    const duplicateCount = result.exactDuplicateCount + result.similarSkippedCount;
+    const photoText = files.length
+      ? `${result.savedCount} Hafenbild${result.savedCount === 1 ? '' : 'er'} ergänzt${duplicateCount ? ` · ${duplicateCount} Dublette${duplicateCount === 1 ? '' : 'n'} nicht übernommen` : ''}`
+      : '';
+    toast(photoText || (savedPort.coords ? 'Hafen mit Position gespeichert' : 'Hafen gespeichert – Koordinaten konnten nicht automatisch gefunden werden'));
+    window.setTimeout(() => document.querySelector(`[data-store="ports"][data-record-id="${savedPort.id}"]`)?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+  } catch (error) {
+    console.error(error);
+    setPortPhotoStatus(`Der Hafen konnte nicht gespeichert werden. ${error.message || ''}`, 'error');
+    alert('Der Hafen konnte nicht gespeichert werden. ' + (error.message || ''));
+  } finally {
+    if (saveButton) {
+      saveButton.disabled = false;
+      saveButton.textContent = 'Hafen speichern';
+    }
+  }
+};
 
 function maintenanceMaterialsFromEditor(){return [...document.querySelectorAll('#materialRows .material-row')].map(row=>({name:row.querySelector('[data-material-name]')?.value.trim()||'',quantity:row.querySelector('[data-material-qty]')?.value.trim()||'',cost:parseFuelDecimal(row.querySelector('[data-material-cost]')?.value)||0})).filter(x=>x.name||x.cost);}
 function renderMaterialEditor(materials=[]){const box=$('#materialRows');if(!box)return;box.innerHTML='';(materials.length?materials:[{name:'',quantity:'',cost:''}]).forEach(add=>addMaterialRow(add));updateMaterialTotal();}
@@ -4445,6 +4622,10 @@ $('#import').onchange = async event => {
 
 initRatingPickers();
 $('#portGpsButton')?.addEventListener('click', suggestPortFromGps);
+$('#portPhotoInput')?.addEventListener('change', () => {
+  setPortPhotoStatus();
+  updatePortPhotoSelection();
+});
 $('#portGpsSuggestions')?.addEventListener('click', event => {
   const button = event.target.closest('[data-port-gps-index]');
   if (!button) return;
@@ -4459,6 +4640,8 @@ $('#portGpsSuggestions')?.addEventListener('click', event => {
 $('#portForm').addEventListener('reset', () => window.setTimeout(() => {
   syncRatingPickers($('#portForm'));
   resetPortGpsAssistant();
+  updatePortPhotoSelection();
+  setPortPhotoStatus();
 }, 0));
 
 $('#menu').onclick = () => setMobileMenu(!$('#nav').classList.contains('open'));

@@ -1,0 +1,12 @@
+LEEFKE 8.21
+
+Hafenbilder im Hafenbuch
+
+- Zu einem neuen oder bereits gespeicherten Hafen können optional ein oder mehrere Fotos hinzugefügt werden.
+- Die Bilder werden über den vorhandenen Galerie-Speicher sicher mit dem Hafen und dem aktiven Törn verknüpft.
+- Hafenbilder erscheinen kompakt direkt am Hafeneintrag und lassen sich im großen Bildbetrachter durchblättern oder wischen.
+- EXIF-Datum und GPS bleiben erhalten; ohne Bild-GPS wird die bekannte Hafenposition verwendet.
+- Die bestehende Erkennung identischer und optisch ähnlicher Bilder gilt auch beim Import aus dem Hafenbuch.
+- Bereits gespeicherte Hafenbilder bleiben beim Bearbeiten erhalten; neu ausgewählte Bilder werden ergänzt.
+
+Die vorhandenen Hafen-, Galerie-, Synchronisations- und Sicherungsdatenmodelle wurden nicht umgebaut.
