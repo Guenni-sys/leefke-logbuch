@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.15">
+  <link rel="stylesheet" href="style.css?v=8.17">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -34,7 +34,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.15</small>
+        <small>BORDTAGEBUCH · VERSION 8.17</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -366,7 +366,7 @@
           <section class="wide port-form-section">
             <div class="port-form-section-head">
               <span>⚓</span>
-              <div><small>HAFEN & LIEGEPLATZ</small><h3 id="portFormTitle">Hafen erfassen</h3></div>
+              <div><small>HAFEN & LIEGEPLATZ</small><h3>Grunddaten</h3></div>
             </div>
 
             <div class="port-form-grid">
@@ -469,8 +469,7 @@
           </section>
 
           <div class="wide actions form-actions-stable">
-            <button id="portSaveButton" class="primary">Hafen speichern</button>
-            <button id="portCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button>
+            <button class="primary">Hafen speichern</button>
             <button type="reset">Leeren</button>
           </div>
         </form>
@@ -514,13 +513,13 @@
           <button id="newMaintenanceEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="maintenanceForm"><span aria-hidden="true">＋</span> Neue Wartung</button>
         </div>
         <form id="maintenanceForm" class="card form v8-maintenance-form mobile-entry-form-collapsed">
-          <input type="hidden" name="id"><div class="wide section-heading"><span>⚙</span><div><small>WARTUNGSPROTOKOLL</small><h3 id="maintenanceFormTitle">Wartung erfassen</h3></div></div><label>Datum<input required type="date" name="date"></label><label>Kategorie<select name="category"><option>Motor</option><option>Getriebe</option><option>Dieselanlage</option><option>Elektrik</option><option>Hydraulik</option><option>Sanitär</option><option>Rumpf</option><option>Sonstiges</option></select></label><label class="wide">Wartung / Titel<input required name="title" placeholder="z. B. Motorservice / Ölwechsel"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Nächster Service nach Tagen<input type="number" min="0" step="1" name="intervalDays" placeholder="z. B. 360"></label><label>Nächster Service nach Motorstunden<input type="number" min="0" step="1" name="intervalHours" placeholder="z. B. 150"></label><div class="wide next-service-preview" id="nextServicePreview">Nächster Termin wird aus Datum und/oder Motorstunden berechnet.</div><label class="wide">Was wurde gemacht?<textarea rows="5" name="note" placeholder="Freies Wartungsprotokoll …"></textarea></label>
+          <input type="hidden" name="id"><label>Datum<input required type="date" name="date"></label><label>Kategorie<select name="category"><option>Motor</option><option>Getriebe</option><option>Dieselanlage</option><option>Elektrik</option><option>Hydraulik</option><option>Sanitär</option><option>Rumpf</option><option>Sonstiges</option></select></label><label class="wide">Wartung / Titel<input required name="title" placeholder="z. B. Motorservice / Ölwechsel"></label><label>Motorstunden<input type="number" step="0.1" name="engineHours"></label><label>Nächster Service nach Tagen<input type="number" min="0" step="1" name="intervalDays" placeholder="z. B. 360"></label><label>Nächster Service nach Motorstunden<input type="number" min="0" step="1" name="intervalHours" placeholder="z. B. 150"></label><div class="wide next-service-preview" id="nextServicePreview">Nächster Termin wird aus Datum und/oder Motorstunden berechnet.</div><label class="wide">Was wurde gemacht?<textarea rows="5" name="note" placeholder="Freies Wartungsprotokoll …"></textarea></label>
           <div class="wide materials-editor"><div class="section-heading"><span>▤</span><div><small>MATERIAL</small><h3>Material & Kosten</h3></div><button id="addMaterialRow" type="button">+ Material</button></div><div id="materialRows" class="material-rows"></div><div class="material-total"><span>Materialkosten gesamt</span><strong id="materialTotal">0,00 €</strong></div></div>
           <input type="hidden" name="dueDate"><input type="hidden" name="dueHours"><input type="hidden" name="cost"><input type="hidden" name="done" value="true">
-          <div class="wide actions"><button id="maintenanceSaveButton" class="primary">Wartung speichern</button><button id="maintenanceCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="reset">Leeren</button></div>
+          <div class="wide actions"><button class="primary">Wartung speichern</button><button type="reset">Leeren</button></div>
         </form>
         <div id="maintenanceList" class="stack"></div>
-        <article class="card deadline-card"><div class="card-kicker">ERINNERUNGEN</div><h3 id="deadlineFormTitle">Prüfungen & Ablaufdaten</h3><p class="meta">Zum Beispiel Feuerlöscher, Gasprüfung oder Rettungsinsel. Die Startseite erinnert rechtzeitig.</p><div class="mobile-entry-bar nested-entry-bar" data-entry-key="deadline"><button id="newDeadlineEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="deadlineForm"><span aria-hidden="true">＋</span> Neue Erinnerung</button></div><form id="deadlineForm" class="form compact-form mobile-entry-form-collapsed"><input type="hidden" name="id"><label>Erinnerung<input required name="name" placeholder="z. B. Gasprüfung"></label><label>Letzte Prüfung<input type="date" name="lastCheck"></label><label>Intervall (Tage)<input type="number" min="0" step="1" name="intervalDays" placeholder="z. B. 730"></label><label>Fällig am<input type="date" name="dueDate"></label><label>Warnung vorher (Tage)<input type="number" min="0" step="1" name="remindDays" value="60"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button id="deadlineSaveButton" class="primary">Erinnerung speichern</button><button id="deadlineCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="reset">Leeren</button></div></form><div id="deadlineList" class="stack compact-stack"></div></article>
+        <article class="card deadline-card"><div class="card-kicker">ERINNERUNGEN</div><h3>Prüfungen & Ablaufdaten</h3><p class="meta">Zum Beispiel Feuerlöscher, Gasprüfung oder Rettungsinsel. Die Startseite erinnert rechtzeitig.</p><div class="mobile-entry-bar nested-entry-bar" data-entry-key="deadline"><button id="newDeadlineEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="deadlineForm"><span aria-hidden="true">＋</span> Neue Erinnerung</button></div><form id="deadlineForm" class="form compact-form mobile-entry-form-collapsed"><input type="hidden" name="id"><label>Erinnerung<input required name="name" placeholder="z. B. Gasprüfung"></label><label>Letzte Prüfung<input type="date" name="lastCheck"></label><label>Intervall (Tage)<input type="number" min="0" step="1" name="intervalDays" placeholder="z. B. 730"></label><label>Fällig am<input type="date" name="dueDate"></label><label>Warnung vorher (Tage)<input type="number" min="0" step="1" name="remindDays" value="60"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Erinnerung speichern</button><button type="reset">Leeren</button></div></form><div id="deadlineList" class="stack compact-stack"></div></article>
         <button id="createMaintenanceTemplates" type="button" hidden></button>
       </section>
 
@@ -563,10 +562,18 @@
         <div class="title"><small>ERINNERUNGEN</small><h2>LEEFKE unterwegs</h2><p>Fotos aus Häfen, von Überfahrten und besonderen Tagen an Bord.</p></div>
         <article class="card photo-cloud-controls"><div><div class="card-kicker">PRIVATE FOTO-CLOUD</div><h3>Auf allen Geräten verfügbar</h3><p id="photoCloudStatus" class="meta">Nach der Anmeldung werden verkleinerte Fotos automatisch in den privaten LEEFKE-Speicher übertragen.</p></div><div class="actions"><label class="switch-label"><input id="photoAutoSync" type="checkbox" checked> Fotos automatisch synchronisieren</label><button id="syncPhotosButton" type="button">Fotos jetzt abgleichen</button></div></article>
         <div class="mobile-entry-bar" data-entry-key="photos">
-          <button id="newPhotoEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="photoForm"><span aria-hidden="true">＋</span> Foto hinzufügen</button>
+          <button id="newPhotoEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="photoForm"><span aria-hidden="true">＋</span> Fotos hinzufügen</button>
         </div>
-        <form id="photoForm" class="card form mobile-entry-form-collapsed"><label>Datum<input type="date" name="date"></label><label>Bildunterschrift<input name="caption"></label><label>Zuordnung<select name="relatedType"><option value="day">Tageslogbuch</option><option value="port">Hafen</option><option value="trip">Gesamter Törn</option></select></label><label>Bezug<select id="photoRelatedId" name="relatedId"><option value="">Automatisch über Datum</option></select></label><label class="wide">Foto<input required type="file" accept="image/*" name="photo"></label><label class="switch-label wide"><input type="checkbox" name="featured" value="true"> Als Titelbild für diesen Tag verwenden</label><div class="wide"><button class="primary">Foto hinzufügen</button></div></form>
-        <div id="photoGrid" class="gallery"></div>
+        <form id="photoForm" class="card form mobile-entry-form-collapsed photo-import-form">
+          <div class="wide photo-import-intro"><div><div class="card-kicker">MEHRFACHAUSWAHL</div><h3>Fotos automatisch einsortieren</h3><p class="meta">Wähle ein oder mehrere Bilder. Wenn die Bilddaten vorhanden sind, erkennt LEEFKE Aufnahmedatum, Uhrzeit und GPS-Ort und ordnet die Fotos dem passenden Törntag zu.</p></div></div>
+          <label class="wide photo-file-picker">Fotos auswählen<input required type="file" accept="image/*" name="photo" multiple><small>Mehrere Bilder können gleichzeitig markiert werden.</small></label>
+          <label>Bildunterschrift <span class="meta">(optional)</span><input name="caption" placeholder="Bei mehreren Fotos wird automatisch beschriftet"></label>
+          <label>Zuordnung<select name="relatedType"><option value="auto">Automatisch nach Datum & Törn</option><option value="day">Bestimmter Tagebucheintrag</option><option value="port">Bestimmter Hafen</option><option value="trip">Gesamter Törn</option></select></label>
+          <label class="wide">Bezug<select id="photoRelatedId" name="relatedId"><option value="">Wird automatisch erkannt</option></select></label>
+          <div id="photoImportStatus" class="wide photo-import-status" role="status" aria-live="polite" hidden></div>
+          <div class="wide actions"><button id="photoImportButton" class="primary">Fotos importieren</button><button type="reset">Auswahl leeren</button></div>
+        </form>
+        <div id="photoGrid" class="gallery photo-gallery"></div>
       </section>
 
       <section id="report" class="view">
@@ -815,6 +822,24 @@
     </div>
   </dialog>
 
+  <dialog id="photoEditDialog" class="field-help-dialog photo-edit-dialog" aria-labelledby="photoEditTitle">
+    <div class="field-help-dialog-inner">
+      <form method="dialog"><button class="dialog-close" value="cancel" aria-label="Foto-Bearbeitung schließen">×</button></form>
+      <div class="card-kicker">FOTO-ZUORDNUNG</div>
+      <h3 id="photoEditTitle">Foto bearbeiten</h3>
+      <form id="photoEditForm" class="form compact-form">
+        <input type="hidden" name="id">
+        <label>Datum<input type="date" name="date" required></label>
+        <label>Uhrzeit<input type="time" name="captureTime"></label>
+        <label class="wide">Ort<input name="locationName" placeholder="z. B. Marstal"></label>
+        <label class="wide">Bildunterschrift<input name="caption"></label>
+        <label>Zuordnung<select name="relatedType"><option value="day">Tageslogbuch</option><option value="port">Hafen</option><option value="trip">Gesamter Törn</option></select></label>
+        <label>Bezug<select id="photoEditRelatedId" name="relatedId"></select></label>
+        <div class="wide dialog-actions"><button class="primary" type="submit">Änderungen speichern</button><button type="button" id="photoEditCancel">Abbrechen</button></div>
+      </form>
+    </div>
+  </dialog>
+
   <dialog id="photoViewerDialog" class="photo-viewer-dialog" aria-labelledby="photoViewerCaption">
     <div class="photo-viewer-inner">
       <form method="dialog"><button class="dialog-close photo-viewer-close" value="cancel" aria-label="Foto schließen">×</button></form>
@@ -827,6 +852,7 @@
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="app.js?v=8.15"></script>
+  <script src="https://unpkg.com/exifr@7.1.3/dist/full.umd.js"></script>
+  <script src="app.js?v=8.17"></script>
 </body>
 </html>

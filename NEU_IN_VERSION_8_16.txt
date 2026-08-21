@@ -1,0 +1,18 @@
+LEEFKE 8.16 – INTELLIGENTE FOTO-GALERIE
+
+NEU
+- Mehrere Fotos in einem Schritt auswählen und importieren.
+- Bildmetadaten (EXIF) werden, soweit vorhanden, automatisch ausgewertet.
+- Aufnahmedatum und Uhrzeit werden übernommen.
+- GPS-Koordinaten werden aus dem Foto gelesen und in einen Ortsnamen umgesetzt.
+- Bekannte Häfen aus dem LEEFKE-Hafenbuch werden bei der Ortszuordnung bevorzugt.
+- Ohne GPS versucht die App, den Ort aus Hafenbuch und passendem Törntag abzuleiten.
+- Fotos werden automatisch dem passenden Tageslogbuch bzw. dem geöffneten Törn zugeordnet.
+- Galerie ist nach Aufnahmetag chronologisch gruppiert und zeigt Datum, Ort, Uhrzeit und Törnbezug.
+- Jede automatische Zuordnung kann über „Bearbeiten“ korrigiert werden.
+- Titelbilder lassen sich weiterhin nachträglich festlegen.
+
+HINWEIS
+- GPS/EXIF kann nur genutzt werden, wenn diese Informationen im Originalfoto noch vorhanden sind.
+- Bei Bildern ohne EXIF-Datum wird das Dateidatum verwendet und in der Galerie entsprechend gekennzeichnet.
+- Die Ortsnamenerkennung aus GPS benötigt beim ersten Abgleich eine Internetverbindung; bekannte Häfen funktionieren auch lokal.

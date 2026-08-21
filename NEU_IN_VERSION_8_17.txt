@@ -1,0 +1,7 @@
+LEEFKE 8.17
+
+- Aktualisierungshinweis liegt jetzt immer innerhalb der sicheren Bildschirmfläche.
+- iPhone/Dynamic Island/Notch und Android-Statusleiste werden über Safe-Area-Abstände berücksichtigt.
+- Der Hinweis ist als schwebende, gut erreichbare Karte ausgeführt und kann nicht mehr unter die obere Systemleiste rutschen.
+- „Jetzt aktualisieren“ und „Später“ haben auf Touch-Geräten ausreichend große Trefferflächen.
+- Auf sehr schmalen Smartphones stehen die beiden Schaltflächen untereinander.
