@@ -1,0 +1,11 @@
+LEEFKE 8.20
+
+- Die Galerie verwendet jetzt ein einziges durchgehendes, kompaktes Raster statt eines eigenen Rasters pro Tag.
+- Freie Plätze am Ende eines Datumsblocks werden sofort durch das nächste chronologische Foto genutzt.
+- Datum, Position innerhalb des Tages und der Beginn eines neuen Tages stehen direkt auf jeder Miniatur.
+- Ort, Törn-/Tagesbezug und Aufnahmezeit bleiben direkt am Bild sichtbar.
+- Auf Smartphones stehen die beiden Bildaktionen platzsparend nebeneinander.
+- „Galerie“ ist ein eigener Hauptmenüpunkt direkt oberhalb von „Mehr“.
+- Cloud- und Dublettenwerkzeuge sind in einer kompakten, aufklappbaren Zeile zusammengefasst.
+- Bearbeiten und Titelbild sind niedrige, platzsparende Aktionsschaltflächen.
+- Duplikaterkennung, Mehrfachupload, EXIF/GPS, Bearbeiten, Titelbild und Törnverknüpfung bleiben unverändert erhalten.

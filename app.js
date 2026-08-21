@@ -1,4 +1,4 @@
-const APP_VERSION = '8.19';
+const APP_VERSION = '8.20';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -5917,26 +5917,34 @@ function photoContextLabel(item) {
   return trip?.title || getActiveTrip()?.title || '';
 }
 
+function photoCardDateLabel(date) {
+  if (!date) return 'Datum unbekannt';
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return fmtDate(date);
+  return parsed.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
 function renderPhotos() {
   const photos = [...(state.photos || [])].sort((a,b) => photoSortKey(a).localeCompare(photoSortKey(b)) || (a.created || 0) - (b.created || 0));
-  const groups = new Map();
-  for (const photo of photos) {
-    const key = photo.date || 'unknown';
-    if (!groups.has(key)) groups.set(key, []);
-    groups.get(key).push(photo);
-  }
-  $('#photoGrid').innerHTML = [...groups.entries()].map(([date, items]) => {
-    const groupContexts = [...new Set(items.map(photoContextLabel).filter(Boolean))];
-    const groupContext = groupContexts.length === 1 ? groupContexts[0] : groupContexts.length > 1 ? `${groupContexts.length} Törn-/Ortsbezüge` : '';
-    const cards = items.map(item => {
-      const place = item.locationName || (item.latitude != null && item.longitude != null ? coordinateLabel(item.latitude, item.longitude) : 'Ort nicht erkannt');
-      const context = photoContextLabel(item);
-      const time = item.captureTime ? `${item.captureTime} Uhr` : '';
-      const source = item.captureSource === 'EXIF' ? 'Bilddatum' : item.captureSource === 'Dateidatum' ? 'Dateidatum' : '';
-      return `<figure class="photo ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || place || 'LEEFKE')}</strong><div class="photo-location">📍 ${esc(place)}</div>${context ? `<div class="photo-context">⚓ ${esc(context)}</div>` : ''}<div class="meta photo-capture-meta">${[time, source].filter(Boolean).map(esc).join(' · ') || 'Aufnahmezeit unbekannt'}</div></figcaption><div class="photo-actions"><button onclick="editPhotoMeta('${item.id}')">Bearbeiten</button><button onclick="setFeaturedPhoto('${item.id}')">${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild'}</button></div></figure>`;
-    }).join('');
-    return `<section class="photo-day-group"><div class="photo-day-heading">${photoDayHeading(date === 'unknown' ? '' : date, items.length, groupContext)}</div><div class="photo-day-photos">${cards}</div></section>`;
-  }).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
+  const dateCounts = photos.reduce((counts, item) => {
+    const key = item.date || 'unknown';
+    counts.set(key, (counts.get(key) || 0) + 1);
+    return counts;
+  }, new Map());
+  const datePositions = new Map();
+  const cards = photos.map((item, index) => {
+    const dateKey = item.date || 'unknown';
+    const datePosition = (datePositions.get(dateKey) || 0) + 1;
+    datePositions.set(dateKey, datePosition);
+    const startsDate = index === 0 || (photos[index - 1].date || 'unknown') !== dateKey;
+    const place = item.locationName || (item.latitude != null && item.longitude != null ? coordinateLabel(item.latitude, item.longitude) : 'Ort nicht erkannt');
+    const context = photoContextLabel(item);
+    const time = item.captureTime ? `${item.captureTime} Uhr` : '';
+    const source = item.captureSource === 'EXIF' ? 'Bilddatum' : item.captureSource === 'Dateidatum' ? 'Dateidatum' : '';
+    const count = dateCounts.get(dateKey) || 1;
+    return `<figure class="photo photo-stream-card ${startsDate ? 'photo-date-start' : ''} ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-card-date" title="${esc(item.date ? fmtDate(item.date) : 'Datum unbekannt')}"><strong>${esc(photoCardDateLabel(item.date))}</strong><span>${datePosition}/${count}${startsDate ? ' · neuer Tag' : ''}</span></div><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || place || 'LEEFKE')}</strong><div class="photo-location">📍 ${esc(place)}</div>${context ? `<div class="photo-context">⚓ ${esc(context)}</div>` : ''}<div class="meta photo-capture-meta">${[time, source].filter(Boolean).map(esc).join(' · ') || 'Aufnahmezeit unbekannt'}</div></figcaption><div class="photo-actions"><button class="photo-action-edit" onclick="editPhotoMeta('${item.id}')" aria-label="Foto bearbeiten" title="Foto bearbeiten">✎ <span>Bearbeiten</span></button><button class="photo-action-featured" onclick="setFeaturedPhoto('${item.id}')" aria-label="${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild verwenden'}" title="${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild verwenden'}">${item.featured === true || item.featured === 'true' ? '★ <span>Lösen</span>' : '☆ <span>Titelbild</span>'}</button></div></figure>`;
+  }).join('');
+  $('#photoGrid').innerHTML = cards ? `<div class="photo-stream-grid">${cards}</div>` : '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
   const pending = photos.filter(item => !item.storagePath || item._cloudState === 'error').length;
   if ($('#photoCloudStatus')) $('#photoCloudStatus').textContent = currentSession ? (pending ? `${pending} Foto(s) warten auf den Cloud-Abgleich.` : 'Alle Fotos sind im privaten LEEFKE-Speicher verfügbar.') : 'Anmelden, um Fotos auf allen Geräten verfügbar zu machen.';
   if ($('#photoAutoSync')) $('#photoAutoSync').checked = getSettings().photoAutoSync !== false;

@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.19">
+  <link rel="stylesheet" href="style.css?v=8.20">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -34,7 +34,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.19</small>
+        <small>BORDTAGEBUCH · VERSION 8.20</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -54,11 +54,11 @@
       <button data-view="ports"><span>⚓</span> Hafenbuch</button>
       <button data-view="fuel"><span>⛽</span> Tankbuch</button>
       <button data-view="route"><span>⌁</span> Törnarchiv</button>
+      <button data-view="photos"><span>▦</span> Galerie</button>
       <details id="navMoreGroup" class="nav-more-group">
         <summary>Mehr</summary>
         <div>
           <button data-view="maintenance"><span>⚙</span> Wartung & Fristen</button>
-          <button data-view="photos"><span>▦</span> Fotos</button>
           <button data-view="settings"><span>♜</span> Schiffspass</button>
           <button data-view="sync"><span>☁</span> Konto & Sync</button>
           <button data-view="history"><span>⟲</span> Verlauf <b id="conflictNavBadge" class="nav-badge" hidden>0</b></button>
@@ -559,8 +559,11 @@
       </section>
 
       <section id="photos" class="view">
-        <div class="title"><small>ERINNERUNGEN</small><h2>LEEFKE unterwegs</h2><p>Fotos aus Häfen, von Überfahrten und besonderen Tagen an Bord.</p></div>
-        <article class="card photo-cloud-controls"><div><div class="card-kicker">PRIVATE FOTO-CLOUD</div><h3>Auf allen Geräten verfügbar</h3><p id="photoCloudStatus" class="meta">Nach der Anmeldung werden verkleinerte Fotos automatisch in den privaten LEEFKE-Speicher übertragen.</p><p id="photoDuplicateScanStatus" class="meta photo-duplicate-scan-status" role="status" aria-live="polite"></p></div><div class="actions"><label class="switch-label"><input id="photoAutoSync" type="checkbox" checked> Fotos automatisch synchronisieren</label><button id="syncPhotosButton" type="button">Fotos jetzt abgleichen</button><button id="checkPhotoDuplicatesButton" type="button">Doppelte Fotos prüfen</button></div></article>
+        <div class="title"><small>GALERIE</small><h2>LEEFKE unterwegs</h2><p>Bilder aus Häfen, von Überfahrten und besonderen Tagen an Bord.</p></div>
+        <details class="card photo-cloud-controls photo-tools-details">
+          <summary><div><strong>Cloud & Galerie-Werkzeuge</strong><span>Synchronisieren und doppelte Bilder prüfen</span></div><span aria-hidden="true">▾</span></summary>
+          <div class="photo-tools-content"><p id="photoCloudStatus" class="meta">Nach der Anmeldung werden verkleinerte Fotos automatisch in den privaten LEEFKE-Speicher übertragen.</p><p id="photoDuplicateScanStatus" class="meta photo-duplicate-scan-status" role="status" aria-live="polite"></p><div class="actions"><label class="switch-label"><input id="photoAutoSync" type="checkbox" checked> Automatisch synchronisieren</label><button id="syncPhotosButton" type="button">Jetzt abgleichen</button><button id="checkPhotoDuplicatesButton" type="button">Doppelte prüfen</button></div></div>
+        </details>
         <div class="mobile-entry-bar" data-entry-key="photos">
           <button id="newPhotoEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="photoForm"><span aria-hidden="true">＋</span> Fotos hinzufügen</button>
         </div>
@@ -877,6 +880,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/exifr@7.1.3/dist/full.umd.js"></script>
-  <script src="app.js?v=8.19"></script>
+  <script src="app.js?v=8.20"></script>
 </body>
 </html>

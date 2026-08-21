@@ -3221,6 +3221,70 @@ body{
   .photo-duplicate-actions button{min-height:46px}
 }
 
+/* LEEFKE 8.20 · durchgehender Fotostrom ohne reservierte Leerstellen je Tag */
+#photoGrid.gallery.photo-gallery{display:block!important;margin-top:2px}
+.photo-stream-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px;align-items:stretch}
+#photoGrid .photo-stream-card{display:flex!important;min-width:0;width:100%;height:100%;margin:0;flex-direction:column;border:1px solid rgba(29,66,81,.13);border-radius:12px;box-shadow:0 4px 13px rgba(8,31,48,.085)}
+.photo-stream-card.photo-date-start{border-color:rgba(181,126,37,.58);box-shadow:0 5px 15px rgba(181,126,37,.14)}
+.photo-card-date{display:flex;align-items:center;justify-content:space-between;gap:7px;min-height:33px;padding:6px 9px;border-bottom:1px solid rgba(29,66,81,.11);background:#eef2ef;color:var(--navy-900)}
+.photo-card-date strong{overflow:hidden;font-size:.72rem;line-height:1.1;text-overflow:ellipsis;text-transform:capitalize;white-space:nowrap}
+.photo-card-date span{flex:0 0 auto;color:var(--muted);font-size:.61rem;font-weight:800;white-space:nowrap}
+.photo-date-start .photo-card-date{background:#fff1c9;color:#573f15}
+.photo-date-start .photo-card-date span{color:#75581e}
+#photoGrid .photo-stream-card .photo-badges{top:42px}
+#photoGrid .photo-stream-card>.delete{top:42px!important}
+#photoGrid .photo-stream-card>img{display:block;width:100%;height:auto!important;max-height:none!important;aspect-ratio:4/3!important;object-fit:cover!important;object-position:center!important;cursor:zoom-in}
+#photoGrid .photo-stream-card figcaption{display:grid;gap:2px;padding:8px 9px 6px}
+.photo-stream-card figcaption>strong,.photo-stream-card .photo-location,.photo-stream-card .photo-context,.photo-stream-card .photo-capture-meta{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.photo-stream-card figcaption>strong{font-size:.84rem;line-height:1.2}
+#photoGrid .photo-stream-card .photo-location,#photoGrid .photo-stream-card .photo-context{margin:0;font-size:.7rem;line-height:1.2}
+#photoGrid .photo-stream-card .photo-capture-meta{margin:1px 0 0;font-size:.63rem;line-height:1.2}
+#photoGrid .photo-stream-card .photo-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;margin-top:auto;padding:0 9px 9px}
+#photoGrid .photo-stream-card .photo-actions button{min-width:0;min-height:27px;padding:3px 4px;flex:none;border-radius:7px;font-size:.64rem;line-height:1.08;white-space:nowrap}
+#photoGrid .photo-stream-card .photo-actions button span{display:inline}
+
+.photo-tools-details{display:block;margin:8px 0 10px!important;padding:0!important;overflow:hidden}
+.photo-tools-details>summary{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:9px 12px;cursor:pointer;list-style:none}
+.photo-tools-details>summary::-webkit-details-marker{display:none}
+.photo-tools-details>summary>div{display:grid;gap:1px;min-width:0}
+.photo-tools-details>summary strong{color:var(--navy-900);font-size:.84rem}
+.photo-tools-details>summary div span{overflow:hidden;color:var(--muted);font-size:.7rem;text-overflow:ellipsis;white-space:nowrap}
+.photo-tools-details>summary>span{color:var(--brass-dark);font-size:1rem;transition:transform .18s}
+.photo-tools-details[open]>summary{border-bottom:1px solid var(--line)}
+.photo-tools-details[open]>summary>span{transform:rotate(180deg)}
+.photo-tools-content{display:grid;gap:7px;padding:9px 12px 11px}
+.photo-tools-content>p{margin:0!important;font-size:.74rem}
+.photo-tools-details .actions{display:grid;grid-template-columns:minmax(190px,1fr) auto auto;align-items:center;gap:7px;margin:0}
+.photo-tools-details .actions button{min-height:34px;padding:6px 9px;font-size:.7rem}
+.photo-tools-details .switch-label{font-size:.74rem!important}
+
+@media(max-width:850px){
+  .photo-stream-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:9px}
+}
+@media(max-width:650px){
+  .photo-stream-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
+  .photo-card-date{min-height:30px;padding:5px 7px}
+  .photo-card-date strong{font-size:.66rem}
+  .photo-card-date span{font-size:.56rem}
+  #photoGrid .photo-stream-card .photo-badges{top:38px}
+  #photoGrid .photo-stream-card>.delete{top:38px!important}
+  #photoGrid .photo-stream-card figcaption{padding:7px 7px 5px}
+  .photo-stream-card figcaption>strong{font-size:.77rem}
+  #photoGrid .photo-stream-card .photo-location,#photoGrid .photo-stream-card .photo-context{font-size:.64rem}
+  #photoGrid .photo-stream-card .photo-capture-meta{font-size:.58rem}
+  #photoGrid .photo-stream-card .photo-actions{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:4px;padding:0 7px 7px}
+  #photoGrid .photo-stream-card .photo-actions button{min-height:29px;padding:3px 2px;font-size:.58rem}
+  .photo-tools-details>summary{min-height:46px;padding:8px 10px}
+  .photo-tools-content{padding:8px 10px 10px}
+  .photo-tools-details .actions{grid-template-columns:1fr 1fr}
+  .photo-tools-details .actions .switch-label{grid-column:1/-1}
+  .photo-tools-details .actions button{width:auto!important;min-height:34px}
+}
+@media(max-width:350px){
+  .photo-stream-grid{gap:5px}
+  .photo-card-date span{display:none}
+}
+
 
 /* LEEFKE 8.17 · Aktualisierungshinweis immer innerhalb der bedienbaren Safe Area */
 .update-banner{
