@@ -1,4 +1,4 @@
-const APP_VERSION = '8.16';
+const APP_VERSION = '8.17';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -6903,7 +6903,7 @@ async function checkForAppUpdate({ manual = false } = {}) {
     if (registration.waiting) {
       pendingServiceWorker = registration.waiting;
       $('#updateBanner').hidden = false;
-      setAppUpdateStatus('Neue Version verfügbar. Oben auf „Jetzt aktualisieren“ tippen.', 'success');
+      setAppUpdateStatus('Neue Version verfügbar. Im Aktualisierungshinweis auf „Jetzt aktualisieren“ tippen.', 'success');
     } else if (manual) {
       setAppUpdateStatus(`LEEFKE ${APP_VERSION} ist auf diesem Gerät aktuell.`, 'success');
     }

@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-16-smart-photo-gallery-20260820';
+const APP_CACHE = 'leefke-v8-17-safe-update-banner-20260821';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.16',
+  './index.html?v=8.17',
   './style.css',
-  './style.css?v=8.16',
+  './style.css?v=8.17',
   './app.js',
-  './app.js?v=8.16',
+  './app.js?v=8.17',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',

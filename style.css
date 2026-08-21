@@ -3133,3 +3133,41 @@ body{
   #photoGrid.gallery.photo-gallery{gap:16px}
   .photo-file-picker input[type="file"]{font-size:16px}
 }
+
+
+/* LEEFKE 8.17 · Aktualisierungshinweis immer innerhalb der bedienbaren Safe Area */
+.update-banner{
+  position:fixed!important;
+  z-index:1000!important;
+  top:calc(env(safe-area-inset-top,0px) + 12px)!important;
+  left:50%!important;
+  right:auto!important;
+  width:min(760px,calc(100% - 24px))!important;
+  max-height:calc(100dvh - env(safe-area-inset-top,0px) - 24px);
+  box-sizing:border-box;
+  transform:translateX(-50%);
+  overflow:auto;
+  overscroll-behavior:contain;
+  border:1px solid #b98e38;
+  border-radius:14px;
+  box-shadow:0 14px 40px rgba(20,25,28,.28);
+}
+.update-banner .actions{flex:0 0 auto}
+.update-banner button{min-height:44px;touch-action:manipulation}
+@media(max-width:850px){
+  .update-banner{
+    position:fixed!important;
+    top:calc(env(safe-area-inset-top,0px) + 10px)!important;
+    left:max(10px,env(safe-area-inset-left,0px))!important;
+    right:max(10px,env(safe-area-inset-right,0px))!important;
+    width:auto!important;
+    max-height:calc(100dvh - env(safe-area-inset-top,0px) - env(safe-area-inset-bottom,0px) - 20px);
+    transform:none;
+    padding:14px;
+  }
+  .update-banner .actions{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;width:100%}
+  .update-banner .actions button{width:100%;min-width:0}
+}
+@media(max-width:430px){
+  .update-banner .actions{grid-template-columns:1fr}
+}
