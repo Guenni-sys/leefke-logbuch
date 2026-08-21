@@ -1,0 +1,8 @@
+LEEFKE 8.18
+
+- Galerie nach Aufnahmetag klar und chronologisch in Zeilen gruppiert.
+- Kompaktes, gleichmäßiges Bildraster mit deutlich weniger Leerraum.
+- Ort sowie Törn-/Tagesbezug stehen direkt und getrennt lesbar an jedem Foto.
+- Responsive Zwei-Spalten-Ansicht auf Android und iPhone, auf sehr schmalen Geräten einspaltig.
+- Miniaturen öffnen eine große Bildansicht mit Vor/Zurück, Positionsanzeige, Pfeiltasten und Wischgeste.
+- Mehrfachupload, EXIF-Datum/GPS, automatische Zuordnung, Bearbeiten und Törnverknüpfung bleiben unverändert erhalten.

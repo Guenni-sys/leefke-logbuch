@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.17">
+  <link rel="stylesheet" href="style.css?v=8.19">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -34,7 +34,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.17</small>
+        <small>BORDTAGEBUCH · VERSION 8.19</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -560,7 +560,7 @@
 
       <section id="photos" class="view">
         <div class="title"><small>ERINNERUNGEN</small><h2>LEEFKE unterwegs</h2><p>Fotos aus Häfen, von Überfahrten und besonderen Tagen an Bord.</p></div>
-        <article class="card photo-cloud-controls"><div><div class="card-kicker">PRIVATE FOTO-CLOUD</div><h3>Auf allen Geräten verfügbar</h3><p id="photoCloudStatus" class="meta">Nach der Anmeldung werden verkleinerte Fotos automatisch in den privaten LEEFKE-Speicher übertragen.</p></div><div class="actions"><label class="switch-label"><input id="photoAutoSync" type="checkbox" checked> Fotos automatisch synchronisieren</label><button id="syncPhotosButton" type="button">Fotos jetzt abgleichen</button></div></article>
+        <article class="card photo-cloud-controls"><div><div class="card-kicker">PRIVATE FOTO-CLOUD</div><h3>Auf allen Geräten verfügbar</h3><p id="photoCloudStatus" class="meta">Nach der Anmeldung werden verkleinerte Fotos automatisch in den privaten LEEFKE-Speicher übertragen.</p><p id="photoDuplicateScanStatus" class="meta photo-duplicate-scan-status" role="status" aria-live="polite"></p></div><div class="actions"><label class="switch-label"><input id="photoAutoSync" type="checkbox" checked> Fotos automatisch synchronisieren</label><button id="syncPhotosButton" type="button">Fotos jetzt abgleichen</button><button id="checkPhotoDuplicatesButton" type="button">Doppelte Fotos prüfen</button></div></article>
         <div class="mobile-entry-bar" data-entry-key="photos">
           <button id="newPhotoEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="photoForm"><span aria-hidden="true">＋</span> Fotos hinzufügen</button>
         </div>
@@ -840,12 +840,36 @@
     </div>
   </dialog>
 
+  <dialog id="photoDuplicateDialog" class="field-help-dialog photo-duplicate-dialog" aria-labelledby="photoDuplicateTitle">
+    <div class="field-help-dialog-inner">
+      <button id="photoDuplicateClose" class="dialog-close" type="button" aria-label="Duplikatvergleich schließen">×</button>
+      <div class="card-kicker">DUBLETTENPRÜFUNG</div>
+      <h3 id="photoDuplicateTitle">Möglicherweise dasselbe Foto</h3>
+      <p id="photoDuplicateMessage" class="meta"></p>
+      <div class="photo-duplicate-comparison">
+        <figure><span>Bereits vorhanden</span><img id="photoDuplicateExistingImage" alt="Bereits vorhandenes Foto"><figcaption id="photoDuplicateExistingMeta"></figcaption></figure>
+        <figure><span>Neu beziehungsweise später gespeichert</span><img id="photoDuplicateNewImage" alt="Zu prüfendes Foto"><figcaption id="photoDuplicateNewMeta"></figcaption></figure>
+      </div>
+      <p class="photo-duplicate-note">LEEFKE löscht bei einer bloßen Ähnlichkeit nichts automatisch. Bitte entscheide, welches Bild erhalten bleiben soll.</p>
+      <div class="dialog-actions photo-duplicate-actions">
+        <button id="photoDuplicateKeepExisting" class="primary" type="button">Vorhandenes behalten</button>
+        <button id="photoDuplicateKeepNew" type="button">Neues stattdessen</button>
+        <button id="photoDuplicateKeepBoth" type="button">Beide behalten</button>
+      </div>
+    </div>
+  </dialog>
+
   <dialog id="photoViewerDialog" class="photo-viewer-dialog" aria-labelledby="photoViewerCaption">
     <div class="photo-viewer-inner">
       <form method="dialog"><button class="dialog-close photo-viewer-close" value="cancel" aria-label="Foto schließen">×</button></form>
-      <img id="photoViewerImage" alt="Foto in voller Ansicht">
+      <div class="photo-viewer-stage">
+        <button id="photoViewerPrevious" class="photo-viewer-nav photo-viewer-previous" type="button" aria-label="Vorheriges Foto">‹</button>
+        <img id="photoViewerImage" alt="Foto in voller Ansicht">
+        <button id="photoViewerNext" class="photo-viewer-nav photo-viewer-next" type="button" aria-label="Nächstes Foto">›</button>
+        <span id="photoViewerCounter" class="photo-viewer-counter" aria-live="polite"></span>
+      </div>
       <div id="photoViewerCaption" class="photo-viewer-caption"></div>
-      <form method="dialog" class="dialog-actions"><button value="ok">Schließen</button></form>
+      <form method="dialog" class="dialog-actions"><button value="ok">Schließen</button><small>Wischen oder Pfeiltasten für das nächste Bild</small></form>
     </div>
   </dialog>
 
@@ -853,6 +877,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/exifr@7.1.3/dist/full.umd.js"></script>
-  <script src="app.js?v=8.17"></script>
+  <script src="app.js?v=8.19"></script>
 </body>
 </html>

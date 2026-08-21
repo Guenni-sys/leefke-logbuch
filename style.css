@@ -1785,6 +1785,13 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
   object-fit:contain;
   background:#06151d;
 }
+.photo-viewer-stage{position:relative;display:grid;place-items:center;min-height:180px;background:#06151d;touch-action:pan-y}
+.photo-viewer-stage>img{display:block;width:100%;max-height:78vh;object-fit:contain;background:#06151d;user-select:none;-webkit-user-drag:none}
+.photo-viewer-nav{position:absolute;z-index:3;top:50%;display:grid;place-items:center;width:46px;height:58px;margin:0;padding:0;transform:translateY(-50%);border:1px solid rgba(255,255,255,.26);border-radius:12px;background:rgba(6,21,29,.72);color:#fff;font-size:2.25rem;line-height:1;box-shadow:0 5px 18px rgba(0,0,0,.28)}
+.photo-viewer-nav:hover,.photo-viewer-nav:focus-visible{background:rgba(255,255,255,.94);color:var(--navy-900)}
+.photo-viewer-nav:disabled{display:none}
+.photo-viewer-previous{left:12px}.photo-viewer-next{right:12px}
+.photo-viewer-counter{position:absolute;right:12px;bottom:10px;padding:4px 8px;border-radius:999px;background:rgba(6,21,29,.76);color:#fff;font-size:.75rem;font-weight:800}
 .photo-viewer-caption{
   display:flex;
   justify-content:space-between;
@@ -1808,6 +1815,8 @@ body.holiday-mode .holiday-mode-switch{background:#fff5d7;border-color:rgba(154,
   padding:0 16px 14px;
   background:#0b202b;
 }
+.photo-viewer-inner>.dialog-actions{align-items:center;justify-content:space-between}
+.photo-viewer-inner>.dialog-actions small{color:#b9cbd2}
 
 /* Auf Mobilgeräten bleibt das Startbild klein und vollständig. */
 @media(max-width:700px){
@@ -3132,6 +3141,84 @@ body{
   .photo-day-photos{columns:1!important}
   #photoGrid.gallery.photo-gallery{gap:16px}
   .photo-file-picker input[type="file"]{font-size:16px}
+}
+
+/* LEEFKE 8.18 · kompakte, zeilenweise chronologische Foto-Galerie */
+#photoGrid.gallery.photo-gallery{gap:24px}
+.photo-day-group{display:grid;gap:10px}
+.photo-day-heading{margin:0;padding:0 2px 9px;border-bottom:2px solid rgba(29,66,81,.16)}
+.photo-day-heading>div{align-items:center}
+.photo-day-heading>div>div{display:grid;gap:2px;min-width:0}
+.photo-day-heading small{overflow:hidden;color:var(--muted);font-size:.75rem;font-weight:750;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
+.photo-day-photos{display:grid;grid-template-columns:repeat(auto-fill,minmax(225px,1fr));gap:12px;columns:auto}
+.photo-day-photos .photo{display:flex;min-width:0;height:100%;flex-direction:column;border:1px solid rgba(29,66,81,.11);border-radius:13px;box-shadow:0 5px 16px rgba(8,31,48,.09)}
+.photo-day-photos .photo>img{height:auto;aspect-ratio:4/3;object-fit:cover;cursor:zoom-in}
+.photo-day-photos .photo figcaption{display:grid;gap:3px;padding:9px 10px 7px}
+.photo-day-photos .photo figcaption>strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#photoGrid .photo-location,#photoGrid .photo-context{overflow:hidden;margin:0;font-size:.78rem;font-weight:800;line-height:1.25;text-overflow:ellipsis;white-space:nowrap}
+#photoGrid .photo-context{color:var(--navy-800)}
+#photoGrid .photo-capture-meta{margin-top:1px;font-size:.7rem;line-height:1.25}
+.photo-day-photos .photo-actions{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:auto;padding:0 10px 10px}
+.photo-day-photos .photo-actions button{min-width:0;padding:7px 5px;line-height:1.2}
+
+@media(max-width:850px){
+  .photo-day-photos{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+}
+@media(max-width:560px){
+  #photoGrid.gallery.photo-gallery{gap:20px}
+  .photo-day-heading>div{align-items:flex-end;flex-direction:row;gap:10px}
+  .photo-day-heading>div>div{min-width:0}
+  .photo-day-heading strong{font-size:.96rem}
+  .photo-day-heading small{font-size:.68rem}
+  .photo-day-photos{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;columns:auto!important}
+  .photo-day-photos .photo>img{aspect-ratio:1/1}
+  .photo-day-photos .photo figcaption{padding:8px 8px 6px}
+  .photo-day-photos .photo figcaption>strong{font-size:.82rem}
+  #photoGrid .photo-location,#photoGrid .photo-context{font-size:.7rem}
+  #photoGrid .photo-capture-meta{font-size:.64rem}
+  .photo-day-photos .photo-actions{grid-template-columns:1fr;padding:0 8px 8px}
+  .photo-day-photos .photo-actions button{min-height:38px;font-size:.7rem}
+  .photo-viewer-dialog{width:100vw;max-width:none;max-height:100dvh;border-radius:0}
+  .photo-viewer-inner{max-height:100dvh}
+  .photo-viewer-stage>img{max-height:72dvh}
+  .photo-viewer-nav{width:42px;height:52px}
+  .photo-viewer-previous{left:6px}.photo-viewer-next{right:6px}
+  .photo-viewer-caption{display:grid;gap:4px;padding:10px 12px}
+  .photo-viewer-inner>.dialog-actions{padding:0 12px calc(10px + env(safe-area-inset-bottom,0px))}
+  .photo-viewer-inner>.dialog-actions small{font-size:.66rem;text-align:right}
+}
+@media(max-width:360px){
+  .photo-day-photos{grid-template-columns:1fr}
+  .photo-day-photos .photo>img{aspect-ratio:4/3}
+  .photo-day-photos .photo-actions{grid-template-columns:1fr 1fr}
+}
+
+/* LEEFKE 8.19 · lokale Dublettenprüfung für Fotos */
+.photo-cloud-controls .actions{flex-wrap:wrap}
+.photo-duplicate-scan-status{margin:7px 0 0!important;color:#315f70!important;font-weight:750}
+.photo-duplicate-scan-status:empty{display:none}
+.photo-duplicate-dialog{width:min(860px,calc(100vw - 24px))}
+.photo-duplicate-dialog .field-help-dialog-inner{position:relative;max-height:calc(100dvh - 30px);overflow:auto}
+.photo-duplicate-dialog h3{margin:.25rem 0 .35rem}
+.photo-duplicate-comparison{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin:16px 0}
+.photo-duplicate-comparison figure{display:grid;grid-template-rows:auto auto 1fr;gap:7px;min-width:0;margin:0;padding:10px;border:1px solid var(--line);border-radius:13px;background:#fff}
+.photo-duplicate-comparison figure>span{color:var(--navy-900);font-size:.72rem;font-weight:850;letter-spacing:.04em;text-transform:uppercase}
+.photo-duplicate-comparison img{display:block;width:100%;aspect-ratio:4/3;object-fit:cover;border-radius:9px;background:#e8edef}
+.photo-duplicate-comparison figcaption{color:var(--muted);font-size:.76rem;line-height:1.35;overflow-wrap:anywhere}
+.photo-duplicate-note{margin:0;padding:10px 12px;border-left:4px solid var(--brass);border-radius:8px;background:#fff7df;color:#5e5849;font-size:.82rem;line-height:1.4}
+.photo-duplicate-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:14px}
+.photo-duplicate-actions button{min-width:0;white-space:normal}
+
+@media(max-width:650px){
+  .photo-cloud-controls .actions button{width:100%}
+  .photo-duplicate-dialog{width:100vw;max-width:none;max-height:100dvh;border-radius:0}
+  .photo-duplicate-dialog .field-help-dialog-inner{max-height:100dvh;padding:22px 12px calc(16px + env(safe-area-inset-bottom,0px))}
+  .photo-duplicate-comparison{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin:12px 0}
+  .photo-duplicate-comparison figure{padding:6px}
+  .photo-duplicate-comparison figure>span{font-size:.62rem}
+  .photo-duplicate-comparison figcaption{font-size:.66rem}
+  .photo-duplicate-actions{grid-template-columns:1fr}
+  .photo-duplicate-actions button{min-height:46px}
 }
 
 

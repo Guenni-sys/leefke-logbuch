@@ -1,0 +1,8 @@
+LEEFKE 8.19
+
+- Exakte doppelte Bilder werden beim Import unabhängig vom Dateinamen erkannt und zurückgehalten.
+- Optisch sehr ähnliche Bilder werden mit zwei Miniaturen zur sicheren Entscheidung angezeigt.
+- Zur Auswahl stehen: vorhandenes Bild behalten, neues Bild stattdessen verwenden oder beide behalten.
+- Die bestehende Galerie kann nachträglich mit „Doppelte Fotos prüfen“ untersucht werden.
+- Die Bildanalyse erfolgt vollständig lokal auf dem Gerät; Bilder werden dafür nicht an einen zusätzlichen Dienst gesendet.
+- Datenbankstruktur, Cloud-Synchronisierung, EXIF/GPS, automatische Zuordnung und Törnverknüpfung bleiben unverändert.

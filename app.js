@@ -1,4 +1,4 @@
-const APP_VERSION = '8.17';
+const APP_VERSION = '8.19';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -5065,6 +5065,211 @@ function compressImage(file, maxDimension = 1800, quality = .82) {
   });
 }
 
+/* LEEFKE 8.19 · lokale Erkennung identischer und optisch sehr ähnlicher Fotos */
+const photoFingerprintCache = new Map();
+let photoDuplicateResolver = null;
+
+function fallbackPhotoHash(value) {
+  let first = 2166136261;
+  let second = 2246822519;
+  for (let index = 0; index < value.length; index += 1) {
+    const code = value.charCodeAt(index);
+    first = Math.imul(first ^ code, 16777619);
+    second = Math.imul(second ^ code, 3266489917);
+  }
+  return `${(first >>> 0).toString(16).padStart(8, '0')}${(second >>> 0).toString(16).padStart(8, '0')}`;
+}
+
+async function photoContentHash(data) {
+  if (globalThis.crypto?.subtle) {
+    const bytes = await dataUrlToBlob(data).arrayBuffer();
+    const digest = await crypto.subtle.digest('SHA-256', bytes);
+    return [...new Uint8Array(digest)].map(value => value.toString(16).padStart(2, '0')).join('');
+  }
+  return fallbackPhotoHash(String(data));
+}
+
+function photoVisualFingerprint(data) {
+  return new Promise((resolve, reject) => {
+    const image = new Image();
+    image.onerror = () => reject(new Error('Bild konnte für die Dublettenprüfung nicht gelesen werden.'));
+    image.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = 9;
+      canvas.height = 8;
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+      let bits = '';
+      let red = 0;
+      let green = 0;
+      let blue = 0;
+      for (let y = 0; y < 8; y += 1) {
+        for (let x = 0; x < 9; x += 1) {
+          const offset = (y * 9 + x) * 4;
+          red += pixels[offset];
+          green += pixels[offset + 1];
+          blue += pixels[offset + 2];
+          if (x < 8) {
+            const nextOffset = offset + 4;
+            const gray = pixels[offset] * .299 + pixels[offset + 1] * .587 + pixels[offset + 2] * .114;
+            const nextGray = pixels[nextOffset] * .299 + pixels[nextOffset + 1] * .587 + pixels[nextOffset + 2] * .114;
+            bits += gray > nextGray ? '1' : '0';
+          }
+        }
+      }
+      let visualHash = '';
+      for (let index = 0; index < bits.length; index += 4) visualHash += Number.parseInt(bits.slice(index, index + 4), 2).toString(16);
+      resolve({
+        visualHash,
+        color: [red, green, blue].map(value => Math.round(value / 72)),
+        width: image.naturalWidth || 1,
+        height: image.naturalHeight || 1,
+        ratio: (image.naturalWidth || 1) / (image.naturalHeight || 1)
+      });
+    };
+    image.src = data;
+  });
+}
+
+async function createPhotoFingerprint(data) {
+  const [contentHash, visual] = await Promise.all([photoContentHash(data), photoVisualFingerprint(data)]);
+  return { contentHash, ...visual };
+}
+
+async function getPhotoFingerprint(photo) {
+  if (!photo?.data) return null;
+  const cacheKey = `${photo.data.length}:${photo._mediaUpdatedAt || photo.created || ''}`;
+  const cached = photoFingerprintCache.get(photo.id);
+  if (cached?.cacheKey === cacheKey) return cached.fingerprint;
+  const fingerprint = await createPhotoFingerprint(photo.data);
+  photoFingerprintCache.set(photo.id, { cacheKey, fingerprint });
+  return fingerprint;
+}
+
+function photoHashDistance(left, right) {
+  if (!left || !right || left.length !== right.length) return 64;
+  let distance = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    let value = Number.parseInt(left[index], 16) ^ Number.parseInt(right[index], 16);
+    while (value) { distance += value & 1; value >>= 1; }
+  }
+  return distance;
+}
+
+function photoFingerprintSimilarity(candidate, existing) {
+  if (!candidate || !existing) return null;
+  if (candidate.contentHash === existing.contentHash) return { kind: 'exact', distance: 0, similarity: 100 };
+  const ratioDifference = Math.abs(candidate.ratio - existing.ratio) / Math.max(candidate.ratio, existing.ratio, .01);
+  const colorDifference = candidate.color.reduce((sum, value, index) => sum + Math.abs(value - existing.color[index]), 0) / 3;
+  const distance = photoHashDistance(candidate.visualHash, existing.visualHash);
+  if (ratioDifference <= .08 && colorDifference <= 38 && distance <= 5) {
+    return { kind: 'visual', distance, similarity: Math.round((1 - distance / 64) * 100) };
+  }
+  return null;
+}
+
+async function findPhotoDuplicate(candidateFingerprint, photos, excludeId = '') {
+  let bestVisualMatch = null;
+  for (const photo of photos) {
+    if (!photo?.data || photo.id === excludeId) continue;
+    const existingFingerprint = await getPhotoFingerprint(photo);
+    const similarity = photoFingerprintSimilarity(candidateFingerprint, existingFingerprint);
+    if (!similarity) continue;
+    if (similarity.kind === 'exact') return { photo, ...similarity };
+    if (!bestVisualMatch || similarity.distance < bestVisualMatch.distance) bestVisualMatch = { photo, ...similarity };
+  }
+  return bestVisualMatch;
+}
+
+function photoDuplicateMeta(item) {
+  const details = [
+    item.fileName || item.caption || 'Foto',
+    item.date ? fmtDate(item.date) : '',
+    item.captureTime ? `${item.captureTime} Uhr` : '',
+    item.locationName ? `📍 ${item.locationName}` : '',
+    item.id ? photoContextLabel(item) : ''
+  ].filter(Boolean);
+  return details.join(' · ');
+}
+
+function finishPhotoDuplicateReview(action = 'keep-both') {
+  const resolver = photoDuplicateResolver;
+  photoDuplicateResolver = null;
+  const dialog = $('#photoDuplicateDialog');
+  if (dialog?.open) dialog.close();
+  if (resolver) resolver(action);
+}
+
+function reviewPhotoDuplicate(candidate, existing, match) {
+  const dialog = $('#photoDuplicateDialog');
+  if (!dialog) return Promise.resolve('keep-both');
+  const exact = match.kind === 'exact';
+  $('#photoDuplicateTitle').textContent = exact ? 'Exakt dasselbe Bild gefunden' : 'Möglicherweise dasselbe Foto';
+  $('#photoDuplicateMessage').textContent = exact
+    ? 'Der Bildinhalt stimmt vollständig überein – auch wenn der Dateiname anders ist.'
+    : `Die Bildinhalte stimmen zu etwa ${match.similarity}% überein. Kleine Unterschiede durch Komprimierung oder Bearbeitung sind möglich.`;
+  $('#photoDuplicateExistingImage').src = existing.data;
+  $('#photoDuplicateNewImage').src = candidate.data;
+  $('#photoDuplicateExistingMeta').textContent = photoDuplicateMeta(existing);
+  $('#photoDuplicateNewMeta').textContent = photoDuplicateMeta(candidate);
+  if (typeof dialog.showModal === 'function') dialog.showModal();
+  else dialog.setAttribute('open', '');
+  return new Promise(resolve => { photoDuplicateResolver = resolve; });
+}
+
+async function checkPhotoDuplicates() {
+  const button = $('#checkPhotoDuplicatesButton');
+  const status = $('#photoDuplicateScanStatus');
+  const photos = [...(state.photos || [])].filter(photo => photo.data).sort((a,b) => photoSortKey(a).localeCompare(photoSortKey(b)) || (a.created || 0) - (b.created || 0));
+  if (photos.length < 2) {
+    if (status) status.textContent = 'Für eine Dublettenprüfung werden mindestens zwei Fotos benötigt.';
+    return;
+  }
+  if (button) button.disabled = true;
+  let exactCount = 0;
+  let visualCount = 0;
+  let removedCount = 0;
+  let keptBothCount = 0;
+  const retained = [];
+  try {
+    for (let index = 0; index < photos.length; index += 1) {
+      const candidate = photos[index];
+      if (status) status.textContent = `Foto ${index + 1} von ${photos.length} wird lokal verglichen …`;
+      const fingerprint = await getPhotoFingerprint(candidate);
+      const match = await findPhotoDuplicate(fingerprint, retained, candidate.id);
+      if (!match) { retained.push(candidate); continue; }
+      if (match.kind === 'exact') exactCount += 1; else visualCount += 1;
+      const action = await reviewPhotoDuplicate(candidate, match.photo, match);
+      if (action === 'keep-existing') {
+        await del('photos', candidate.id);
+        photoFingerprintCache.delete(candidate.id);
+        removedCount += 1;
+      } else if (action === 'keep-new') {
+        await del('photos', match.photo.id);
+        photoFingerprintCache.delete(match.photo.id);
+        const retainedIndex = retained.findIndex(item => item.id === match.photo.id);
+        if (retainedIndex >= 0) retained.splice(retainedIndex, 1);
+        retained.push(candidate);
+        removedCount += 1;
+      } else {
+        retained.push(candidate);
+        keptBothCount += 1;
+      }
+    }
+    if (removedCount) await refresh();
+    if (status) status.textContent = exactCount || visualCount
+      ? `Prüfung abgeschlossen: ${exactCount} exakte${exactCount === 1 ? ' Dublette' : ' Dubletten'} und ${visualCount} optisch ähnliche${visualCount === 1 ? ' Fundstelle' : ' Fundstellen'}. ${removedCount} ${removedCount === 1 ? 'Foto' : 'Fotos'} entfernt, ${keptBothCount} ${keptBothCount === 1 ? 'Paar' : 'Paare'} bewusst behalten.`
+      : `Prüfung abgeschlossen: In ${photos.length} Fotos wurden keine Dubletten gefunden.`;
+    toast(exactCount || visualCount ? 'Dublettenprüfung abgeschlossen' : 'Keine doppelten Fotos gefunden');
+  } catch (error) {
+    console.error(error);
+    if (status) status.textContent = `Dublettenprüfung nicht abgeschlossen: ${error.message || 'Unbekannter Fehler'}`;
+  } finally {
+    if (button) button.disabled = false;
+  }
+}
+
 function safeFilename(name) {
   return String(name || 'datei').normalize('NFKD').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/-+/g, '-').slice(-80);
 }
@@ -5689,11 +5894,12 @@ function photoRelationOptions() {
   fillPhotoRelationSelect(select, form.elements.relatedType?.value || 'auto', select.value);
 }
 
-function photoDayHeading(date, count) {
-  if (!date) return `<div><strong>Datum unbekannt</strong><span>${count} Foto${count === 1 ? '' : 's'}</span></div>`;
+function photoDayHeading(date, count, context = '') {
+  const contextHtml = context ? `<small>${esc(context)}</small>` : '';
+  if (!date) return `<div><div><strong>Datum unbekannt</strong>${contextHtml}</div><span>${count} Foto${count === 1 ? '' : 's'}</span></div>`;
   const d = new Date(`${date}T12:00:00`);
   const label = Number.isNaN(d.getTime()) ? fmtDate(date) : d.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: 'long', year: 'numeric' });
-  return `<div><strong>${esc(label)}</strong><span>${count} Foto${count === 1 ? '' : 's'}</span></div>`;
+  return `<div><div><strong>${esc(label)}</strong>${contextHtml}</div><span>${count} Foto${count === 1 ? '' : 's'}</span></div>`;
 }
 
 function photoSortKey(item) {
@@ -5720,14 +5926,16 @@ function renderPhotos() {
     groups.get(key).push(photo);
   }
   $('#photoGrid').innerHTML = [...groups.entries()].map(([date, items]) => {
+    const groupContexts = [...new Set(items.map(photoContextLabel).filter(Boolean))];
+    const groupContext = groupContexts.length === 1 ? groupContexts[0] : groupContexts.length > 1 ? `${groupContexts.length} Törn-/Ortsbezüge` : '';
     const cards = items.map(item => {
       const place = item.locationName || (item.latitude != null && item.longitude != null ? coordinateLabel(item.latitude, item.longitude) : 'Ort nicht erkannt');
       const context = photoContextLabel(item);
       const time = item.captureTime ? `${item.captureTime} Uhr` : '';
       const source = item.captureSource === 'EXIF' ? 'Bilddatum' : item.captureSource === 'Dateidatum' ? 'Dateidatum' : '';
-      return `<figure class="photo ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || place || 'LEEFKE')}</strong><div class="photo-location">📍 ${esc(place)}</div><div class="meta">${[time, source, context].filter(Boolean).map(esc).join(' · ')}</div></figcaption><div class="photo-actions"><button onclick="editPhotoMeta('${item.id}')">Bearbeiten</button><button onclick="setFeaturedPhoto('${item.id}')">${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild'}</button></div></figure>`;
+      return `<figure class="photo ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || place || 'LEEFKE')}</strong><div class="photo-location">📍 ${esc(place)}</div>${context ? `<div class="photo-context">⚓ ${esc(context)}</div>` : ''}<div class="meta photo-capture-meta">${[time, source].filter(Boolean).map(esc).join(' · ') || 'Aufnahmezeit unbekannt'}</div></figcaption><div class="photo-actions"><button onclick="editPhotoMeta('${item.id}')">Bearbeiten</button><button onclick="setFeaturedPhoto('${item.id}')">${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild'}</button></div></figure>`;
     }).join('');
-    return `<section class="photo-day-group"><div class="photo-day-heading">${photoDayHeading(date === 'unknown' ? '' : date, items.length)}</div><div class="photo-day-photos">${cards}</div></section>`;
+    return `<section class="photo-day-group"><div class="photo-day-heading">${photoDayHeading(date === 'unknown' ? '' : date, items.length, groupContext)}</div><div class="photo-day-photos">${cards}</div></section>`;
   }).join('') || '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
   const pending = photos.filter(item => !item.storagePath || item._cloudState === 'error').length;
   if ($('#photoCloudStatus')) $('#photoCloudStatus').textContent = currentSession ? (pending ? `${pending} Foto(s) warten auf den Cloud-Abgleich.` : 'Alle Fotos sind im privaten LEEFKE-Speicher verfügbar.') : 'Anmelden, um Fotos auf allen Geräten verfügbar zu machen.';
@@ -5735,21 +5943,49 @@ function renderPhotos() {
   photoRelationOptions();
 }
 
-function openPhotoViewer(id) {
-  const item = (state.photos || []).find(photo => photo.id === id);
+let photoViewerIds = [];
+let photoViewerIndex = -1;
+let photoViewerSwipeStartX = null;
+
+function showPhotoViewerIndex(index) {
+  if (!photoViewerIds.length) return;
+  photoViewerIndex = (index + photoViewerIds.length) % photoViewerIds.length;
+  const item = (state.photos || []).find(photo => photo.id === photoViewerIds[photoViewerIndex]);
   if (!item?.data) return;
-  const dialog = $('#photoViewerDialog');
   const image = $('#photoViewerImage');
   const caption = $('#photoViewerCaption');
-  if (!dialog || !image) return;
+  if (!image) return;
   image.src = item.data;
   image.alt = item.caption || 'Foto der LEEFKE';
   const details = [item.date ? fmtDate(item.date) : '', item.captureTime ? `${item.captureTime} Uhr` : '', item.locationName ? `📍 ${item.locationName}` : '', photoContextLabel(item)].filter(Boolean);
   if (caption) caption.innerHTML = `<strong>${esc(item.caption || item.locationName || 'LEEFKE')}</strong>${details.length ? `<span>${details.map(esc).join(' · ')}</span>` : ''}`;
+  const counter = $('#photoViewerCounter');
+  if (counter) counter.textContent = `${photoViewerIndex + 1} / ${photoViewerIds.length}`;
+  const previous = $('#photoViewerPrevious');
+  const next = $('#photoViewerNext');
+  if (previous) previous.disabled = photoViewerIds.length < 2;
+  if (next) next.disabled = photoViewerIds.length < 2;
+}
+
+function movePhotoViewer(step) {
+  showPhotoViewerIndex(photoViewerIndex + step);
+}
+
+function openPhotoViewer(id) {
+  photoViewerIds = [...(state.photos || [])]
+    .filter(photo => photo.data)
+    .sort((a,b) => photoSortKey(a).localeCompare(photoSortKey(b)) || (a.created || 0) - (b.created || 0))
+    .map(photo => photo.id);
+  const selectedIndex = photoViewerIds.indexOf(id);
+  if (selectedIndex < 0) return;
+  const dialog = $('#photoViewerDialog');
+  if (!dialog) return;
+  showPhotoViewerIndex(selectedIndex);
   if (typeof dialog.showModal === 'function') dialog.showModal();
   else dialog.setAttribute('open', '');
 }
 window.openPhotoViewer = openPhotoViewer;
+window.movePhotoViewer = movePhotoViewer;
 
 function photoEditRelationOptions() {
   const form = $('#photoEditForm');
@@ -6929,10 +7165,30 @@ window.addEventListener('load', () => {
   $('#createAutoBackupButton')?.addEventListener('click', async()=>{await createAutoBackup('Manueller Sicherungspunkt',true);await refresh();toast('Sicherungspunkt angelegt')});
   $('#createMaintenanceTemplates')?.addEventListener('click',createMaintenanceTemplates);
   $('#syncPhotosButton')?.addEventListener('click',syncPhotosNow);
+  $('#checkPhotoDuplicatesButton')?.addEventListener('click',checkPhotoDuplicates);
   $('#photoAutoSync')?.addEventListener('change',async event=>{await put('settings',{...getSettings(),photoAutoSync:event.target.checked,id:'main'});await refresh()});
   $('#photoForm')?.elements.relatedType?.addEventListener('change',photoRelationOptions);
   $('#photoEditForm')?.elements.relatedType?.addEventListener('change',photoEditRelationOptions);
   $('#photoEditCancel')?.addEventListener('click',()=>$('#photoEditDialog')?.close());
+  $('#photoDuplicateClose')?.addEventListener('click',()=>finishPhotoDuplicateReview('keep-both'));
+  $('#photoDuplicateKeepExisting')?.addEventListener('click',()=>finishPhotoDuplicateReview('keep-existing'));
+  $('#photoDuplicateKeepNew')?.addEventListener('click',()=>finishPhotoDuplicateReview('keep-new'));
+  $('#photoDuplicateKeepBoth')?.addEventListener('click',()=>finishPhotoDuplicateReview('keep-both'));
+  $('#photoDuplicateDialog')?.addEventListener('cancel',event=>{event.preventDefault();finishPhotoDuplicateReview('keep-both')});
+  $('#photoViewerPrevious')?.addEventListener('click',()=>movePhotoViewer(-1));
+  $('#photoViewerNext')?.addEventListener('click',()=>movePhotoViewer(1));
+  $('#photoViewerDialog')?.addEventListener('keydown',event=>{
+    if(event.key==='ArrowLeft'){event.preventDefault();movePhotoViewer(-1)}
+    if(event.key==='ArrowRight'){event.preventDefault();movePhotoViewer(1)}
+  });
+  $('#photoViewerImage')?.addEventListener('pointerdown',event=>{if(event.pointerType!=='mouse')photoViewerSwipeStartX=event.clientX});
+  $('#photoViewerImage')?.addEventListener('pointerup',event=>{
+    if(photoViewerSwipeStartX==null||event.pointerType==='mouse')return;
+    const distance=event.clientX-photoViewerSwipeStartX;
+    photoViewerSwipeStartX=null;
+    if(Math.abs(distance)>=45)movePhotoViewer(distance<0?1:-1);
+  });
+  $('#photoViewerImage')?.addEventListener('pointercancel',()=>{photoViewerSwipeStartX=null});
   $('#photoEditForm')?.addEventListener('submit',async event=>{
     event.preventDefault();
     const form=event.currentTarget;
@@ -7001,11 +7257,39 @@ if($('#photoForm'))$('#photoForm').onsubmit=async event=>{
   let gpsCount=0;
   let exifCount=0;
   let placeCount=0;
+  let exactDuplicateCount=0;
+  let similarSkippedCount=0;
+  let replacedCount=0;
+  let keptSimilarCount=0;
+  let comparisonPhotos=[...(state.photos||[])];
+  const savedIds=new Set();
   try{
     for(let index=0;index<files.length;index+=1){
       const file=files[index];
-      if(status)status.innerHTML=`<strong>${index+1} von ${files.length}</strong><span>${esc(file.name)} · Bilddaten und Ort werden erkannt …</span>`;
+      if(status)status.innerHTML=`<strong>${index+1} von ${files.length}</strong><span>${esc(file.name)} · Bilddaten und mögliche Dubletten werden geprüft …</span>`;
       const meta=await readPhotoMetadata(file);
+      const data=await compressImage(file,1800,.82);
+      const fingerprint=await createPhotoFingerprint(data);
+      const match=await findPhotoDuplicate(fingerprint,comparisonPhotos);
+      if(match?.kind==='exact'){
+        exactDuplicateCount+=1;
+        continue;
+      }
+      if(match?.kind==='visual'){
+        const candidatePreview={data,fileName:file.name,date:meta.date,captureTime:meta.time,caption:manualCaption||file.name};
+        const action=await reviewPhotoDuplicate(candidatePreview,match.photo,match);
+        if(action==='keep-existing'){
+          similarSkippedCount+=1;
+          continue;
+        }
+        if(action==='keep-new'){
+          await del('photos',match.photo.id);
+          photoFingerprintCache.delete(match.photo.id);
+          comparisonPhotos=comparisonPhotos.filter(photo=>photo.id!==match.photo.id);
+          if(savedIds.delete(match.photo.id))savedCount=Math.max(0,savedCount-1);
+          replacedCount+=1;
+        }else keptSimilarCount+=1;
+      }
       if(meta.source==='EXIF')exifCount+=1;
       if(meta.hasGps)gpsCount+=1;
       let day=findPhotoDay(meta.date,meta.time,meta);
@@ -7020,13 +7304,17 @@ if($('#photoForm'))$('#photoForm').onsubmit=async event=>{
         else{relatedType='trip';relatedId=activeTripId||'';}
       }
       const caption=(files.length===1&&manualCaption)?manualCaption:photoAutoCaption(place,day,meta);
-      const data=await compressImage(file,1800,.82);
-      await put('photos',{
+      const created=Date.now()+index;
+      const mediaUpdatedAt=new Date().toISOString();
+      const saved=await put('photos',{
         id:uid(),tripId:activeTripId||'',date:meta.date,captureTime:meta.time,captureDateTime:meta.dateTime,captureSource:meta.source,
         caption,autoCaption:!(files.length===1&&manualCaption),locationName:place?.name||'',locationDetail:place?.detail||'',locationSource:place?.source||'',
         latitude:meta.hasGps?meta.latitude:null,longitude:meta.hasGps?meta.longitude:null,relatedType:relatedType||'trip',relatedId:relatedId||'',featured:false,
-        data,mimeType:'image/jpeg',fileName:file.name,size:file.size,created:Date.now()+index,_mediaUpdatedAt:new Date().toISOString(),_cloudState:'pending'
+        data,mimeType:'image/jpeg',fileName:file.name,size:file.size,created,_mediaUpdatedAt:mediaUpdatedAt,_cloudState:'pending'
       });
+      comparisonPhotos.push(saved);
+      savedIds.add(saved.id);
+      photoFingerprintCache.set(saved.id,{cacheKey:`${data.length}:${saved._mediaUpdatedAt||saved.created||''}`,fingerprint});
       savedCount+=1;
     }
     form.reset();
@@ -7034,9 +7322,15 @@ if($('#photoForm'))$('#photoForm').onsubmit=async event=>{
     photoRelationOptions();
     await refresh();
     syncMobileEntryUi('photos',{open:false});
-    scheduleSync(200);
-    toast(`${savedCount} Foto${savedCount===1?'':'s'} chronologisch einsortiert`);
-    if(status){status.hidden=false;status.className='wide photo-import-status success';status.innerHTML=`<strong>${savedCount} Foto${savedCount===1?'':'s'} importiert</strong><span>${exifCount} mit EXIF-Datum · ${gpsCount} mit GPS · ${placeCount} mit Ortsangabe</span>`;}
+    if(savedCount||replacedCount)scheduleSync(200);
+    toast(savedCount?`${savedCount} Foto${savedCount===1?'':'s'} chronologisch einsortiert`:'Keine neuen Fotos importiert');
+    const duplicateSummary=[
+      exactDuplicateCount?`${exactDuplicateCount} exakte Dublette${exactDuplicateCount===1?'':'n'} zurückgehalten`:'',
+      similarSkippedCount?`${similarSkippedCount} ähnliche${similarSkippedCount===1?'s Foto':' Fotos'} nicht importiert`:'',
+      replacedCount?`${replacedCount} vorhandene${replacedCount===1?'s Foto':' Fotos'} ersetzt`:'',
+      keptSimilarCount?`${keptSimilarCount} ähnliche${keptSimilarCount===1?'s Paar':' Paare'} bewusst behalten`:''
+    ].filter(Boolean).join(' · ');
+    if(status){status.hidden=false;status.className='wide photo-import-status success';status.innerHTML=`<strong>${savedCount} Foto${savedCount===1?'':'s'} importiert</strong><span>${exifCount} mit EXIF-Datum · ${gpsCount} mit GPS · ${placeCount} mit Ortsangabe${duplicateSummary?`<br>${esc(duplicateSummary)}`:''}</span>`;}
   }catch(error){
     console.error(error);
     if(status){status.hidden=false;status.className='wide photo-import-status error';status.innerHTML=`<strong>Import unterbrochen</strong><span>${savedCount} Foto(s) wurden bereits gespeichert. ${esc(error.message||'Unbekannter Fehler')}</span>`;}
