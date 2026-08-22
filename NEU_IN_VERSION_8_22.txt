@@ -1,0 +1,12 @@
+LEEFKE 8.22
+
+Kompaktere Datenerfassung
+
+- Im Hafenbuch bleibt die Datenerfassung zunächst geschlossen.
+- Der einheitliche Knopf „Neuer Eintrag“ öffnet das Hafenformular bei Bedarf.
+- Beim erneuten Aufrufen des Hafenbuchs wird das Formular wieder geschlossen angezeigt, solange kein Eintrag bearbeitet wird.
+- Bearbeiten öffnet das Formular weiterhin automatisch mit allen gespeicherten Daten.
+- Ausführliche Erklärungen im Tankbuch erscheinen nicht mehr dauerhaft.
+- Kleine Fragezeichen erklären bei Bedarf den automatischen Tankstand, getankte Liter, Literpreis, Motorstunden und den tatsächlichen Tankstand.
+
+Datenmodell, IndexedDB, Supabase, Synchronisation und gespeicherte Einträge bleiben unverändert.

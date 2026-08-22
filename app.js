@@ -1,4 +1,4 @@
-const APP_VERSION = '8.21';
+const APP_VERSION = '8.22';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 const AUTO_SYNC_INTERVAL_MS = 60000;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
@@ -1298,7 +1298,7 @@ function syncMobileDayEntryUi(options = {}) {
 }
 
 const MOBILE_ENTRY_CONFIG = {
-  ports: { view: 'ports', formId: 'portForm', buttonId: 'newPortEntryButton', closed: 'Neuer Hafen', open: 'Hafenerfassung schließen' },
+  ports: { view: 'ports', formId: 'portForm', buttonId: 'newPortEntryButton', closed: 'Neuer Eintrag', open: 'Datenerfassung schließen' },
   fuel: { view: 'fuel', formId: 'fuelForm', buttonId: 'newFuelEntryButton', closed: 'Neuer Tankvorgang', open: 'Erfassung schließen' },
   maintenance: { view: 'maintenance', formId: 'maintenanceForm', buttonId: 'newMaintenanceEntryButton', closed: 'Neue Wartung', open: 'Erfassung schließen' },
   deadline: { view: 'maintenance', formId: 'deadlineForm', buttonId: 'newDeadlineEntryButton', closed: 'Neue Erinnerung', open: 'Erfassung schließen' },
@@ -2095,7 +2095,7 @@ function renderTank(settings) {
     $('#tankPercent').textContent = '—';
     $('#tankLiters').textContent = `Tankkapazität ${dec2(capacity)} Liter · bitte einmal einen aktuellen Tankstand eintragen`;
     if ($('#fuelEstimateHeadline')) $('#fuelEstimateHeadline').textContent = 'Ausgangsstand erforderlich';
-    if ($('#fuelEstimateDetail')) $('#fuelEstimateDetail').textContent = `Bitte einmal den aktuellen Tankstand (%) im Schiffspass oder bei einem Tankvorgang eintragen. Danach rechnet die App automatisch mit ${dec2(ESTIMATED_FUEL_RATE_LPH)} l/h weiter.`;
+    if ($('#fuelEstimateDetail')) $('#fuelEstimateDetail').textContent = 'Bitte einmal einen bekannten Tankstand eintragen.';
     if ($('#fuelEstimatePercent')) $('#fuelEstimatePercent').textContent = '—';
     if ($('#fuelEstimateLiters')) $('#fuelEstimateLiters').textContent = '—';
     return;
@@ -2107,10 +2107,9 @@ function renderTank(settings) {
 
   if ($('#fuelEstimateHeadline')) $('#fuelEstimateHeadline').textContent = `Geschätzter Stand: ${dec2(estimate.percent)} %`;
   if ($('#fuelEstimateDetail')) {
-    const consumed = estimate.consumedHours > 0
-      ? `Seit dem letzten bekannten Tankstand: ${dec2(estimate.consumedHours)} h Fahrt ≈ ${dec2(estimate.consumedLiters)} l Verbrauch.`
-      : 'Seit dem letzten bekannten Tankstand ist noch keine Fahrzeit mit Verbrauch erfasst.';
-    $('#fuelEstimateDetail').textContent = `${consumed} Tankvorgänge werden chronologisch berücksichtigt. Teilbetankungen erhöhen den Stand nur um die tatsächlich getankten Liter; 100 % gelten nur bei ausdrücklich eingetragenem Tankstand. Grundlage ${dec2(estimate.rate)} l/h.`;
+    $('#fuelEstimateDetail').textContent = estimate.consumedHours > 0
+      ? `${dec2(estimate.consumedHours)} h Motorfahrt · ca. ${dec2(estimate.consumedLiters)} l Verbrauch seit bekanntem Stand`
+      : 'Noch keine Motorfahrt seit dem bekannten Tankstand.';
   }
   if ($('#fuelEstimatePercent')) $('#fuelEstimatePercent').textContent = `≈ ${dec2(estimate.percent)} %`;
   if ($('#fuelEstimateLiters')) $('#fuelEstimateLiters').textContent = `ca. ${dec2(estimate.liters)} l`;
@@ -2703,7 +2702,12 @@ const DAY_FIELD_HELP = {
   tide: ['Tide / Strom', 'Hier kommt die beobachtete oder geplante Tide- und Stromsituation hinein.', 'Beispiel: ablaufend · etwa 1 kn mitlaufender Strom'],
   crew: ['Besatzung', 'Alle Personen an Bord, durch Komma getrennt. Die Standardbesatzung kann im Schiffspass hinterlegt werden.', 'Beispiel: Günni, …'],
   summary: ['Tagesbericht', 'Der eigentliche Logbucheintrag: Verlauf der Fahrt, Verkehr, Manöver, Vorkommnisse, Ansteuerung und Liegeplatz.', 'Beispiel: Um 08:15 Alte Weser passiert, mäßiger Schiffsverkehr …'],
-  moment: ['Moment des Tages', 'Der persönliche Höhepunkt oder eine besondere Erinnerung. Dieser Text wird im Reisebericht hervorgehoben.', 'Beispiel: Die ersten Basstölpel kurz vor Helgoland.']
+  moment: ['Moment des Tages', 'Der persönliche Höhepunkt oder eine besondere Erinnerung. Dieser Text wird im Reisebericht hervorgehoben.', 'Beispiel: Die ersten Basstölpel kurz vor Helgoland.'],
+  fuelEstimate: ['Automatischer Tankstand', 'Der Schätz-Tankstand rechnet mit 4,0 Litern pro Motorstunde. Er berücksichtigt gespeicherte Tagestouren und Tankvorgänge auch über mehrere Törns hinweg. Tatsächlich eingefüllte Liter werden zum vorherigen Stand addiert; die App nimmt nach dem Tanken niemals automatisch 100 Prozent an.', 'Der tatsächliche Durchschnittsverbrauch wird getrennt aus nachgetankten Litern und den Motorstunden seit dem vorherigen Tankvorgang berechnet.'],
+  fuelLiters: ['Getankte Liter', 'Trage nur die Liter ein, die bei diesem Tankvorgang tatsächlich eingefüllt wurden. Komma und Punkt werden beide verstanden.', 'Beispiel: 120,5 oder 120.5'],
+  fuelPrice: ['Preis je Liter', 'Hier gehört der Preis für einen einzelnen Liter Diesel hinein. Den Gesamtpreis berechnet die App automatisch aus Literzahl mal Literpreis.', 'Beispiel: 1,699 Euro je Liter'],
+  fuelEngineHours: ['Motorstunden beim Tanken', 'Trage den Stand des Betriebsstundenzählers zum Zeitpunkt des Tankens ein. Zusammen mit früheren Tankvorgängen kann die App daraus den tatsächlichen Durchschnittsverbrauch berechnen.', 'Beispiel: 954,3 Stunden'],
+  fuelTankPercent: ['Tatsächlicher Tankstand danach', 'Dieses Feld ist optional. Trage einen Prozentwert nur ein, wenn du den Tankstand nach dem Tanken wirklich kennst. Bleibt das Feld leer, rechnet die App mit dem bisherigen Schätzstand und den tatsächlich getankten Litern weiter. Sie setzt den Tank niemals automatisch auf 100 Prozent.', 'Beispiel: 72 für einen bekannten Tankstand von 72 Prozent']
 };
 
 function openDayFieldHelp(key) {

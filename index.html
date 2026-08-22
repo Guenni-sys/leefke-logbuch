@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.21">
+  <link rel="stylesheet" href="style.css?v=8.22">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -34,7 +34,7 @@
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.21</small>
+        <small>BORDTAGEBUCH · VERSION 8.22</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -338,7 +338,7 @@
       <section id="ports" class="view">
         <div class="title"><small>HAFENBUCH</small><h2>Häfen & Liegeplätze</h2><p>Persönliche Hafenerfahrungen der LEEFKE – jetzt mit echten Sternbewertungen.</p></div>
         <div class="mobile-entry-bar" data-entry-key="ports">
-          <button id="newPortEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="portForm"><span aria-hidden="true">＋</span> Neuer Hafen</button>
+          <button id="newPortEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="portForm"><span aria-hidden="true">＋</span> Neuer Eintrag</button>
         </div>
         <form id="portForm" class="card form port-form mobile-entry-form-collapsed">
           <input type="hidden" name="id">
@@ -494,10 +494,9 @@
         <div class="title"><small>TANKBUCH</small><h2>Diesel & Verbrauch</h2><p>Tankvorgänge, tatsächlicher Verbrauch und automatisch geschätzter Tankstand der LEEFKE.</p></div>
         <div class="stats compact"><article><span>Getankt</span><strong id="fuelLiters">0 l</strong></article><article><span>Kosten</span><strong id="fuelCost">0 €</strong></article><article><span>Ø Preis</span><strong id="fuelPrice">—</strong></article><article><span>Ø seit Tankstopps</span><strong id="fuelPerHour">—</strong></article></div>
         <article class="card fuel-estimate-card">
-          <div><div class="card-kicker">AUTOMATISCHER TANKSTAND</div><h3 id="fuelEstimateHeadline">Noch kein Ausgangsstand</h3><p id="fuelEstimateDetail" class="meta">Grundlage: 4,0 Liter pro Fahrstunde. Ein bekannter Tankstand dient als Ausgangspunkt.</p></div>
+          <div><div class="fuel-estimate-help-row"><div class="card-kicker">AUTOMATISCHER TANKSTAND</div><button class="field-help" type="button" data-help="fuelEstimate" aria-label="Erklärung zum automatischen Tankstand" title="Erklärung anzeigen">?</button></div><h3 id="fuelEstimateHeadline">Noch kein Ausgangsstand</h3><p id="fuelEstimateDetail" class="meta">Ein bekannter Tankstand fehlt.</p></div>
           <div class="fuel-estimate-value"><strong id="fuelEstimatePercent">—</strong><span id="fuelEstimateLiters">—</span></div>
         </article>
-        <p class="meta fuel-calculation-note">Der <strong>Schätz-Tankstand</strong> rechnet mit 4,0 l/h und berücksichtigt alle gespeicherten Tagestouren sowie jeden Tankvorgang – auch über mehrere Törns hinweg. Beim Tanken werden nur die <strong>tatsächlich eingefüllten Liter</strong> zum vorherigen Stand addiert; <strong>100 % werden niemals automatisch angenommen</strong>. Der tatsächliche Durchschnittsverbrauch wird weiterhin separat aus <strong>nachgetankten Litern ÷ Motorstunden seit dem vorherigen Tankvorgang</strong> berechnet.</p>
         <div class="mobile-entry-bar" data-entry-key="fuel">
           <button id="newFuelEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="fuelForm"><span aria-hidden="true">＋</span> Neuer Tankvorgang</button>
         </div>
@@ -507,10 +506,10 @@
           <label>Datum<input required type="date" name="date"></label>
           <label>Uhrzeit<input type="time" name="time"></label>
           <label class="wide">Ort / Tankstelle<input name="place" autocomplete="off" placeholder="z. B. Bootstankstelle Bremerhaven"></label>
-          <label>Getankte Liter<input type="text" inputmode="decimal" name="liters" autocomplete="off" placeholder="z. B. 120,5"><small>Komma oder Punkt möglich</small></label>
-          <label>Preis je Liter (€)<input type="text" inputmode="decimal" name="price" autocomplete="off" placeholder="z. B. 1,699"><small>Der Gesamtpreis wird automatisch berechnet</small></label>
-          <label>Motorstunden beim Tanken<input type="text" inputmode="decimal" name="engineHours" autocomplete="off" placeholder="z. B. 954,3"></label>
-          <label>Tatsächlicher Tankstand danach (%)<input type="text" inputmode="decimal" name="tankPercent" autocomplete="off" placeholder="optional, z. B. 72"><small>Nur eintragen, wenn du den Stand wirklich kennst. Leer lassen = bisheriger Schätzstand + tatsächlich getankte Liter. Die App setzt einen Tankvorgang niemals automatisch auf 100 %.</small></label>
+          <label><span class="label-row"><span>Getankte Liter</span><button class="field-help" type="button" data-help="fuelLiters" aria-label="Erklärung zu getankten Litern" title="Erklärung anzeigen">?</button></span><input type="text" inputmode="decimal" name="liters" autocomplete="off" placeholder="z. B. 120,5"></label>
+          <label><span class="label-row"><span>Preis je Liter (€)</span><button class="field-help" type="button" data-help="fuelPrice" aria-label="Erklärung zum Preis je Liter" title="Erklärung anzeigen">?</button></span><input type="text" inputmode="decimal" name="price" autocomplete="off" placeholder="z. B. 1,699"></label>
+          <label><span class="label-row"><span>Motorstunden beim Tanken</span><button class="field-help" type="button" data-help="fuelEngineHours" aria-label="Erklärung zu den Motorstunden beim Tanken" title="Erklärung anzeigen">?</button></span><input type="text" inputmode="decimal" name="engineHours" autocomplete="off" placeholder="z. B. 954,3"></label>
+          <label><span class="label-row"><span>Tatsächlicher Tankstand danach (%)</span><button class="field-help" type="button" data-help="fuelTankPercent" aria-label="Erklärung zum tatsächlichen Tankstand" title="Erklärung anzeigen">?</button></span><input type="text" inputmode="decimal" name="tankPercent" autocomplete="off" placeholder="optional, z. B. 72"></label>
           <label class="wide">Notiz<textarea rows="3" name="note" placeholder="z. B. vollgetankt, Additiv ergänzt …"></textarea></label>
           <div id="fuelFormStatus" class="form-status wide" hidden></div>
           <div class="wide actions fuel-form-actions"><button id="fuelSaveButton" class="primary">Tankvorgang speichern</button><button id="fuelCancelEditButton" type="button" hidden>Bearbeiten abbrechen</button><button type="reset">Leeren</button></div>
@@ -893,6 +892,6 @@
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="https://unpkg.com/exifr@7.1.3/dist/full.umd.js"></script>
-  <script src="app.js?v=8.21"></script>
+  <script src="app.js?v=8.22"></script>
 </body>
 </html>

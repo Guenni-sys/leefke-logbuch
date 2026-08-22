@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-21-port-photos-20260821';
+const APP_CACHE = 'leefke-v8-22-collapsed-entry-help-20260822';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.21',
+  './index.html?v=8.22',
   './style.css',
-  './style.css?v=8.21',
+  './style.css?v=8.22',
   './app.js',
-  './app.js?v=8.21',
+  './app.js?v=8.22',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
