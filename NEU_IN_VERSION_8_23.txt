@@ -1,0 +1,15 @@
+LEEFKE 8.23
+
+Cloud-sparsame Synchronisierung
+
+- Automatischer Cloud-Abgleich nur noch einmal beim vollständigen Start der App.
+- Kein 60-Sekunden-Hintergrundtimer mehr.
+- Keine Synchronisierung mehr nach jedem Speichern oder Löschen.
+- Keine Realtime-Verbindung zu Supabase mehr.
+- Kein automatischer Cloud-Abgleich bei Fokuswechsel, pageshow oder Wiederkehr des Internets.
+- Lokale Änderungen bleiben sicher auf dem Gerät vorgemerkt.
+- „Jetzt vollständig abgleichen“ bleibt jederzeit als manueller Abgleich erhalten.
+- Fotos und Dokumente werden nur im Rahmen eines Start- oder manuellen Abgleichs synchronisiert.
+- Konflikt- und Feld-Zeitstempel-Logik bleibt unverändert erhalten.
+
+Ziel: Supabase-Free-Kontingent deutlich schonen, ohne die lokale Bordbuch-Nutzung einzuschränken.

@@ -1,6 +1,8 @@
-const APP_VERSION = '8.22';
+const APP_VERSION = '8.23';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
-const AUTO_SYNC_INTERVAL_MS = 60000;
+// Cloud-sparsam: automatischer Abgleich nur einmal beim echten App-Start.
+// Weitere Abgleiche erfolgen ausschließlich über „Jetzt vollständig abgleichen“.
+const AUTO_SYNC_INTERVAL_MS = 0;
 const GUEST_MODE_KEY = 'leefke-guest-mode';
 const HOLIDAY_MODE_KEY = 'leefke-holiday-mode';
 const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');
@@ -890,20 +892,19 @@ async function initializeSupabase() {
     window.setTimeout(async () => {
       await updateSyncUI();
       if (currentSession) {
-        startRealtimeSubscription();
-        if (await isLinkedForCurrentUser()) {
-          registerDeviceHeartbeat().catch(error => console.warn('Gerätestatus konnte nicht übertragen werden.', error));
-          if (navigator.onLine) scheduleSync(250);
-          startAutoSync(1200);
-        } else if (navigator.onLine) {
-          await connectDeviceAutomatically({ silent: true });
-          registerDeviceHeartbeat().catch(error => console.warn('Gerätestatus konnte nicht übertragen werden.', error));
+        // Kein Realtime- oder Hintergrundabgleich mehr: Supabase wird nur beim
+        // echten App-Start, beim bewussten Anmelden oder manuell angesprochen.
+        stopRealtimeSubscription();
+        stopAutoSync();
+        if (event === 'SIGNED_IN' && navigator.onLine) {
+          if (await isLinkedForCurrentUser()) await syncNow({ silent: true, reason: 'signed-in' });
+          else await connectDeviceAutomatically({ silent: true });
         }
       } else {
         stopRealtimeSubscription();
         stopAutoSync();
       }
-      if (event === 'SIGNED_IN') setMessage('#authMessage', 'Anmeldung erfolgreich. Dieses Gerät wird automatisch abgeglichen.', 'success');
+      if (event === 'SIGNED_IN') setMessage('#authMessage', 'Anmeldung erfolgreich. Einmaliger Cloud-Abgleich wurde gestartet.', 'success');
     }, 0);
   });
   await updateSyncUI();
@@ -1143,12 +1144,12 @@ async function syncNow(options = {}) {
 }
 
 function scheduleSync(delay = 1400, options = {}) {
+  // Version 8.23: lokale Änderungen werden nur vorgemerkt. Kein automatischer
+  // Cloud-Zugriff nach Speichern/Löschen. Der Abgleich erfolgt beim nächsten
+  // vollständigen App-Start oder bewusst über „Jetzt vollständig abgleichen“.
   window.clearTimeout(syncTimer);
-  const syncOptions = { silent: true, reason: 'scheduled', ...options };
-  syncTimer = window.setTimeout(async () => {
-    if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) await syncNow(syncOptions);
-    else await updateSyncUI();
-  }, delay);
+  syncTimer = null;
+  queueSyncUIUpdate();
 }
 
 function queueSyncUIUpdate(delay = 60) {
@@ -1163,26 +1164,15 @@ function stopAutoSync() {
   autoSyncTimer = null;
 }
 
-function startAutoSync(delay = AUTO_SYNC_INTERVAL_MS) {
+function startAutoSync() {
+  // Bewusst deaktiviert: kein 60-Sekunden-Timer mehr.
   stopAutoSync();
-  if (document.visibilityState !== 'visible') return;
-  autoSyncTimer = window.setTimeout(async () => {
-    try {
-      if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) {
-        await syncNow({ silent: true, reason: 'auto' });
-      }
-    } finally {
-      startAutoSync(AUTO_SYNC_INTERVAL_MS);
-    }
-  }, delay);
 }
 
 async function syncOnForeground() {
-  if (document.visibilityState !== 'visible') return;
-  if (currentSession && navigator.onLine && await isLinkedForCurrentUser()) {
-    await syncNow({ silent: true, reason: 'foreground' });
-  }
-  startAutoSync();
+  // Beim bloßen Zurückkehren/Fokussieren der App wird nicht synchronisiert.
+  // Nur die Anzeige wird aktualisiert; Cloud-Abgleich bleibt Start/Manuell.
+  if (document.visibilityState === 'visible') await updateSyncUI();
 }
 
 function restoreDocumentScrolling() {
@@ -1251,7 +1241,7 @@ async function updateVacationUi(context = {}) {
   let syncText = 'Nur lokal gespeichert';
   if (IS_GUEST_MODE) syncText = 'Gastmodus · nur auf diesem Gerät';
   else if (!navigator.onLine) syncText = dirty ? 'Offline · Änderungen warten' : 'Offline · lokaler Stand verfügbar';
-  else if (loggedIn && dirty) syncText = 'Änderungen werden abgeglichen';
+  else if (loggedIn && dirty) syncText = 'Lokal geändert · Abgleich beim nächsten Start oder manuell';
   else if (loggedIn && lastSync?.at) syncText = `Synchronisiert · ${new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSync.at))}`;
   else if (loggedIn) syncText = 'Cloud verbunden';
   const syncElement = $('#holidaySyncText');
@@ -2805,7 +2795,7 @@ if (dayForm) {
       prepareDayForm();
       await new Promise(resolve => window.setTimeout(resolve, 0));
       const cloudNote = currentSession
-        ? (navigator.onLine ? 'Cloud-Abgleich läuft automatisch.' : 'Offline gespeichert; der Cloud-Abgleich folgt bei Internetverbindung.')
+        ? (navigator.onLine ? 'Lokal gespeichert; Cloud-Abgleich beim nächsten App-Start oder manuell.' : 'Offline gespeichert; Cloud-Abgleich beim nächsten App-Start mit Internet oder manuell.')
         : 'Lokal gespeichert; für den Abgleich mit anderen Geräten bitte anmelden.';
       setDayFormStatus(`Tagestour gespeichert. Sie steht bei den gespeicherten Tagestouren. ${cloudNote}`, 'success');
       syncMobileDayEntryUi({ open: false });
@@ -4741,13 +4731,9 @@ async function onlineState() {
   updateConnectionBanner();
   await updateSyncUI();
   await updateVacationUi();
-  if (navigator.onLine && currentSession) {
-    if (await isLinkedForCurrentUser()) await syncNow({ silent: true, reason: 'online' });
-    else await connectDeviceAutomatically({ silent: true });
-    startAutoSync();
-  } else if (!navigator.onLine) {
-    stopAutoSync();
-  }
+  // Wiederkehrendes Internet löst keinen Cloud-Abgleich mehr aus. Änderungen
+  // bleiben lokal vorgemerkt bis zum nächsten App-Start oder manuellen Abgleich.
+  if (!navigator.onLine) stopAutoSync();
 }
 window.addEventListener('online', onlineState);
 window.addEventListener('offline', onlineState);
@@ -5660,7 +5646,9 @@ async function syncNow(options = {}) {
     syncInProgress = false;
     syncVisualInProgress = false;
     await updateSyncUI();
-    if (syncRequested) { syncRequested = false; scheduleSync(250, { silent: true, reason: 'follow-up' }); }
+    // Keine automatische Folge-Synchronisierung. Falls während des Abgleichs
+    // noch lokal geändert wurde, bleibt der Dirty-Status für Start/Manuell erhalten.
+    if (syncRequested) syncRequested = false;
   }
 }
 
@@ -5690,26 +5678,11 @@ function stopRealtimeSubscription() {
 }
 
 function startRealtimeSubscription() {
+  // Version 8.23: Realtime bewusst deaktiviert, um das Supabase-Free-Kontingent
+  // zu schonen. Andere Geräte werden beim nächsten Start oder manuellen Abgleich geladen.
   stopRealtimeSubscription();
-  if (!supabaseClient || !currentSession?.user?.id || !navigator.onLine) return;
-  if (realtimeState !== 'verbindet …') {
-    realtimeState = 'verbindet …';
-    queueSyncUIUpdate();
-  }
-  realtimeChannel = supabaseClient.channel(`leefke-records-${currentSession.user.id}`)
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'leefke_records', filter: `user_id=eq.${currentSession.user.id}` }, payload => {
-      const sourceDevice = payload?.new?.payload?._updatedBy || payload?.old?.payload?._updatedBy;
-      getDeviceIdentity().then(device => {
-        if (sourceDevice !== device.id) scheduleSync(220, { silent: true, reason: 'realtime' });
-      });
-    })
-    .subscribe(status => {
-      const nextState = status === 'SUBSCRIBED' ? 'verbunden' : status === 'CHANNEL_ERROR' ? 'Fehler' : status === 'TIMED_OUT' ? 'Zeitüberschreitung' : String(status || '').toLowerCase();
-      if (nextState !== realtimeState) {
-        realtimeState = nextState;
-        queueSyncUIUpdate();
-      }
-    });
+  realtimeState = 'Start / manuell';
+  queueSyncUIUpdate();
 }
 
 async function verifySyncState() {
@@ -5786,7 +5759,7 @@ async function updateSyncUI() {
   setText('#realtimeStatusText', loggedIn ? realtimeState : 'Nicht angemeldet');
   setText('#pendingChangesText', dirty || tombstones.length ? `${tombstones.length} Löschung(en) / Änderungen warten` : 'Keine');
   setText('#syncConflictText', String(conflicts.length));
-  setText('#autoSyncText', loggedIn && linked ? (navigator.onLine ? 'Echtzeit + ruhige Sicherheitsprüfung alle 60 Sekunden' : 'Wartet auf Internet') : 'Noch nicht aktiv');
+  setText('#autoSyncText', loggedIn && linked ? (navigator.onLine ? 'Einmal beim App-Start · sonst manuell' : 'Offline · beim nächsten Start mit Internet') : 'Noch nicht aktiv');
 
   let label = 'Nicht angemeldet';
   let detail = 'Cloud-Synchronisierung ist nicht aktiv';
@@ -5797,7 +5770,7 @@ async function updateSyncUI() {
     className = 'sync-status offline';
   } else if (loggedIn && !linked) {
     label = deviceConnectInProgress ? 'Verbinde Gerät …' : 'Gerät verbinden';
-    detail = 'Lokale und gemeinsame Daten werden automatisch zusammengeführt';
+    detail = 'Lokale und gemeinsame Daten werden beim Verbinden zusammengeführt';
     className = 'sync-status attention';
   } else if (syncVisualInProgress) {
     label = 'Abgleich läuft …';
@@ -5809,12 +5782,12 @@ async function updateSyncUI() {
     className = 'sync-status attention';
   } else if (loggedIn && dirty) {
     label = 'Abgleich offen';
-    detail = 'Lokale Änderungen werden im Hintergrund übertragen';
+    detail = 'Lokale Änderungen warten bis zum nächsten App-Start oder manuellen Abgleich';
     className = 'sync-status attention';
   } else if (loggedIn) {
     const lastSyncClock = lastSync?.at ? new Intl.DateTimeFormat('de-DE', { hour: '2-digit', minute: '2-digit' }).format(new Date(lastSync.at)) : '';
     label = `Synchronisiert${lastSyncClock ? ` · ${lastSyncClock}` : ''}`;
-    detail = realtimeState === 'verbunden' ? 'Live verbunden · Änderungen anderer Geräte kommen automatisch an' : 'Alle Geräte arbeiten gleichberechtigt';
+    detail = 'Cloud-Abgleich beim App-Start oder manuell';
     className = 'sync-status synced';
   }
 
@@ -7561,10 +7534,11 @@ if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=e
   await refresh();
   await onlineState();
   if (currentSession) {
+    // Kein zusätzlicher Realtime-/Heartbeat-Zugriff nach dem Startabgleich.
+    // registerDeviceHeartbeat() läuft bereits innerhalb von syncNow().
     startRealtimeSubscription();
-    registerDeviceHeartbeat().catch(error => console.warn('Gerätestatus konnte nicht übertragen werden.', error));
   }
-  startAutoSync();
+  stopAutoSync();
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.register(`service-worker.js?v=${APP_VERSION}`, { updateViaCache: 'none' });
