@@ -13,7 +13,7 @@
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="icon-192.png">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="style.css?v=8.23">
+  <link rel="stylesheet" href="style.css?v=8.24-test">
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
   <title>LEEFKE · Bordtagebuch</title>
 </head>
@@ -28,13 +28,13 @@
   </div>
   <div id="connectionBanner" class="connection-banner no-print" hidden>
     <span aria-hidden="true">⌁</span>
-    <div><strong>Offlinebetrieb</strong><small>Einträge werden sicher auf diesem Gerät gespeichert. Der Cloud-Abgleich erfolgt beim nächsten App-Start mit Internet oder bewusst über „Jetzt vollständig abgleichen“. </small></div>
+    <div><strong>Offlinebetrieb</strong><small>Einträge werden sicher auf diesem Gerät gespeichert. Der Google-Drive-Abgleich erfolgt beim nächsten App-Start mit Internet oder bewusst über „Jetzt vollständig abgleichen“. </small></div>
   </div>
   <header class="topbar">
     <div class="brand">
       <button class="brand-mark" type="button" data-open="home" aria-label="Zur Startseite" title="Zur Startseite">⚓</button>
       <div>
-        <small>BORDTAGEBUCH · VERSION 8.23</small>
+        <small>BORDTAGEBUCH · VERSION 8.24 TEST</small>
         <h1 id="headerBoatName">LEEFKE</h1>
         <p id="headerBoatLine">Groeneveld Kotter · Heimathafen Lemwerder</p>
       </div>
@@ -574,7 +574,7 @@
         <div class="title"><small>GALERIE</small><h2>LEEFKE unterwegs</h2><p>Bilder aus Häfen, von Überfahrten und besonderen Tagen an Bord.</p></div>
         <details class="card photo-cloud-controls photo-tools-details">
           <summary><div><strong>Cloud & Galerie-Werkzeuge</strong><span>Synchronisieren und doppelte Bilder prüfen</span></div><span aria-hidden="true">▾</span></summary>
-          <div class="photo-tools-content"><p id="photoCloudStatus" class="meta">Beim App-Start oder manuellen Cloud-Abgleich werden geänderte Fotos in den privaten LEEFKE-Speicher übertragen.</p><p id="photoDuplicateScanStatus" class="meta photo-duplicate-scan-status" role="status" aria-live="polite"></p><div class="actions"><label class="switch-label"><input id="photoAutoSync" type="checkbox" checked> Fotos beim Cloud-Abgleich mitnehmen</label><button id="syncPhotosButton" type="button">Jetzt abgleichen</button><button id="checkPhotoDuplicatesButton" type="button">Doppelte prüfen</button></div></div>
+          <div class="photo-tools-content"><p id="photoCloudStatus" class="meta">Beim App-Start oder manuellen Google-Drive-Abgleich werden geänderte Fotos in den privaten LEEFKE-Speicher übertragen.</p><p id="photoDuplicateScanStatus" class="meta photo-duplicate-scan-status" role="status" aria-live="polite"></p><div class="actions"><label class="switch-label"><input id="photoAutoSync" type="checkbox" checked> Fotos beim Google-Drive-Abgleich mitnehmen</label><button id="syncPhotosButton" type="button">Jetzt abgleichen</button><button id="checkPhotoDuplicatesButton" type="button">Doppelte prüfen</button></div></div>
         </details>
         <div class="mobile-entry-bar" data-entry-key="photos">
           <button id="newPhotoEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="photoForm"><span aria-hidden="true">＋</span> Fotos hinzufügen</button>
@@ -638,23 +638,24 @@
 
 
       <section id="sync" class="view">
-        <div class="title"><small>LEEFKE CLOUD</small><h2>Konto & Synchronisierung</h2><p>Logbuchdaten auf iPad, Handy und Windows gemeinsam nutzen – unterwegs weiterhin offline.</p></div>
+        <div class="title"><small>LEEFKE · GOOGLE DRIVE</small><h2>Konto & Synchronisierung</h2><p>Logbuchdaten auf iPad, Handy und Windows gemeinsam nutzen – lokal arbeiten, Google Drive nur beim Start oder bewusst manuell verwenden.</p></div>
 
         <div class="sync-grid">
           <article class="card sync-account-card">
             <div class="card-kicker">LEEFKE-KONTO</div>
             <div id="authLoggedOut">
-              <h3>Anmelden oder Konto anlegen</h3>
-              <p class="meta">Auf allen Geräten dieselbe E-Mail-Adresse und dasselbe Passwort verwenden.</p>
+              <h3>Mit Google Drive verbinden</h3>
+              <p class="meta">LEEFKE bleibt lokal auf diesem Gerät nutzbar. Google Drive wird nur für den gemeinsamen Datenstand deiner Geräte verwendet.</p>
               <form id="authForm" class="auth-form">
-                <label>E-Mail-Adresse<input id="authEmail" type="email" autocomplete="email" required placeholder="name@beispiel.de"></label>
-                <label>Passwort<input id="authPassword" type="password" autocomplete="current-password" minlength="8" required placeholder="mindestens 8 Zeichen"></label>
+                <input id="authEmail" type="email" hidden>
+                <input id="authPassword" type="password" hidden>
                 <div class="actions auth-actions">
-                  <button id="signInButton" class="primary" type="submit">Anmelden</button>
-                  <button id="signUpButton" type="button">Konto anlegen</button>
+                  <button id="signInButton" class="primary" type="submit">Mit Google Drive verbinden</button>
+                  <button id="signUpButton" type="button" hidden>Konto anlegen</button>
                 </div>
-                <button id="resetPasswordButton" class="text-button" type="button">Passwort vergessen</button>
+                <button id="resetPasswordButton" class="text-button" type="button" hidden>Passwort</button>
               </form>
+              <p class="meta">Es gibt kein separates LEEFKE-Passwort mehr. Die App erhält nur Zugriff auf Dateien, die sie selbst in Google Drive anlegt.</p>
               <div id="authMessage" class="sync-message" aria-live="polite"></div>
             </div>
 
@@ -664,14 +665,14 @@
                 <div><dt>Status</dt><dd id="syncStatusText">Noch nicht synchronisiert</dd></div>
                 <div><dt>Letzte Synchronisierung</dt><dd id="lastSyncText">—</dd></div>
                 <div><dt>Gerät</dt><dd id="deviceNameText">Dieses Gerät</dd></div>
-                <div><dt>Echtzeitverbindung</dt><dd id="realtimeStatusText">Noch nicht aktiv</dd></div>
+                <div><dt>Cloud-Verbindung</dt><dd id="realtimeStatusText">Noch nicht aktiv</dd></div>
                 <div><dt>Offene Änderungen</dt><dd id="pendingChangesText">—</dd></div>
                 <div><dt>Konflikte</dt><dd id="syncConflictText">0</dd></div>
-                <div><dt>Cloud-Abgleich</dt><dd id="autoSyncText">Noch nicht aktiv</dd></div>
+                <div><dt>Google-Drive-Abgleich</dt><dd id="autoSyncText">Noch nicht aktiv</dd></div>
               </dl>
               <div class="actions">
                 <button id="syncNowButton" class="primary" type="button">Jetzt vollständig abgleichen</button>
-                <button id="repairDeviceSyncButton" type="button">Cloud-Daten auf diesem Gerät reparieren</button>
+                <button id="repairDeviceSyncButton" type="button">Google-Drive-Daten auf diesem Gerät reparieren</button>
                 <button id="verifySyncButton" type="button">Datenstand prüfen</button>
                 <button id="checkAppUpdateButton" type="button">App-Aktualisierung prüfen</button>
                 <button id="signOutButton" type="button">Abmelden</button>
@@ -682,7 +683,7 @@
             <div id="guestModePanel" class="guest-mode-panel" hidden>
               <div class="account-badge guest-account-badge"><span>⚓</span><div><small>LOKALE VORFÜHRVERSION</small><strong>Gastmodus der LEEFKE</strong></div></div>
               <h3>Alles ausprobieren – ohne echte Daten zu berühren</h3>
-              <p>Die Demo läuft in einer eigenen lokalen Datenbank auf diesem Gerät. Änderungen werden <strong>nicht</strong> mit der LEEFKE-Cloud synchronisiert und sind für andere Geräte nicht sichtbar.</p>
+              <p>Die Demo läuft in einer eigenen lokalen Datenbank auf diesem Gerät. Änderungen werden <strong>nicht</strong> mit Google Drive synchronisiert und sind für andere Geräte nicht sichtbar.</p>
               <dl class="sync-facts">
                 <div><dt>Datenbestand</dt><dd>Vorbereiteter Demo-Törn</dd></div>
                 <div><dt>Speicherung</dt><dd>Nur auf diesem Gerät</dd></div>
@@ -703,25 +704,25 @@
             <div class="sync-flow">
               <div><span>1</span><p><strong>Eintragen</strong><br>Neue Daten werden sofort auf dem Gerät gespeichert.</p></div>
               <div><span>2</span><p><strong>Unterwegs offline</strong><br>Die LEEFKE-App bleibt auch ohne Mobilfunk nutzbar.</p></div>
-              <div><span>3</span><p><strong>Beim Öffnen abgleichen</strong><br>Beim vollständigen Start der App wird einmal mit der Cloud abgeglichen. Während die App geöffnet bleibt, gibt es keine Hintergrundabfragen. Bei Bedarf kannst du jederzeit „Jetzt vollständig abgleichen“ verwenden.</p></div>
+              <div><span>3</span><p><strong>Beim Öffnen abgleichen</strong><br>Beim vollständigen Start der App wird einmal mit Google Drive abgeglichen. Während die App geöffnet bleibt, gibt es keine Hintergrundabfragen. Bei Bedarf kannst du jederzeit „Jetzt vollständig abgleichen“ verwenden.</p></div>
             </div>
-            <p class="nautical-warning"><strong>Wichtig:</strong> Lokale Änderungen bleiben zunächst sicher auf dem jeweiligen Gerät. Beim nächsten vollständigen App-Start werden sie mit der Cloud und den anderen Geräten zusammengeführt. Für einen sofortigen Austausch kannst du jederzeit manuell abgleichen.<br><br><strong>Synchronisiert:</strong> Tageslogbuch, Törnplanung, Häfen, Tankbuch, Wartung, Checklisten, Schiffsdaten, GPX-Routen, Wettervorhersagen, Fotos, Dokumente, Vorräte und Sicherheitsprüfungen. Änderungen werden feldweise mit Zeit und Gerät protokolliert. Bei einem echten Widerspruch wird nichts still überschrieben – die App zeigt ihn unter „Verlauf & Konflikte“ an.</p>
+            <p class="nautical-warning"><strong>Wichtig:</strong> Lokale Änderungen bleiben zunächst sicher auf dem jeweiligen Gerät. Beim nächsten vollständigen App-Start werden sie mit Google Drive und den anderen Geräten zusammengeführt. Für einen sofortigen Austausch kannst du jederzeit manuell abgleichen.<br><br><strong>Synchronisiert:</strong> Tageslogbuch, Törnplanung, Häfen, Tankbuch, Wartung, Checklisten, Schiffsdaten, GPX-Routen, Wettervorhersagen, Fotos, Dokumente, Vorräte und Sicherheitsprüfungen. Änderungen werden feldweise mit Zeit und Gerät protokolliert. Bei einem echten Widerspruch wird nichts still überschrieben – die App zeigt ihn unter „Verlauf & Konflikte“ an.</p>
           </article>
         </div>
 
         <article id="guestEntryCard" class="card guest-entry-card">
-          <div class="guest-entry-copy"><span class="guest-entry-icon">⚓</span><div><div class="card-kicker">VORFÜHRVERSION</div><h3>Die LEEFKE-App gefahrlos ausprobieren</h3><p>Öffnet einen vorbereiteten Demo-Törn in einem vollständig getrennten lokalen Datenbestand. Anmeldung und Cloud-Synchronisierung sind dafür nicht erforderlich.</p></div></div>
+          <div class="guest-entry-copy"><span class="guest-entry-icon">⚓</span><div><div class="card-kicker">VORFÜHRVERSION</div><h3>Die LEEFKE-App gefahrlos ausprobieren</h3><p>Öffnet einen vorbereiteten Demo-Törn in einem vollständig getrennten lokalen Datenbestand. Anmeldung und Google-Drive-Synchronisierung sind dafür nicht erforderlich.</p></div></div>
           <button id="enterGuestModeButton" class="primary" type="button">Als Gast testen</button>
         </article>
 
         <article id="initialSyncPanel" class="card initial-sync-panel" hidden>
           <div class="card-kicker">DIESES GERÄT VERBINDEN</div>
           <h3>Ein Knopf – der richtige Datenstand wird automatisch erkannt</h3>
-          <p>Die App prüft selbst, ob dieses Gerät leer ist, ob bereits Cloud-Daten vorhanden sind oder ob auf beiden Seiten neue Einträge liegen. Vorhandene LEEFKE-Daten werden automatisch zusammengeführt; ein leeres Gerät übernimmt den Cloud-Datenstand.</p>
+          <p>Die App prüft selbst, ob dieses Gerät leer ist, ob bereits Google-Drive-Daten vorhanden sind oder ob auf beiden Seiten neue Einträge liegen. Vorhandene LEEFKE-Daten werden automatisch zusammengeführt; ein leeres Gerät übernimmt den Google-Drive-Datenstand.</p>
           <div class="initial-sync-options single-option">
             <button id="connectDeviceButton" class="initial-option primary" type="button"><span>⇄</span><strong>Gerät verbinden und vollständig abgleichen</strong><small>Danach sind Handy, Tablet und Laptop gleichberechtigt. Es gibt kein Hauptgerät.</small></button>
           </div>
-          <p class="meta">Beim ersten Anmelden wird das Gerät einmal verbunden. Danach erfolgt der automatische Cloud-Abgleich nur noch beim vollständigen App-Start; zusätzlich kannst du ihn jederzeit manuell starten.</p>
+          <p class="meta">Beim ersten Anmelden wird das Gerät einmal verbunden. Danach erfolgt der automatische Google-Drive-Abgleich nur noch beim vollständigen App-Start; zusätzlich kannst du ihn jederzeit manuell starten.</p>
         </article>
       </section>
 
@@ -733,11 +734,11 @@
       </section>
 
       <section id="backup" class="view">
-        <div class="title"><small>DATENSICHERUNG</small><h2>Das Bordbuch zusätzlich sichern</h2><p>Die Cloud-Synchronisierung ersetzt keine eigene Sicherungsdatei. Ein Export ist vor größeren Änderungen weiterhin sinnvoll.</p></div>
+        <div class="title"><small>DATENSICHERUNG</small><h2>Das Bordbuch zusätzlich sichern</h2><p>Die Google-Drive-Synchronisierung ersetzt keine eigene Sicherungsdatei. Ein Export ist vor größeren Änderungen weiterhin sinnvoll.</p></div>
         <article class="card"><div class="card-kicker">URLAUBSSICHERUNG</div><h3>Vollständige Sicherung</h3><p>Alle Einträge, Schiffsdaten, GPX-Routen, Bewertungen und Fotos werden in einer Datei gesichert. Vor dem Download entsteht zusätzlich ein lokaler Wiederherstellungspunkt.</p><div class="actions"><button id="holidayBackupButtonBackupPage" class="primary" type="button">Urlaubssicherung erstellen</button><button id="export" type="button">Normale Sicherung exportieren</button></div><p id="backupPageStatus" class="meta">Noch keine Urlaubssicherung erstellt.</p></article>
         <article class="card"><h3>Wiederherstellen</h3><input id="import" type="file" accept="application/json,.json"></article>
         <article class="card"><div class="backup-heading"><div><div class="card-kicker">AUTOMATISCHE SICHERUNGSPUNKTE</div><h3>Vor Abgleich und Updates</h3><p class="meta">Die App legt täglich sowie vor größeren Synchronisierungen und Aktualisierungen lokale Sicherungspunkte an. Die neuesten fünf bleiben erhalten.</p></div><button id="createAutoBackupButton" type="button">Jetzt Sicherungspunkt anlegen</button></div><div id="autoBackupList" class="backup-list"></div></article>
-        <article class="card warning"><strong>Wichtig:</strong> Cloud-Synchronisierung und automatische Sicherungspunkte ergänzen sich, ersetzen aber keinen gelegentlichen JSON-Export auf einen unabhängigen Datenträger.</article>
+        <article class="card warning"><strong>Wichtig:</strong> Google-Drive-Synchronisierung und automatische Sicherungspunkte ergänzen sich, ersetzen aber keinen gelegentlichen JSON-Export auf einen unabhängigen Datenträger.</article>
       </section>
     </main>
   </div>
@@ -890,8 +891,8 @@
 
   <div id="toast" role="status" aria-live="polite"></div>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://accounts.google.com/gsi/client"></script>
   <script src="https://unpkg.com/exifr@7.1.3/dist/full.umd.js"></script>
-  <script src="app.js?v=8.23"></script>
+  <script src="app.js?v=8.24-test"></script>
 </body>
 </html>

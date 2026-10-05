@@ -1,4 +1,4 @@
-const APP_VERSION = '8.23';
+const APP_VERSION = '8.24-test';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 // Cloud-sparsam: automatischer Abgleich nur einmal beim echten App-Start.
 // Weitere Abgleiche erfolgen ausschließlich über „Jetzt vollständig abgleichen“.
@@ -19,6 +19,8 @@ const SETTINGS_FIELD_RECORD_TYPE = 'settings_field';
 const systemStores = ['syncMeta', 'syncTombstones'];
 const SUPABASE_URL = 'https://fzaxoivuwpubwhgabahz.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VRFnhXCeSrhJ7BsxMNgl6Q_HolDM-yC';
+const GOOGLE_DRIVE_CLIENT_ID = '1055159550955-tunrc9es0hmm9juac9ip4h55qhdkdu75.apps.googleusercontent.com';
+const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
 const DEFAULT_SETTINGS = {
   id: 'main',
@@ -7569,3 +7571,596 @@ window.addEventListener('DOMContentLoaded', () => {
   const activeView = document.querySelector('.view.active')?.id || 'home';
   updateMobileChrome(activeView);
 });
+
+
+/* ============================================================================
+   LEEFKE 8.24 TEST – GOOGLE DRIVE CLOUD ADAPTER
+   Basis: 8.23. IndexedDB und die feldweise Konfliktlogik bleiben unverändert.
+   Supabase wird in dieser Testversion nicht initialisiert. Stattdessen werden
+   Datensätze in einer von LEEFKE angelegten JSON-Datei im Google Drive gehalten;
+   Fotos/Dokumente liegen als eigene Drive-Dateien. Cloud-Zugriff erfolgt nur
+   beim Start (wenn noch ein gültiges Google-Zugriffstoken vorhanden ist) oder
+   bewusst über die Synchronisationsschaltfläche.
+   ============================================================================ */
+
+const GOOGLE_DRIVE_TOKEN_KEY = 'leefke-google-drive-token-v1';
+const GOOGLE_DRIVE_IDENTITY_KEY = 'leefke-google-drive-identity-v1';
+const GOOGLE_DRIVE_AUTH_MARKER_KEY = 'leefke-google-drive-authorized-v1';
+const GOOGLE_DRIVE_DATA_FORMAT = 'leefke-drive-records-v1';
+const GOOGLE_DRIVE_API = 'https://www.googleapis.com/drive/v3';
+const GOOGLE_DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
+let googleDriveAccessToken = '';
+let googleDriveTokenExpiresAt = 0;
+let googleDriveWorkspacePromise = null;
+let googleDriveWorkspace = null;
+let googleDriveRemoteRecordsCache = null;
+let googleDriveDataDirty = false;
+
+function googleDriveStorageId(storagePath) {
+  const value = String(storagePath || '');
+  return value.startsWith('gdrive:') ? value.slice(7) : '';
+}
+
+function googleDriveStoragePath(fileId) {
+  return fileId ? `gdrive:${fileId}` : '';
+}
+
+function googleDriveSaveToken(accessToken, expiresIn) {
+  googleDriveAccessToken = String(accessToken || '');
+  googleDriveTokenExpiresAt = Date.now() + Math.max(0, Number(expiresIn || 3600) - 90) * 1000;
+  if (!googleDriveAccessToken) {
+    sessionStorage.removeItem(GOOGLE_DRIVE_TOKEN_KEY);
+    return;
+  }
+  sessionStorage.setItem(GOOGLE_DRIVE_TOKEN_KEY, JSON.stringify({
+    accessToken: googleDriveAccessToken,
+    expiresAt: googleDriveTokenExpiresAt
+  }));
+}
+
+function googleDriveRestoreToken() {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(GOOGLE_DRIVE_TOKEN_KEY) || 'null');
+    if (!saved?.accessToken || Number(saved.expiresAt || 0) <= Date.now() + 15000) return false;
+    googleDriveAccessToken = saved.accessToken;
+    googleDriveTokenExpiresAt = Number(saved.expiresAt);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function googleDriveClearToken({ revoke = false } = {}) {
+  const token = googleDriveAccessToken;
+  googleDriveAccessToken = '';
+  googleDriveTokenExpiresAt = 0;
+  sessionStorage.removeItem(GOOGLE_DRIVE_TOKEN_KEY);
+  googleDriveWorkspacePromise = null;
+  googleDriveWorkspace = null;
+  googleDriveRemoteRecordsCache = null;
+  googleDriveDataDirty = false;
+  if (revoke && token && window.google?.accounts?.oauth2?.revoke) {
+    try { window.google.accounts.oauth2.revoke(token, () => {}); } catch {}
+  }
+}
+
+function googleDriveHasToken() {
+  return Boolean(googleDriveAccessToken && googleDriveTokenExpiresAt > Date.now() + 10000);
+}
+
+async function waitForGoogleIdentity(timeoutMs = 5000) {
+  const started = Date.now();
+  while (!window.google?.accounts?.oauth2?.initTokenClient) {
+    if (Date.now() - started >= timeoutMs) return false;
+    await new Promise(resolve => window.setTimeout(resolve, 80));
+  }
+  return true;
+}
+
+async function requestGoogleDriveToken({ interactive = true } = {}) {
+  if (!navigator.onLine) throw new Error('Keine Internetverbindung. Die lokalen LEEFKE-Daten bleiben verfügbar.');
+  if (!await waitForGoogleIdentity()) throw new Error('Google-Anmeldung konnte nicht geladen werden. Bitte Internetverbindung prüfen und die App neu öffnen.');
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const finishError = error => {
+      if (settled) return;
+      settled = true;
+      reject(error instanceof Error ? error : new Error(error?.message || error?.type || 'Google-Anmeldung wurde nicht abgeschlossen.'));
+    };
+    const client = window.google.accounts.oauth2.initTokenClient({
+      client_id: GOOGLE_DRIVE_CLIENT_ID,
+      scope: GOOGLE_DRIVE_SCOPE,
+      include_granted_scopes: true,
+      callback: response => {
+        if (settled) return;
+        if (response?.error) return finishError(new Error(response.error_description || response.error));
+        settled = true;
+        googleDriveSaveToken(response.access_token, response.expires_in);
+        localStorage.setItem(GOOGLE_DRIVE_AUTH_MARKER_KEY, '1');
+        resolve(response);
+      },
+      error_callback: response => finishError(new Error(response?.message || response?.type || 'Google-Anmeldung wurde abgebrochen.'))
+    });
+    try {
+      const firstGrant = localStorage.getItem(GOOGLE_DRIVE_AUTH_MARKER_KEY) !== '1';
+      client.requestAccessToken({ prompt: interactive && firstGrant ? 'consent' : '' });
+    } catch (error) { finishError(error); }
+  });
+}
+
+async function googleDriveRequest(url, options = {}) {
+  if (!googleDriveHasToken()) {
+    const error = new Error('Google Drive ist nicht verbunden. Bitte „Mit Google Drive verbinden“ wählen.');
+    error.code = 'GOOGLE_AUTH_REQUIRED';
+    throw error;
+  }
+  const headers = new Headers(options.headers || {});
+  headers.set('Authorization', `Bearer ${googleDriveAccessToken}`);
+  const response = await fetch(url, { ...options, headers, cache: 'no-store' });
+  if (response.status === 401) {
+    googleDriveClearToken();
+    currentSession = null;
+    const error = new Error('Die Google-Anmeldung ist abgelaufen. Bitte Google Drive erneut verbinden.');
+    error.code = 'GOOGLE_AUTH_REQUIRED';
+    throw error;
+  }
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const payload = await response.clone().json();
+      detail = payload?.error?.message || payload?.error_description || '';
+    } catch {}
+    throw new Error(detail || `Google Drive antwortet mit Fehler ${response.status}.`);
+  }
+  return response;
+}
+
+async function googleDriveAbout() {
+  const response = await googleDriveRequest(`${GOOGLE_DRIVE_API}/about?fields=user(displayName,emailAddress,permissionId)`);
+  return response.json();
+}
+
+async function googleDriveApplyIdentity() {
+  const about = await googleDriveAbout();
+  const user = about?.user || {};
+  const identity = {
+    id: user.permissionId || user.emailAddress || 'google-drive-user',
+    email: user.emailAddress || user.displayName || 'Google Drive',
+    displayName: user.displayName || ''
+  };
+  currentSession = { user: identity, provider: 'google-drive' };
+  localStorage.setItem(GOOGLE_DRIVE_IDENTITY_KEY, JSON.stringify(identity));
+  realtimeState = 'Google Drive · Start / manuell';
+  return identity;
+}
+
+function googleDriveEscapeQueryValue(value) {
+  return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
+async function googleDriveList(q, fields = 'files(id,name,mimeType,modifiedTime,size,parents,appProperties)') {
+  const params = new URLSearchParams({ q, spaces: 'drive', fields, pageSize: '100' });
+  const response = await googleDriveRequest(`${GOOGLE_DRIVE_API}/files?${params.toString()}`);
+  return (await response.json())?.files || [];
+}
+
+async function googleDriveFindByRole(role, parentId = '') {
+  const roleValue = googleDriveEscapeQueryValue(role);
+  const clauses = ["trashed = false", `appProperties has { key='leefkeRole' and value='${roleValue}' }`];
+  if (parentId) clauses.push(`'${googleDriveEscapeQueryValue(parentId)}' in parents`);
+  const files = await googleDriveList(clauses.join(' and '));
+  return files.sort((a,b) => String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || '')))[0] || null;
+}
+
+async function googleDriveCreateMetadata(metadata) {
+  const response = await googleDriveRequest(`${GOOGLE_DRIVE_API}/files?fields=id,name,mimeType,modifiedTime,parents,appProperties`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+    body: JSON.stringify(metadata)
+  });
+  return response.json();
+}
+
+async function googleDriveUploadBlob(blob, metadata = {}, fileId = '') {
+  const method = fileId ? 'PATCH' : 'POST';
+  const target = fileId ? `/files/${encodeURIComponent(fileId)}` : '/files';
+  const fields = 'id,name,mimeType,modifiedTime,size,parents,appProperties';
+  if (blob.size <= 4_500_000) {
+    const boundary = `leefke_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const body = new Blob([
+      `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n`,
+      JSON.stringify(metadata || {}),
+      `\r\n--${boundary}\r\nContent-Type: ${blob.type || 'application/octet-stream'}\r\n\r\n`,
+      blob,
+      `\r\n--${boundary}--`
+    ]);
+    const response = await googleDriveRequest(`${GOOGLE_DRIVE_UPLOAD_API}${target}?uploadType=multipart&fields=${encodeURIComponent(fields)}`, {
+      method,
+      headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
+      body
+    });
+    return response.json();
+  }
+
+  const initResponse = await googleDriveRequest(`${GOOGLE_DRIVE_UPLOAD_API}${target}?uploadType=resumable&fields=${encodeURIComponent(fields)}`, {
+    method,
+    headers: {
+      'Content-Type': 'application/json; charset=UTF-8',
+      'X-Upload-Content-Type': blob.type || 'application/octet-stream',
+      'X-Upload-Content-Length': String(blob.size)
+    },
+    body: JSON.stringify(metadata || {})
+  });
+  const uploadUrl = initResponse.headers.get('Location');
+  if (!uploadUrl) throw new Error('Google Drive hat keine Upload-Adresse zurückgegeben.');
+  const uploadResponse = await fetch(uploadUrl, {
+    method: 'PUT',
+    headers: {
+      'Authorization': `Bearer ${googleDriveAccessToken}`,
+      'Content-Type': blob.type || 'application/octet-stream'
+    },
+    body: blob
+  });
+  if (!uploadResponse.ok) throw new Error(`Google Drive Upload fehlgeschlagen (${uploadResponse.status}).`);
+  return uploadResponse.json();
+}
+
+async function googleDriveDownload(fileId, as = 'blob') {
+  const response = await googleDriveRequest(`${GOOGLE_DRIVE_API}/files/${encodeURIComponent(fileId)}?alt=media`);
+  if (as === 'text') return response.text();
+  if (as === 'json') return response.json();
+  return response.blob();
+}
+
+async function googleDriveDelete(fileId) {
+  if (!fileId) return;
+  await googleDriveRequest(`${GOOGLE_DRIVE_API}/files/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
+}
+
+async function ensureGoogleDriveWorkspace() {
+  if (googleDriveWorkspace) return googleDriveWorkspace;
+  if (googleDriveWorkspacePromise) return googleDriveWorkspacePromise;
+  googleDriveWorkspacePromise = (async () => {
+    let root = await googleDriveFindByRole('root');
+    if (!root) {
+      root = await googleDriveCreateMetadata({
+        name: 'LEEFKE App',
+        mimeType: 'application/vnd.google-apps.folder',
+        appProperties: { leefkeRole: 'root', leefkeSchema: '1' }
+      });
+    }
+    const folders = {};
+    for (const [key, name] of [['photos','Fotos'], ['documents','Dokumente'], ['boat','Boot']]) {
+      const role = `folder-${key}`;
+      let folder = await googleDriveFindByRole(role, root.id);
+      if (!folder) {
+        folder = await googleDriveCreateMetadata({
+          name,
+          mimeType: 'application/vnd.google-apps.folder',
+          parents: [root.id],
+          appProperties: { leefkeRole: role, leefkeSchema: '1' }
+        });
+      }
+      folders[key] = folder.id;
+    }
+    let dataFile = await googleDriveFindByRole('data', root.id);
+    googleDriveWorkspace = { rootId: root.id, folders, dataFileId: dataFile?.id || '' };
+    return googleDriveWorkspace;
+  })();
+  try { return await googleDriveWorkspacePromise; }
+  finally { googleDriveWorkspacePromise = null; }
+}
+
+async function googleDriveLoadRecordFile() {
+  const workspace = await ensureGoogleDriveWorkspace();
+  if (!workspace.dataFileId) {
+    googleDriveRemoteRecordsCache = [];
+    return [];
+  }
+  try {
+    const raw = await googleDriveDownload(workspace.dataFileId, 'text');
+    const payload = JSON.parse(raw || '{}');
+    const records = Array.isArray(payload.records) ? payload.records : [];
+    googleDriveRemoteRecordsCache = records;
+    return records;
+  } catch (error) {
+    if (/404|not found/i.test(String(error?.message || ''))) {
+      workspace.dataFileId = '';
+      googleDriveRemoteRecordsCache = [];
+      return [];
+    }
+    throw error;
+  }
+}
+
+async function googleDriveWriteRecordFile() {
+  const workspace = await ensureGoogleDriveWorkspace();
+  const payload = {
+    app: 'LEEFKE Bordbuch',
+    format: GOOGLE_DRIVE_DATA_FORMAT,
+    version: APP_VERSION,
+    updatedAt: new Date().toISOString(),
+    records: googleDriveRemoteRecordsCache || []
+  };
+  const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+  const metadata = {
+    name: 'LEEFKE_Daten.json',
+    mimeType: 'application/json',
+    appProperties: { leefkeRole: 'data', leefkeSchema: '1' }
+  };
+  if (!workspace.dataFileId) metadata.parents = [workspace.rootId];
+  const file = await googleDriveUploadBlob(blob, metadata, workspace.dataFileId || '');
+  workspace.dataFileId = file.id;
+  googleDriveDataDirty = false;
+  return file;
+}
+
+async function fetchRemoteRecords() {
+  if (!currentSession?.user?.id || !navigator.onLine) return [];
+  if (!googleDriveHasToken()) throw new Error('Google Drive ist nicht verbunden. Bitte erneut verbinden.');
+  return googleDriveLoadRecordFile();
+}
+
+async function upsertRows(rows) {
+  if (!rows?.length) return;
+  if (!googleDriveRemoteRecordsCache) await googleDriveLoadRecordFile();
+  const map = new Map((googleDriveRemoteRecordsCache || []).map(row => [`${row.record_type}:${row.record_id}`, row]));
+  for (const row of rows) {
+    const key = `${row.record_type}:${row.record_id}`;
+    const previous = map.get(key);
+    const previousTs = remoteTimestamp(previous);
+    const incomingTs = remoteTimestamp(row);
+    if (!previous || incomingTs >= previousTs) map.set(key, row);
+  }
+  googleDriveRemoteRecordsCache = [...map.values()];
+  googleDriveDataDirty = true;
+  await googleDriveWriteRecordFile();
+}
+
+async function googleDriveFindMedia(store, recordId) {
+  const storeValue = googleDriveEscapeQueryValue(store);
+  const idValue = googleDriveEscapeQueryValue(recordId);
+  const q = [
+    'trashed = false',
+    "appProperties has { key='leefkeRole' and value='media' }",
+    `appProperties has { key='leefkeStore' and value='${storeValue}' }`,
+    `appProperties has { key='leefkeRecordId' and value='${idValue}' }`
+  ].join(' and ');
+  const files = await googleDriveList(q);
+  return files[0] || null;
+}
+
+async function mediaUploadRecord(store, item) {
+  if (!currentSession?.user?.id || !googleDriveHasToken() || !item?.data) return item;
+  const workspace = await ensureGoogleDriveWorkspace();
+  const folderKey = store === 'photos' ? 'photos' : 'documents';
+  const extension = item.mimeType?.includes('pdf') ? 'pdf' : item.mimeType?.includes('png') ? 'png' : item.mimeType?.includes('webp') ? 'webp' : 'jpg';
+  let fileId = googleDriveStorageId(item.storagePath);
+  if (!fileId) fileId = (await googleDriveFindMedia(store, item.id))?.id || '';
+  const blob = dataUrlToBlob(item.data);
+  const metadata = {
+    name: `${item.id}-${safeFilename(item.fileName || item.caption || item.title || 'leefke')}.${extension}`,
+    mimeType: item.mimeType || blob.type || 'application/octet-stream',
+    appProperties: { leefkeRole: 'media', leefkeStore: store, leefkeRecordId: String(item.id), leefkeSchema: '1' }
+  };
+  if (!fileId) metadata.parents = [workspace.folders[folderKey]];
+  const file = await googleDriveUploadBlob(blob, metadata, fileId);
+  const updated = { ...item, storagePath: googleDriveStoragePath(file.id), _mediaCloudAt: new Date().toISOString(), _cloudState: 'synced' };
+  await rawPut(store, updated);
+  return updated;
+}
+
+async function mediaDownloadRecord(store, item) {
+  if (!item || item.data) return item;
+  const fileId = googleDriveStorageId(item.storagePath);
+  if (!fileId) return item;
+  const blob = await googleDriveDownload(fileId, 'blob');
+  const updated = { ...item, data: await blobToDataUrl(blob), _cloudState: 'synced' };
+  await rawPut(store, updated);
+  return updated;
+}
+
+async function syncBoatPhoto() {
+  const settings = await getOne('settings', 'main');
+  if (!settings || !currentSession?.user?.id || !googleDriveHasToken()) return;
+  const workspace = await ensureGoogleDriveWorkspace();
+  let updated = { ...settings };
+  let fileId = googleDriveStorageId(settings.boatPhotoStoragePath);
+  if (settings.boatPhoto && (!fileId || Date.parse(settings._mediaUpdatedAt || 0) > Date.parse(settings._mediaCloudAt || 0))) {
+    if (!fileId) fileId = (await googleDriveFindByRole('boat-photo', workspace.folders.boat))?.id || '';
+    const blob = dataUrlToBlob(settings.boatPhoto);
+    const metadata = {
+      name: 'LEEFKE_Startbild.jpg',
+      mimeType: blob.type || 'image/jpeg',
+      appProperties: { leefkeRole: 'boat-photo', leefkeSchema: '1' }
+    };
+    if (!fileId) metadata.parents = [workspace.folders.boat];
+    const file = await googleDriveUploadBlob(blob, metadata, fileId);
+    updated = { ...updated, boatPhotoStoragePath: googleDriveStoragePath(file.id), _mediaCloudAt: new Date().toISOString() };
+    await rawPut('settings', updated);
+  } else if (!settings.boatPhoto && fileId) {
+    const blob = await googleDriveDownload(fileId, 'blob');
+    updated.boatPhoto = await blobToDataUrl(blob);
+    await rawPut('settings', updated);
+  }
+}
+
+async function processMediaDeletes() {
+  const tombstones = await all('syncTombstones');
+  for (const tombstone of tombstones) {
+    const fileId = googleDriveStorageId(tombstone.storagePath);
+    if (!fileId) continue;
+    try { await googleDriveDelete(fileId); }
+    catch (error) { console.warn('Drive-Medium konnte nicht gelöscht werden.', error); }
+  }
+}
+
+async function syncMedia(options = {}) {
+  if (mediaSyncInProgress || !navigator.onLine || !currentSession || !googleDriveHasToken()) return;
+  const settings = getSettings();
+  if (options.manual !== true && settings.photoAutoSync === false) return;
+  mediaSyncInProgress = true;
+  try {
+    await processMediaDeletes();
+    for (const store of ['photos', 'documents']) {
+      for (const item of await all(store)) {
+        try {
+          const driveId = googleDriveStorageId(item.storagePath);
+          if (item.data && (!driveId || Date.parse(item._mediaUpdatedAt || item._updatedAt || 0) > Date.parse(item._mediaCloudAt || 0))) await mediaUploadRecord(store, item);
+          else if (!item.data && driveId) await mediaDownloadRecord(store, item);
+        } catch (error) {
+          console.warn(`Google-Drive-Medienabgleich ${store}/${item.id} fehlgeschlagen`, error);
+          await rawPut(store, { ...item, _cloudState: 'error' });
+        }
+      }
+    }
+    await syncBoatPhoto();
+  } finally { mediaSyncInProgress = false; }
+}
+
+async function registerDeviceHeartbeat() {
+  if (!currentSession?.user?.id || !googleDriveHasToken() || !navigator.onLine) return;
+  if (!await isLinkedForCurrentUser()) return;
+  const device = await getDeviceIdentity();
+  const existing = await getOne('devices', device.id);
+  const lastSeen = Date.parse(existing?.lastSeenAt || 0) || 0;
+  if (Date.now() - lastSeen < 5 * 60 * 1000 && existing?.appVersion === APP_VERSION) return;
+  const now = new Date().toISOString();
+  const record = normalizeRecord('devices', {
+    ...(existing || {}), id: device.id, label: device.label,
+    lastSeenAt: now, appVersion: APP_VERSION
+  }, now, device.id);
+  await rawPut('devices', record);
+  await upsertRows([cloudRowFromRecord('devices', record, currentSession.user.id)]);
+}
+
+async function uploadLocalAsSource() {
+  if (!currentSession || !navigator.onLine) return setMessage('#syncMessage', 'Bitte zuerst Google Drive verbinden.', 'error');
+  if (!confirm('Soll der lokale Datenstand dieses Geräts als Ausgangspunkt für Google Drive verwendet werden?')) return;
+  try {
+    syncInProgress = true;
+    googleDriveRemoteRecordsCache = [];
+    const rows = await localRows();
+    googleDriveRemoteRecordsCache = rows;
+    await googleDriveWriteRecordFile();
+    await syncMedia({ manual: true });
+    const mediaRows = [];
+    for (const store of ['photos', 'documents', 'settings']) for (const item of await all(store)) mediaRows.push(cloudRowFromRecord(store, item, currentSession.user.id));
+    await upsertRows(mediaRows);
+    await rawClear('syncTombstones');
+    await markLinked('google-drive-upload');
+    await setDirty(false);
+    await metaSet('lastSync', { at: new Date().toISOString() });
+    setMessage('#syncMessage', 'Lokaler Datenstand wurde in Google Drive gespeichert.', 'success');
+  } catch (error) {
+    setMessage('#syncMessage', `Übertragung fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+  } finally { syncInProgress = false; await updateSyncUI(); }
+}
+
+async function downloadCloudAsSource() {
+  if (!currentSession || !navigator.onLine) return setMessage('#syncMessage', 'Bitte zuerst Google Drive verbinden.', 'error');
+  try {
+    const remote = await fetchRemoteRecords();
+    const active = remote.filter(row => !row.deleted_at && (syncableStores.includes(row.record_type) || row.record_type === SETTINGS_FIELD_RECORD_TYPE));
+    if (!active.length) return setMessage('#syncMessage', 'In Google Drive liegen noch keine LEEFKE-Daten.', 'error');
+    if (!confirm('Die synchronisierbaren Daten auf diesem Gerät werden durch den Google-Drive-Datenstand ersetzt. Fortfahren?')) return;
+    await createAutoBackup('Vor Google-Drive-Wiederherstellung', true);
+    await replaceLocalWithRemote(remote);
+    await markLinked('google-drive-download');
+    await setDirty(false);
+    await metaSet('lastSync', { at: new Date().toISOString() });
+    await syncMedia({ manual: true });
+    await refresh();
+    setMessage('#syncMessage', 'Google-Drive-Daten wurden auf dieses Gerät geladen.', 'success');
+  } catch (error) {
+    setMessage('#syncMessage', `Laden fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+  } finally { await updateSyncUI(); }
+}
+
+async function initializeSupabase() {
+  // Der Funktionsname bleibt aus Kompatibilitätsgründen erhalten; Supabase wird
+  // in 8.24 TEST bewusst nicht initialisiert.
+  if (IS_GUEST_MODE) {
+    supabaseClient = null;
+    currentSession = null;
+    realtimeState = 'Gastmodus';
+    await updateSyncUI();
+    return;
+  }
+  supabaseClient = { provider: 'google-drive' };
+  currentSession = null;
+  realtimeState = 'Google Drive · nicht verbunden';
+  if (!navigator.onLine) {
+    await updateSyncUI();
+    return;
+  }
+  if (!googleDriveRestoreToken()) {
+    await waitForGoogleIdentity(2500);
+    await updateSyncUI();
+    return;
+  }
+  try {
+    await googleDriveApplyIdentity();
+    setMessage('#authMessage', 'Google Drive verbunden. Beim App-Start wird einmal abgeglichen.', 'success');
+  } catch (error) {
+    googleDriveClearToken();
+    currentSession = null;
+    console.warn('Gespeicherte Google-Anmeldung konnte nicht wiederhergestellt werden.', error);
+  }
+  await updateSyncUI();
+}
+
+function stopRealtimeSubscription() {
+  realtimeChannel = null;
+  realtimeState = currentSession ? 'Google Drive · Start / manuell' : 'Google Drive · nicht verbunden';
+}
+
+function startRealtimeSubscription() {
+  // Google Drive wird absichtlich nicht als Echtzeitdienst genutzt.
+  realtimeChannel = null;
+  realtimeState = currentSession ? 'Google Drive · Start / manuell' : 'Google Drive · nicht verbunden';
+  queueSyncUIUpdate();
+}
+
+function readableAuthError(error) {
+  const message = String(error?.message || error || 'Unbekannter Fehler');
+  if (/popup.*closed|popup_closed|access_denied/i.test(message)) return 'Google-Anmeldung wurde abgebrochen.';
+  if (/popup.*open|popup_failed/i.test(message)) return 'Das Google-Anmeldefenster wurde vom Browser blockiert. Bitte erneut auf „Mit Google Drive verbinden“ tippen.';
+  if (/expired|abgelaufen|auth_required/i.test(message)) return 'Die Google-Anmeldung ist abgelaufen. Bitte Google Drive erneut verbinden.';
+  return message;
+}
+
+function installGoogleDriveAuthHandlers() {
+  const authForm = $('#authForm');
+  if (authForm) authForm.onsubmit = async event => {
+    event.preventDefault();
+    setMessage('#authMessage', 'Google Drive wird verbunden …');
+    try {
+      await requestGoogleDriveToken({ interactive: true });
+      await googleDriveApplyIdentity();
+      setMessage('#authMessage', 'Google Drive ist verbunden.', 'success');
+      await updateSyncUI();
+      if (await isLinkedForCurrentUser()) await syncNow({ silent: false, reason: 'google-sign-in' });
+      else await connectDeviceAutomatically({ silent: false });
+    } catch (error) {
+      setMessage('#authMessage', readableAuthError(error), 'error');
+      await updateSyncUI();
+    }
+  };
+  const signOut = $('#signOutButton');
+  if (signOut) signOut.onclick = async () => {
+    googleDriveClearToken({ revoke: false });
+    currentSession = null;
+    supabaseClient = { provider: 'google-drive' };
+    stopRealtimeSubscription();
+    stopAutoSync();
+    setMessage('#syncMessage', 'Google Drive getrennt. Die lokalen Daten bleiben vollständig auf diesem Gerät erhalten.');
+    await updateSyncUI();
+  };
+  const signUp = $('#signUpButton');
+  if (signUp) signUp.onclick = () => authForm?.requestSubmit();
+  const resetPassword = $('#resetPasswordButton');
+  if (resetPassword) resetPassword.onclick = () => setMessage('#authMessage', 'Für Google Drive verwendest du dein normales Google-Konto. Ein separates LEEFKE-Passwort gibt es nicht mehr.');
+}
+
+installGoogleDriveAuthHandlers();

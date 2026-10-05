@@ -2,7 +2,7 @@
   "id": "./",
   "name": "LEEFKE Bordtagebuch",
   "short_name": "LEEFKE",
-  "start_url": "./index.html?v=8.23",
+  "start_url": "./index.html?v=8.24-test",
   "scope": "./",
   "display": "standalone",
   "orientation": "any",

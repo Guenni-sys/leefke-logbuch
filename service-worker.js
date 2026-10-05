@@ -1,13 +1,13 @@
-const APP_CACHE = 'leefke-v8-23-start-only-sync-20260927';
+const APP_CACHE = 'leefke-v8-24-google-drive-test-20261001';
 const RUNTIME_CACHE = 'leefke-runtime-v6-3';
 const ASSETS = [
   './',
   './index.html',
-  './index.html?v=8.23',
+  './index.html?v=8.24-test',
   './style.css',
-  './style.css?v=8.23',
+  './style.css?v=8.24-test',
   './app.js',
-  './app.js?v=8.23',
+  './app.js?v=8.24-test',
   './manifest.webmanifest',
   './icon.svg',
   './icon-192.png',
@@ -86,7 +86,7 @@ async function cacheFirst(request, cacheName) {
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
-  const isSupabaseRequest = url.hostname.endsWith('.supabase.co');
+  const isCloudApiRequest = url.hostname.endsWith('.supabase.co') || url.hostname.endsWith('googleapis.com') || url.hostname === 'accounts.google.com';
   const isLiveDataRequest =
     url.hostname.endsWith('open-meteo.com') ||
     url.hostname.endsWith('pegelonline.wsv.de') ||
@@ -100,7 +100,7 @@ self.addEventListener('fetch', event => {
     url.hostname === 'unpkg.com' ||
     url.hostname === 'cdn.jsdelivr.net';
 
-  if (isSupabaseRequest) {
+  if (isCloudApiRequest) {
     event.respondWith(fetch(event.request));
     return;
   }

@@ -1,0 +1,30 @@
+LEEFKE 8.24 TEST – Google-Drive-Vorbereitung
+
+Basis
+- Ausschließlich LEEFKE 8.23 als Ausgangsversion.
+- IndexedDB, Törnlogik, Konfliktlogik und Offline-Nutzung bleiben bestehen.
+
+Vorbereitet
+- Supabase-Bibliothek wird nicht mehr geladen.
+- Google Identity Services eingebunden.
+- OAuth-Client-ID des Projekts LEEFKE App eingetragen.
+- Scope: drive.file (Zugriff nur auf Dateien, die LEEFKE selbst anlegt/öffnet).
+- Sichtbarer Google-Drive-Ordner „LEEFKE App“ wird beim ersten Verbinden angelegt.
+- Metadaten/Datensätze werden in LEEFKE_Daten.json gespeichert.
+- Fotos, Dokumente und Bootsfoto werden als eigene Drive-Dateien abgelegt.
+- Feldweise Merge-/Konfliktlogik aus 8.23 bleibt erhalten.
+- Kein Realtime, kein Minuten-Timer, kein Sync nach jedem Speichern.
+- Sync beim App-Start nur, wenn noch ein gültiges Google-Zugriffstoken vorhanden ist; sonst bewusst „Mit Google Drive verbinden“.
+- Manueller Button „Jetzt vollständig abgleichen“ bleibt erhalten.
+
+Noch zu testen
+1. Erster Google-Login auf GitHub Pages.
+2. Anlegen des Drive-Ordners und der LEEFKE_Daten.json.
+3. Erster Upload des vorhandenen 8.23-Datenstands.
+4. Zweites Gerät: Download/Merge.
+5. Foto-Upload/Download (auch >5 MB / resumable upload).
+6. Token-Ablauf und erneute Verbindung.
+7. Test nach PWA-Neustart auf iPhone/Android/Windows.
+
+Wichtig
+Diese Datei ist eine Test-/Migrationsversion. 8.23 bleibt unverändert als Rückfallstand.
