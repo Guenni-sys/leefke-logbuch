@@ -1,4 +1,4 @@
-const APP_VERSION = '8.24-test';
+const APP_VERSION = '8.24';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 // Cloud-sparsam: automatischer Abgleich nur einmal beim echten App-Start.
 // Weitere Abgleiche erfolgen ausschließlich über „Jetzt vollständig abgleichen“.
@@ -17,8 +17,10 @@ const TRIP_SCOPED_STORES = new Set(['days', 'fuel', 'photos', 'route', 'ports', 
 const INITIAL_TRIP_ID = 'trip-daenische-suedsee-2026';
 const SETTINGS_FIELD_RECORD_TYPE = 'settings_field';
 const systemStores = ['syncMeta', 'syncTombstones'];
-const SUPABASE_URL = 'https://fzaxoivuwpubwhgabahz.supabase.co';
-const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_VRFnhXCeSrhJ7BsxMNgl6Q_HolDM-yC';
+// Legacy symbol names remain only so older internal helper code can stay dormant.
+// Since 8.24 no Supabase endpoint or key is configured or used.
+const SUPABASE_URL = '';
+const SUPABASE_PUBLISHABLE_KEY = '';
 const GOOGLE_DRIVE_CLIENT_ID = '1055159550955-tunrc9es0hmm9juac9ip4h55qhdkdu75.apps.googleusercontent.com';
 const GOOGLE_DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
 
@@ -782,7 +784,7 @@ async function connectDeviceAutomatically(options = {}) {
         : 'Gerät verbunden. Der erste gemeinsame Datenstand wurde angelegt.', 'success');
     }
 
-    toast('Gerät mit LEEFKE-Cloud verbunden');
+    toast('Gerät mit Google Drive verbunden');
     startAutoSync(1200);
   } catch (error) {
     console.error('Automatische Geräteverbindung fehlgeschlagen', error);
@@ -973,7 +975,7 @@ async function uploadLocalAsSource() {
     await markLinked('upload');
     await setDirty(false);
     await metaSet('lastSync', { at: new Date().toISOString() });
-    setMessage('#syncMessage', `${rows.length} Datensätze wurden in die LEEFKE-Cloud übertragen.`, 'success');
+    setMessage('#syncMessage', `${rows.length} Datensätze wurden in Google Drive übertragen.`, 'success');
     toast('LEEFKE-Daten synchronisiert');
     startAutoSync();
   } catch (error) {
@@ -7574,7 +7576,7 @@ window.addEventListener('DOMContentLoaded', () => {
 
 
 /* ============================================================================
-   LEEFKE 8.24 TEST – GOOGLE DRIVE CLOUD ADAPTER
+   LEEFKE 8.24 – GOOGLE DRIVE CLOUD ADAPTER
    Basis: 8.23. IndexedDB und die feldweise Konfliktlogik bleiben unverändert.
    Supabase wird in dieser Testversion nicht initialisiert. Stattdessen werden
    Datensätze in einer von LEEFKE angelegten JSON-Datei im Google Drive gehalten;
@@ -7587,6 +7589,9 @@ const GOOGLE_DRIVE_TOKEN_KEY = 'leefke-google-drive-token-v1';
 const GOOGLE_DRIVE_IDENTITY_KEY = 'leefke-google-drive-identity-v1';
 const GOOGLE_DRIVE_AUTH_MARKER_KEY = 'leefke-google-drive-authorized-v1';
 const GOOGLE_DRIVE_DATA_FORMAT = 'leefke-drive-records-v1';
+const GOOGLE_DRIVE_DATA_ROLE = 'data-production-v1';
+const GOOGLE_DRIVE_MEDIA_ROLE = 'media-production-v1';
+const GOOGLE_DRIVE_BOAT_PHOTO_ROLE = 'boat-photo-production-v1';
 const GOOGLE_DRIVE_API = 'https://www.googleapis.com/drive/v3';
 const GOOGLE_DRIVE_UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3';
 let googleDriveAccessToken = '';
@@ -7843,7 +7848,7 @@ async function ensureGoogleDriveWorkspace() {
       }
       folders[key] = folder.id;
     }
-    let dataFile = await googleDriveFindByRole('data', root.id);
+    let dataFile = await googleDriveFindByRole(GOOGLE_DRIVE_DATA_ROLE, root.id);
     googleDriveWorkspace = { rootId: root.id, folders, dataFileId: dataFile?.id || '' };
     return googleDriveWorkspace;
   })();
@@ -7884,9 +7889,9 @@ async function googleDriveWriteRecordFile() {
   };
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
   const metadata = {
-    name: 'LEEFKE_Daten.json',
+    name: 'LEEFKE_Daten_Produktiv.json',
     mimeType: 'application/json',
-    appProperties: { leefkeRole: 'data', leefkeSchema: '1' }
+    appProperties: { leefkeRole: GOOGLE_DRIVE_DATA_ROLE, leefkeSchema: '1', leefkeEnvironment: 'production' }
   };
   if (!workspace.dataFileId) metadata.parents = [workspace.rootId];
   const file = await googleDriveUploadBlob(blob, metadata, workspace.dataFileId || '');
@@ -7922,7 +7927,7 @@ async function googleDriveFindMedia(store, recordId) {
   const idValue = googleDriveEscapeQueryValue(recordId);
   const q = [
     'trashed = false',
-    "appProperties has { key='leefkeRole' and value='media' }",
+    `appProperties has { key='leefkeRole' and value='${googleDriveEscapeQueryValue(GOOGLE_DRIVE_MEDIA_ROLE)}' }`,
     `appProperties has { key='leefkeStore' and value='${storeValue}' }`,
     `appProperties has { key='leefkeRecordId' and value='${idValue}' }`
   ].join(' and ');
@@ -7941,7 +7946,7 @@ async function mediaUploadRecord(store, item) {
   const metadata = {
     name: `${item.id}-${safeFilename(item.fileName || item.caption || item.title || 'leefke')}.${extension}`,
     mimeType: item.mimeType || blob.type || 'application/octet-stream',
-    appProperties: { leefkeRole: 'media', leefkeStore: store, leefkeRecordId: String(item.id), leefkeSchema: '1' }
+    appProperties: { leefkeRole: GOOGLE_DRIVE_MEDIA_ROLE, leefkeStore: store, leefkeRecordId: String(item.id), leefkeSchema: '1', leefkeEnvironment: 'production' }
   };
   if (!fileId) metadata.parents = [workspace.folders[folderKey]];
   const file = await googleDriveUploadBlob(blob, metadata, fileId);
@@ -7967,12 +7972,12 @@ async function syncBoatPhoto() {
   let updated = { ...settings };
   let fileId = googleDriveStorageId(settings.boatPhotoStoragePath);
   if (settings.boatPhoto && (!fileId || Date.parse(settings._mediaUpdatedAt || 0) > Date.parse(settings._mediaCloudAt || 0))) {
-    if (!fileId) fileId = (await googleDriveFindByRole('boat-photo', workspace.folders.boat))?.id || '';
+    if (!fileId) fileId = (await googleDriveFindByRole(GOOGLE_DRIVE_BOAT_PHOTO_ROLE, workspace.folders.boat))?.id || '';
     const blob = dataUrlToBlob(settings.boatPhoto);
     const metadata = {
       name: 'LEEFKE_Startbild.jpg',
       mimeType: blob.type || 'image/jpeg',
-      appProperties: { leefkeRole: 'boat-photo', leefkeSchema: '1' }
+      appProperties: { leefkeRole: GOOGLE_DRIVE_BOAT_PHOTO_ROLE, leefkeSchema: '1', leefkeEnvironment: 'production' }
     };
     if (!fileId) metadata.parents = [workspace.folders.boat];
     const file = await googleDriveUploadBlob(blob, metadata, fileId);
@@ -8079,7 +8084,7 @@ async function downloadCloudAsSource() {
 
 async function initializeSupabase() {
   // Der Funktionsname bleibt aus Kompatibilitätsgründen erhalten; Supabase wird
-  // in 8.24 TEST bewusst nicht initialisiert.
+  // seit 8.24 bewusst nicht initialisiert.
   if (IS_GUEST_MODE) {
     supabaseClient = null;
     currentSession = null;

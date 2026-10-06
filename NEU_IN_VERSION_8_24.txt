@@ -1,0 +1,33 @@
+LEEFKE 8.24 – Google Drive statt Supabase
+
+Basis
+- Ausschließlich LEEFKE 8.23 als Ausgangsversion.
+- IndexedDB, Törnlogik, feldweise Konfliktlogik und Offline-Nutzung bleiben erhalten.
+
+Neu in 8.24
+- Supabase ist als aktive Cloud-Anbindung vollständig abgeschaltet.
+- Anmeldung und Gerätesynchronisierung laufen über Google Drive.
+- OAuth-Client: LEEFKE App; Berechtigung drive.file.
+- Sichtbarer Google-Drive-Ordner „LEEFKE App“.
+- Produktivdaten liegen in „LEEFKE_Daten_Produktiv.json“.
+- Fotos, Dokumente und Startbild werden als eigene Google-Drive-Dateien abgelegt.
+- Kein Realtime, kein Minuten-Timer und kein Cloud-Zugriff nach jedem Speichern.
+- Automatischer Abgleich nur beim vollständigen App-Start, sofern noch ein gültiges Google-Zugriffstoken vorhanden ist.
+- Manueller Button „Jetzt vollständig abgleichen“ bleibt erhalten.
+- Lokale Änderungen bleiben jederzeit in IndexedDB verfügbar.
+- Konflikte werden weiterhin feldweise anhand Zeitstempel/Gerät behandelt.
+
+Sichere Migration
+- Die produktive 8.24 verwendet einen getrennten Google-Drive-Datensatz und ignoriert den zuvor mit 8.24 TEST angelegten Test-Datensatz.
+- Beim ersten Verbinden der produktiven 8.24 wird der echte lokale 8.23-Datenbestand als Ausgangsbasis mit Google Drive zusammengeführt bzw. hochgeladen.
+- Die lokale Datenbank bleibt „leefke-v2“, damit vorhandene 8.23-Daten auf dem jeweiligen Gerät direkt weiterverwendet werden.
+- 8.23 bleibt bis zum erfolgreichen Produktivtest die Rückfallversion.
+
+Vor dem Merge nach main prüfen
+1. Vollständige Sicherung exportieren.
+2. 8.24 auf entwicklung einspielen und veröffentlichen.
+3. Google Drive verbinden.
+4. Prüfen, ob der echte Datenbestand vollständig vorhanden ist.
+5. „Jetzt vollständig abgleichen“ ausführen.
+6. Zweites Gerät öffnen und denselben Datenstand kontrollieren.
+7. Erst danach nach main mergen.
