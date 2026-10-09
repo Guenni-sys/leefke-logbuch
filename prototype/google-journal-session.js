@@ -4,9 +4,9 @@
   const API = 'https://www.googleapis.com/drive/v3';
   const authError = () => Object.assign(new Error('Die Google-Anmeldesitzung ist nicht mehr gültig. Bitte erneut verbinden.'), { code: 'GOOGLE_AUTH_REQUIRED' });
   class GoogleJournalSession {
-    #state = null; #ticket = null; #fetch; #now; #timeout;
-    constructor({ fetchImpl = (...args) => fetch(...args), now = () => Date.now(), timeoutMs = 30000 } = {}) {
-      this.#fetch = fetchImpl; this.#now = now; this.#timeout = timeoutMs;
+    #state = null; #ticket = null; #fetch; #now; #timeout; #transferTimeout;
+    constructor({ fetchImpl = (...args) => fetch(...args), now = () => Date.now(), timeoutMs = 30000, transferTimeoutMs = 120000 } = {}) {
+      this.#fetch = fetchImpl; this.#now = now; this.#timeout = timeoutMs; this.#transferTimeout = transferTimeoutMs;
     }
     begin() { this.logout(); this.#ticket = crypto.randomUUID(); return this.#ticket; }
     cancel(ticket) { if (ticket === this.#ticket) { this.logout(); return true; } return false; }
@@ -34,13 +34,16 @@
       this.#assert(state);
       const address = new URL(url);
       if (address.origin !== 'https://www.googleapis.com' || address.username || address.password || !/^\/(?:upload\/)?drive\/v3\//.test(address.pathname)) throw new Error('Unzulässige Adresse für den Google-Transport.');
+      const contentRead = (options.method || 'GET').toUpperCase() === 'GET' && address.searchParams.get('alt') === 'media';
+      const upload = address.pathname.startsWith('/upload/');
+      const step = upload ? 'Datei hochladen' : address.pathname.endsWith('/generateIds') ? 'Dateikennung anfordern' : contentRead ? 'Dateiinhalt prüfen' : 'Dateiinformationen lesen';
+      const timeoutMs = contentRead || upload ? this.#transferTimeout : this.#timeout;
       const controller = new AbortController(); state.controllers.add(controller);
-      const timeout = setTimeout(() => controller.abort(), this.#timeout);
+      const timeout = setTimeout(() => controller.abort(), timeoutMs);
       try {
         const headers = new Headers(options.headers || {}); headers.set('Authorization', 'Bearer ' + state.token);
         // A manual redirect on a read is observable without following it or
         // disclosing credentials to another destination. Writes still fail closed.
-        const contentRead = (options.method || 'GET').toUpperCase() === 'GET' && address.searchParams.get('alt') === 'media';
         const response = await this.#fetch(url, { ...options, headers, signal: controller.signal, redirect: contentRead ? 'manual' : 'error', credentials: 'omit', cache: 'no-store' });
         this.#assert(state);
         if (response.type === 'opaqueredirect' || response.status >= 300 && response.status < 400) throw Object.assign(new Error('Google Drive – Dateiinhalt prüfen: Google liefert eine Weiterleitung. Sie wurde nicht verfolgt; die Inhaltsprüfung ist noch offen.'), { code: 'DRIVE_CONTENT_REDIRECT' });
@@ -51,9 +54,8 @@
         return new Response([204, 205].includes(response.status) ? null : bytes, { status: response.status, headers: response.headers });
       } catch (error) {
         if (this.#state !== state) throw authError();
-        if (controller.signal.aborted) throw Object.assign(new Error('Die Drive-Anfrage wurde abgebrochen oder hat das Zeitlimit erreicht. Offene Änderungen bleiben erhalten.'), { code: 'DRIVE_REQUEST_TIMEOUT' });
+        if (controller.signal.aborted) throw Object.assign(new Error(`Google Drive – ${step}: Zeitlimit von ${timeoutMs / 1000} Sekunden erreicht. Offene Änderungen bleiben erhalten. Bitte die App im Vordergrund lassen und manuell erneut abgleichen.`), { code: 'DRIVE_REQUEST_TIMEOUT' });
         if (error instanceof TypeError) {
-          const step = address.pathname.startsWith('/upload/') ? 'Datei hochladen' : address.pathname.endsWith('/generateIds') ? 'Dateikennung anfordern' : address.searchParams.get('alt') === 'media' ? 'Dateiinhalt prüfen' : 'Dateiinformationen lesen';
           throw Object.assign(new Error(`Google Drive – ${step}: Netzwerkzugriff fehlgeschlagen. Offene Änderungen bleiben erhalten; bitte die Verbindung prüfen und manuell erneut abgleichen.`), { code: 'DRIVE_NETWORK_ERROR' });
         }
         throw error;
