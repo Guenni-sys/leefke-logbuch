@@ -1,4 +1,4 @@
-const APP_VERSION = '8.24';
+const APP_VERSION = '8.25';
 if (/Android/i.test(navigator.userAgent || '')) document.documentElement.classList.add('android-device');
 // Cloud-sparsam: automatischer Abgleich nur einmal beim echten App-Start.
 // Weitere Abgleiche erfolgen ausschließlich über „Jetzt vollständig abgleichen“.
@@ -8,8 +8,10 @@ const HOLIDAY_MODE_KEY = 'leefke-holiday-mode';
 const MODE_QUERY = new URLSearchParams(window.location.search).get('guest');
 if (MODE_QUERY === '1') localStorage.setItem(GUEST_MODE_KEY, '1');
 if (MODE_QUERY === '0') localStorage.removeItem(GUEST_MODE_KEY);
-const IS_GUEST_MODE = localStorage.getItem(GUEST_MODE_KEY) === '1';
-const DB_NAME = IS_GUEST_MODE ? 'leefke-v2-guest' : 'leefke-v2';
+const IS_JOURNAL_RELEASE = globalThis.LEEFKE_RELEASE?.journal === true;
+const IS_JOURNAL_TEST = IS_JOURNAL_RELEASE || ['127.0.0.1', 'localhost'].includes(location.hostname) && new URLSearchParams(location.search).get('journalTest') === '1';
+const IS_GUEST_MODE = !IS_JOURNAL_TEST && localStorage.getItem(GUEST_MODE_KEY) === '1';
+const DB_NAME = IS_JOURNAL_RELEASE ? 'leefke-journal-v1' : IS_JOURNAL_TEST ? (new URLSearchParams(location.search).get('handoff') === '1' ? 'leefke-journal-app-test-handoff' : 'leefke-journal-app-test-integrated') : IS_GUEST_MODE ? 'leefke-v2-guest' : 'leefke-v2';
 const DB_VERSION = 7;
 const stores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'trips', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather', 'autoBackups'];
 const syncableStores = ['days', 'fuel', 'maintenance', 'photos', 'checklists', 'route', 'ports', 'settings', 'trips', 'gpx', 'weather', 'inventory', 'safety', 'documents', 'changeLog', 'conflicts', 'devices', 'routeWeather'];
@@ -191,27 +193,48 @@ function getOne(store, id) {
   });
 }
 
-function rawPut(store, value) {
+function runLocalWrite(store, operation, result) {
   return new Promise((resolve, reject) => {
-    const request = db.transaction(store, 'readwrite').objectStore(store).put(value);
-    request.onsuccess = () => resolve(value);
-    request.onerror = () => reject(request.error);
+    const transaction = db.transaction(store, 'readwrite');
+    // A successful request is not yet a committed transaction (e.g. quota errors).
+    transaction.oncomplete = () => resolve(result);
+    transaction.onabort = () => reject(transaction.error || new Error('Lokales Speichern wurde abgebrochen.'));
+    transaction.onerror = () => reject(transaction.error || new Error('Lokales Speichern ist fehlgeschlagen.'));
+    try {
+      operation(transaction.objectStore(store));
+    } catch (error) {
+      transaction.abort();
+      reject(error);
+    }
   });
+}
+
+function rawPut(store, value) {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST && syncableStores.includes(store)) return Promise.reject(new Error('Dieser direkte Schreibweg ist im Journal-Testmodus noch gesperrt. Bitte die normale Bearbeitung verwenden.'));
+  return runLocalWrite(store, objectStore => objectStore.put(value), value);
 }
 
 function rawDel(store, id) {
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(store, 'readwrite').objectStore(store).delete(id);
-    request.onsuccess = resolve;
-    request.onerror = () => reject(request.error);
-  });
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST && syncableStores.includes(store)) return Promise.reject(new Error('Direktes Löschen außerhalb des Journals ist im Testmodus gesperrt.'));
+  return runLocalWrite(store, objectStore => objectStore.delete(id));
 }
 
 function rawClear(store) {
-  return new Promise((resolve, reject) => {
-    const request = db.transaction(store, 'readwrite').objectStore(store).clear();
-    request.onsuccess = resolve;
-    request.onerror = () => reject(request.error);
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return Promise.reject(new Error('Das Leeren von Tabellen ist im Journal-Testmodus gesperrt.'));
+  return runLocalWrite(store, objectStore => objectStore.clear());
+}
+
+function acknowledgeSyncedTombstones(tombstones) {
+  return runLocalWrite('syncTombstones', store => {
+    for (const sent of tombstones) {
+      const request = store.get(sent.id);
+      request.onsuccess = () => {
+        // Read and conditional delete share one transaction. A newer deletion
+        // made during the upload must remain pending for the next manual/start sync.
+        const current = request.result;
+        if (current && JSON.stringify(current) === JSON.stringify(sent)) store.delete(sent.id);
+      };
+    }
   });
 }
 
@@ -224,7 +247,55 @@ async function metaSet(id, value) {
 }
 
 async function setDirty(value = true) {
-  await metaSet('dirty', { value, changedAt: new Date().toISOString() });
+  await metaSet('dirty', { value, changedAt: new Date().toISOString(), revision: crypto.randomUUID() });
+}
+
+async function commitLocalMutation(store, id, previous, saved, tombstone, changeLog, dirty) {
+  // Snapshot caller intent before opening the transaction. No network work here.
+  const intent = structuredClone({ previous, saved, tombstone, changeLog });
+  const journalIntents = typeof LeefkeAppJournal !== 'undefined' && db.name.startsWith('leefke-journal-app-test-') ? [await LeefkeAppJournal.prepare(store, id, intent.saved, intent.previous)] : [];
+  if (journalIntents.length && intent.changeLog) journalIntents.push(await LeefkeAppJournal.prepare('changeLog', intent.changeLog.id, intent.changeLog));
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction([...new Set([store, 'syncTombstones', 'syncMeta', 'changeLog'])], 'readwrite');
+    let failure;
+    tx.oncomplete = () => resolve(intent.saved);
+    tx.onabort = () => reject(failure || tx.error || new Error('Die lokale Änderung wurde nicht gespeichert. Bitte erneut versuchen.'));
+    tx.onerror = () => {};
+    const request = tx.objectStore(store).get(id);
+    request.onsuccess = () => {
+      try {
+        if (JSON.stringify(request.result || null) !== JSON.stringify(intent.previous || null)) {
+          throw new Error('Dieser Eintrag wurde inzwischen verändert. Bitte die aktuelle Fassung neu öffnen; deine Änderung wurde nicht gespeichert.');
+        }
+        const write = () => {
+        if (intent.saved === null) tx.objectStore(store).delete(id);
+        else tx.objectStore(store).put(intent.saved);
+        if (intent.tombstone) tx.objectStore('syncTombstones').put(intent.tombstone);
+        else tx.objectStore('syncTombstones').delete(`${store}:${id}`);
+        if (intent.changeLog) tx.objectStore('changeLog').add(intent.changeLog);
+        if (dirty) tx.objectStore('syncMeta').put({ id: 'dirty', value: true, changedAt: new Date().toISOString(), revision: crypto.randomUUID() });
+        };
+        if (journalIntents.length) LeefkeAppJournal.stage(tx, journalIntents, write, error => { failure = error; });
+        else write();
+      } catch (error) { failure = error; tx.abort(); }
+    };
+  });
+}
+
+function acknowledgeDirtyState(expected) {
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('syncMeta', 'readwrite'); let acknowledged = false;
+    tx.oncomplete = () => resolve(acknowledged);
+    tx.onabort = () => reject(tx.error || new Error('Der Abgleichstatus konnte nicht gespeichert werden.'));
+    tx.onerror = () => {};
+    const store = tx.objectStore('syncMeta'); const request = store.get('dirty');
+    request.onsuccess = () => {
+      const current = request.result;
+      if (current?.value && (current.revision !== expected?.revision || current.changedAt !== expected?.changedAt)) return;
+      store.put({ id: 'dirty', value: false, changedAt: new Date().toISOString(), revision: crypto.randomUUID() });
+      acknowledged = true;
+    };
+  });
 }
 
 async function isLinkedForCurrentUser() {
@@ -724,6 +795,7 @@ async function localDataIsOnlyFactoryDefaults() {
 }
 
 async function replaceLocalWithRemote(remoteRows) {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Bitte den gemeinsamen Abgleich verwenden. Ein vollständiges Ersetzen durch einen alten Cloud-Datenstand ist hier gesperrt.');
   const previousSettings = await getOne('settings', 'main');
   const localBoatPhoto = previousSettings?.boatPhoto || '';
   suppressSyncTracking = true;
@@ -750,11 +822,13 @@ async function replaceLocalWithRemote(remoteRows) {
 }
 
 async function connectDeviceAutomatically(options = {}) {
-  if (deviceConnectInProgress || !currentSession?.user?.id) return;
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Bitte den gemeinsamen Abgleich verwenden. Ein vollständiges Ersetzen durch einen alten Cloud-Datenstand ist hier gesperrt.');
+  if (deviceConnectInProgress || syncInProgress) return { ok: false, reason: 'busy' };
+  if (!currentSession?.user?.id) return { ok: false, reason: 'unavailable' };
   if (!navigator.onLine) {
     if (!options.silent) setMessage('#syncMessage', 'Dieses Gerät wird verbunden, sobald wieder Internet vorhanden ist.', 'error');
     await updateSyncUI();
-    return;
+    return { ok: false, reason: 'offline' };
   }
 
   deviceConnectInProgress = true;
@@ -769,6 +843,7 @@ async function connectDeviceAutomatically(options = {}) {
 
     if (remoteHasData && localIsFactoryOnly) {
       await replaceLocalWithRemote(remote);
+      await syncMedia({ manual: true });
       await markLinked('automatic-cloud');
       await setDirty(false);
       await metaSet('lastSync', { at: new Date().toISOString() });
@@ -778,7 +853,8 @@ async function connectDeviceAutomatically(options = {}) {
       await markLinked(remoteHasData ? 'automatic-merge' : 'automatic-first-device');
       await setDirty(true);
       syncInProgress = false;
-      await syncNow({ force: true, silent: options.silent });
+      const result = await syncNow({ force: true, silent: options.silent, reason: options.reason || 'connect' });
+      if (!result?.ok || result.pending) return result;
       if (!options.silent) setMessage('#syncMessage', remoteHasData
         ? 'Gerät verbunden. Lokale und gemeinsame Daten wurden zusammengeführt.'
         : 'Gerät verbunden. Der erste gemeinsame Datenstand wurde angelegt.', 'success');
@@ -786,9 +862,12 @@ async function connectDeviceAutomatically(options = {}) {
 
     toast('Gerät mit Google Drive verbunden');
     startAutoSync(1200);
+    return { ok: true, pending: false };
   } catch (error) {
     console.error('Automatische Geräteverbindung fehlgeschlagen', error);
+    await setDirty(true);
     setMessage('#syncMessage', `Verbindung fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+    return { ok: false, error };
   } finally {
     syncInProgress = false;
     deviceConnectInProgress = false;
@@ -957,6 +1036,7 @@ async function upsertRows(rows) {
 }
 
 async function uploadLocalAsSource() {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Bitte den gemeinsamen Abgleich verwenden. Ein vollständiges Ersetzen durch einen alten Cloud-Datenstand ist hier gesperrt.');
   if (!navigator.onLine) return setMessage('#syncMessage', 'Für die erste Übertragung wird eine Internetverbindung benötigt.', 'error');
   if (!currentSession) return;
   try {
@@ -988,6 +1068,7 @@ async function uploadLocalAsSource() {
 }
 
 async function downloadCloudAsSource() {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Bitte den gemeinsamen Abgleich verwenden. Ein vollständiges Ersetzen durch einen alten Cloud-Datenstand ist hier gesperrt.');
   if (!navigator.onLine) return setMessage('#syncMessage', 'Für das Laden der Cloud-Daten wird eine Internetverbindung benötigt.', 'error');
   if (!currentSession) return;
   try {
@@ -1646,7 +1727,7 @@ async function refresh() {
       || (allState.trips || []).find(item => item.status === 'active')
       || (allState.trips || [])[0];
     activeTripId = candidate?.id || '';
-    if (activeTripId) await metaSet('activeTrip', { tripId: activeTripId, changedAt: new Date().toISOString() });
+    if (activeTripId && activeMeta?.tripId !== activeTripId) await metaSet('activeTrip', { tripId: activeTripId, changedAt: new Date().toISOString() });
   }
   state = {};
   for (const store of stores) {
@@ -1659,6 +1740,7 @@ async function refresh() {
   state.ports.sort((a, b) => String(b.date).localeCompare(String(a.date)));
   render();
   await updateVacationUi();
+  if (IS_JOURNAL_TEST && document.getElementById('journalTestPanel')) await LeefkeJournalUI.renderStatus();
 }
 
 function actionButtons(kind, id) {
@@ -2798,7 +2880,7 @@ if (dayForm) {
       dayForm.reset();
       prepareDayForm();
       await new Promise(resolve => window.setTimeout(resolve, 0));
-      const cloudNote = currentSession
+      const cloudNote = (IS_JOURNAL_TEST ? LeefkeJournalUI.connected() : currentSession)
         ? (navigator.onLine ? 'Lokal gespeichert; Cloud-Abgleich beim nächsten App-Start oder manuell.' : 'Offline gespeichert; Cloud-Abgleich beim nächsten App-Start mit Internet oder manuell.')
         : 'Lokal gespeichert; für den Abgleich mit anderen Geräten bitte anmelden.';
       setDayFormStatus(`Tagestour gespeichert. Sie steht bei den gespeicherten Tagestouren. ${cloudNote}`, 'success');
@@ -4606,6 +4688,11 @@ $('#import').onchange = async event => {
   if (!file || !confirm('Vorhandene Daten auf diesem Gerät ersetzen?')) return;
   try {
     const backup = JSON.parse(await file.text());
+    if (IS_JOURNAL_TEST) {
+      const contents = backup.stores || Object.fromEntries(syncableStores.map(store => [store, backup[store]]));
+      const result = await LeefkeAppJournal.restoreTest(db, { ...backup, stores: contents });
+      await refresh(); toast(`${result.changed} Änderungen lokal übernommen. Vorhandene Sicherungspunkte bleiben erhalten. Übertragung erst beim manuellen Abgleich.`); return;
+    }
     for (const store of stores) {
       await clear(store);
       for (const item of backup[store] || []) await put(store, item);
@@ -4614,7 +4701,7 @@ $('#import').onchange = async event => {
     await refresh();
     toast('Sicherung geladen');
   } catch (error) {
-    alert('Die Sicherungsdatei ist ungültig.');
+    alert(IS_JOURNAL_TEST ? `Sicherung nicht übernommen: ${error.message}` : 'Die Sicherungsdatei ist ungültig.');
   }
 };
 
@@ -4884,6 +4971,7 @@ async function appendChangeLog(store, recordId, action, before, after, fields, o
     changedAt: now, deviceId: device.id, deviceLabel: device.label, undone: false,
     title: changeEntryTitle(store, before, after)
   }, now, device.id);
+  if (options.prepareOnly) return entry;
   await rawPut('changeLog', entry);
 }
 
@@ -4922,30 +5010,26 @@ async function put(store, value, options = {}) {
     base._updatedBy = device.id;
     base._updatedByLabel = device.label;
   }
-  await rawPut(store, base);
-  await rawDel('syncTombstones', `${store}:${base.id}`);
-  if (fields.length || !previous) {
-    await appendChangeLog(store, base.id, previous ? 'update' : 'create', previousNormalized, base, fields, options);
-    await setDirty(true);
-    scheduleSync();
-  }
+  const changed = Boolean(fields.length || !previous);
+  const log = changed ? await appendChangeLog(store, base.id, previous ? 'update' : 'create', previousNormalized, base, fields, { ...options, prepareOnly: true }) : null;
+  await commitLocalMutation(store, base.id, previous, base, null, log || null, changed);
+  if (changed) scheduleSync();
   return base;
 }
 
 async function del(store, id, options = {}) {
   const previous = await getOne(store, id);
-  await rawDel(store, id);
   if (syncableStores.includes(store) && !options.remote && !suppressSyncTracking) {
     const device = await getDeviceIdentity();
     const updatedAt = new Date().toISOString();
-    await rawPut('syncTombstones', {
+    const tombstone = {
       id: `${store}:${id}`, recordType: store, recordId: id, updatedAt,
       deviceId: device.id, deviceLabel: device.label, storagePath: previous?.storagePath || ''
-    });
-    await appendChangeLog(store, id, 'delete', previous, null, recordFieldNames(store, previous || {}), options);
-    await setDirty(true);
+    };
+    const log = await appendChangeLog(store, id, 'delete', previous, null, recordFieldNames(store, previous || {}), { ...options, prepareOnly: true });
+    await commitLocalMutation(store, id, previous, null, tombstone, log || null, true);
     scheduleSync();
-  }
+  } else await rawDel(store, id);
 }
 
 
@@ -5176,6 +5260,14 @@ async function restoreAutoBackup(id) {
   const row = await getOne('autoBackups', id);
   if (!row || !confirm(`Sicherungspunkt „${row.reason}“ vom ${new Date(row.createdAt).toLocaleString('de-DE')} wiederherstellen?`)) return;
   const backup = JSON.parse(row.data);
+  if (IS_JOURNAL_TEST) {
+    try {
+      if (row.mediaOmitted) throw new Error('Diese Sicherung enthält nicht alle Medieninhalte und kann nicht vollständig wiederhergestellt werden.');
+      const result = await LeefkeAppJournal.restoreTest(db, backup);
+      await refresh(); toast(`${result.changed} Änderungen lokal wiederhergestellt. Übertragung erst beim manuellen Abgleich.`);
+    } catch (error) { toast(`Nicht wiederhergestellt: ${error.message}`); }
+    return;
+  }
   suppressSyncTracking = true;
   try {
     for (const store of stores.filter(name => name !== 'autoBackups')) {
@@ -5532,17 +5624,22 @@ async function localRows() {
 }
 
 async function syncNow(options = {}) {
-  if (syncInProgress) { syncRequested = true; return; }
-  if (!supabaseClient || !currentSession?.user?.id || !navigator.onLine) { await updateSyncUI(); return; }
-  const linked = await isLinkedForCurrentUser();
-  if (!linked && !options.force) { await connectDeviceAutomatically({ silent: options.silent }); return; }
+  if (syncInProgress || mediaSyncInProgress) return { ok: false, reason: 'busy' };
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.sync(options.reason === 'startup' ? 'startup' : 'manual');
+  if (!supabaseClient || !currentSession?.user?.id || !navigator.onLine) { await updateSyncUI(); return { ok: false, reason: 'unavailable' }; }
+  // Acquire before the first await: double clicks must not start two writers.
   syncInProgress = true;
   syncVisualInProgress = !options.silent;
-  const dirtyAtStart = await metaGet('dirty');
-  if (syncVisualInProgress) await updateSyncUI();
-  if (!options.silent) setMessage('#syncMessage', 'LEEFKE-Daten werden feldweise abgeglichen …');
   let remoteChangedLocal = false;
   try {
+    const linked = await isLinkedForCurrentUser();
+    if (!linked && !options.force) {
+      syncInProgress = false;
+      return await connectDeviceAutomatically({ silent: options.silent, reason: options.reason });
+    }
+    const dirtyAtStart = await metaGet('dirty');
+    if (syncVisualInProgress) await updateSyncUI();
+    if (!options.silent) setMessage('#syncMessage', 'LEEFKE-Daten werden feldweise abgeglichen …');
     await createAutoBackup('Vor Synchronisierung');
     const userId = currentSession.user.id;
     const fetched = await fetchRemoteRecords();
@@ -5564,10 +5661,11 @@ async function syncNow(options = {}) {
           if (remoteTs >= Math.max(localTs, tombTs)) {
             if (local) remoteChangedLocal = true;
             await rawDel(row.record_type, row.record_id);
-            await rawDel('syncTombstones', key);
+            // Keep local deletion markers until associated media is handled.
           }
           continue;
         }
+        if (tombTs && tombTs >= remoteTs) continue;
         const remotePayload = normalizeRecord(row.record_type, { ...(row.payload || {}), id: row.record_id }, row.updated_at, row.payload?._updatedBy || 'cloud');
         if (!local) {
           await rawPut(row.record_type, remotePayload);
@@ -5620,32 +5718,38 @@ async function syncNow(options = {}) {
       }
     }
     await upsertRows(outgoing);
-    await syncMedia({ manual: false });
+    const mediaResult = await syncMedia({ manual: options.reason !== 'startup', tombstones: pendingTombstones });
     // Medienpfade nach dem Upload noch einmal übertragen.
     const mediaRows = [];
     for (const store of ['photos', 'documents', 'settings']) for (const item of await all(store)) mediaRows.push(cloudRowFromRecord(store, item, userId));
     const settingsAfterMedia = await getOne('settings', 'main');
     if (settingsAfterMedia) mediaRows.push(...settingsFieldCloudRowsV610(settingsAfterMedia, userId));
     await upsertRows(mediaRows);
-    for (const tombstone of pendingTombstones) await rawDel('syncTombstones', tombstone.id);
-    const dirtyNow = await metaGet('dirty');
-    if (!dirtyNow?.value || dirtyNow.changedAt === dirtyAtStart?.changedAt) await setDirty(false); else syncRequested = true;
-    const now = new Date().toISOString();
-    await metaSet('lastSync', { at: now });
-    lastRemoteSummary = { records: remote.length, outgoing: outgoing.length, checkedAt: now };
     await registerDeviceHeartbeat();
+    await acknowledgeSyncedTombstones(pendingTombstones);
+    const dirtyNow = await metaGet('dirty');
+    let pending = Boolean(mediaResult?.pending || (dirtyNow?.value && (dirtyNow.revision !== dirtyAtStart?.revision || dirtyNow.changedAt !== dirtyAtStart?.changedAt)));
+    if (!pending) pending = !(await acknowledgeDirtyState(dirtyNow));
+    else if (mediaResult?.pending) await setDirty(true);
+    const now = new Date().toISOString();
+    if (!pending) await metaSet('lastSync', { at: now });
+    lastRemoteSummary = { records: remote.length, outgoing: outgoing.length, checkedAt: now };
     // Ein stiller Hintergrundabgleich rendert die gesamte App nur neu, wenn
     // wirklich Daten von einem anderen Gerät übernommen wurden. Dadurch
     // bleibt die Oberfläche ruhig und flackert nicht im 60-Sekunden-Takt.
     if (!options.silent || remoteChangedLocal) await refresh();
     else await updateSyncUI();
-    if (!options.silent) setMessage('#syncMessage', outgoing.length ? `${outgoing.length} Änderung(en) abgeglichen. Alle Felder wurden einzeln geprüft.` : 'Alle LEEFKE-Daten sind auf demselben Stand.', 'success');
+    if (!options.silent) {
+      if (pending) setMessage('#syncMessage', 'Abgleich durchgeführt. Weitere lokale Änderungen oder Medien sind noch offen; bitte erneut manuell abgleichen.');
+      else setMessage('#syncMessage', outgoing.length ? `${outgoing.length} Änderung(en) abgeglichen. Alle Felder wurden einzeln geprüft.` : 'Alle LEEFKE-Daten sind auf demselben Stand.', 'success');
+    }
+    return { ok: true, pending };
   } catch (error) {
     suppressSyncTracking = false;
     console.error('Synchronisierung fehlgeschlagen', error);
     await setDirty(true);
-    const storageHint = /bucket|storage|row-level|policy|not found/i.test(String(error?.message || '')) ? ' Bitte die SQL-Datei „SUPABASE_SETUP_V6.sql“ einmal in Supabase ausführen.' : '';
-    setMessage('#syncMessage', `Synchronisierung fehlgeschlagen: ${readableAuthError(error)}${storageHint}`, 'error');
+    setMessage('#syncMessage', `Synchronisierung fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+    return { ok: false, error };
   } finally {
     syncInProgress = false;
     syncVisualInProgress = false;
@@ -5690,6 +5794,7 @@ function startRealtimeSubscription() {
 }
 
 async function verifySyncState() {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Bitte den gemeinsamen Abgleich verwenden. Ein vollständiges Ersetzen durch einen alten Cloud-Datenstand ist hier gesperrt.');
   if (!currentSession || !navigator.onLine) return setMessage('#syncMessage', 'Für die Prüfung wird eine Internetverbindung benötigt.', 'error');
   setMessage('#syncMessage', 'Lokalen und gemeinsamen Datenstand prüfen …');
   try {
@@ -5708,6 +5813,11 @@ async function verifySyncState() {
 
 async function updateSyncUI() {
   const renderToken = ++syncUiRenderToken;
+  if (!db) return;
+  if (IS_JOURNAL_TEST) {
+    if (document.getElementById('journalTestPanel')) await LeefkeJournalUI.renderStatus();
+    return;
+  }
   applyGuestModeUI();
   if (IS_GUEST_MODE) {
     const setText = (selector, value) => { const element = $(selector); if (element && element.textContent !== String(value)) element.textContent = String(value); };
@@ -5833,6 +5943,7 @@ function renderHistory() {
 }
 
 async function resolveConflict(id, choice) {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Bitte die vollständigen Fassungen im Bereich Google-Verbindung und Konflikte vergleichen. Alte feldweise Konfliktentscheidungen sind hier gesperrt.');
   const conflict = await getOne('conflicts', id); if (!conflict) return;
   const record = await getOne(conflict.store, conflict.recordId); if (!record) return;
   const value = choice === 'local' ? conflict.localValue : conflict.remoteValue;
@@ -5845,6 +5956,22 @@ window.resolveConflict = resolveConflict;
 async function undoChange(id) {
   const entry = await getOne('changeLog', id); if (!entry || entry.undone) return;
   if (!confirm('Diese Änderung rückgängig machen? Die Rücknahme wird selbst wieder synchronisiert.')) return;
+  if (IS_JOURNAL_TEST) {
+    try {
+      if (!syncableStores.includes(entry.store) || ['photos', 'documents', 'settings', 'changeLog', 'weather', 'routeWeather'].includes(entry.store)) throw new Error('Für diesen Eintrag bitte eine vollständige Sicherung verwenden; der Verlauf enthält nicht alle Inhalte.');
+      const snapshot = await LeefkeJournalMigration.capture(db, APP_VERSION);
+      const current = snapshot.stores[entry.store].find(row => String(row.id) === String(entry.recordId)) || null;
+      if (LeefkeJournal.canonical(logSnapshot(entry.store, current)) !== LeefkeJournal.canonical(entry.after || null)) throw new Error('Der Eintrag wurde inzwischen erneut geändert. Eine ältere Fassung wird nicht darübergeschrieben.');
+      if (!['create', 'update', 'delete'].includes(entry.action) || entry.action !== 'create' && !entry.before) throw new Error('Der Verlauf enthält keine vollständige vorherige Fassung.');
+      const contents = Object.fromEntries(syncableStores.map(store => [store, [...snapshot.stores[store]]]));
+      contents[entry.store] = contents[entry.store].filter(row => String(row.id) !== String(entry.recordId));
+      if (entry.action !== 'create') contents[entry.store].push(entry.before);
+      contents.changeLog = contents.changeLog.map(row => row.id === entry.id ? { ...row, undone: true, undoneAt: new Date().toISOString() } : row);
+      await LeefkeAppJournal.restoreTest(db, { stores: contents }, snapshot.stores);
+      await refresh(); toast('Änderung lokal rückgängig gemacht. Übertragung erst beim manuellen Abgleich.');
+    } catch (error) { toast(`Nicht rückgängig gemacht: ${error.message}`); }
+    return;
+  }
   if (entry.action === 'create') await del(entry.store, entry.recordId, { skipLog: true });
   else if (entry.action === 'delete' && entry.before) await put(entry.store, entry.before, { skipLog: true });
   else if (entry.before) await put(entry.store, entry.before, { skipLog: true });
@@ -6106,7 +6233,7 @@ function renderPhotos() {
     const time = item.captureTime ? `${item.captureTime} Uhr` : '';
     const source = item.captureSource === 'EXIF' ? 'Bilddatum' : item.captureSource === 'Dateidatum' ? 'Dateidatum' : '';
     const count = dateCounts.get(dateKey) || 1;
-    return `<figure class="photo photo-stream-card ${startsDate ? 'photo-date-start' : ''} ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-card-date" title="${esc(item.date ? fmtDate(item.date) : 'Datum unbekannt')}"><strong>${esc(photoCardDateLabel(item.date))}</strong><span>${datePosition}/${count}${startsDate ? ' · neuer Tag' : ''}</span></div><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || place || 'LEEFKE')}</strong><div class="photo-location">📍 ${esc(place)}</div>${context ? `<div class="photo-context">⚓ ${esc(context)}</div>` : ''}<div class="meta photo-capture-meta">${[time, source].filter(Boolean).map(esc).join(' · ') || 'Aufnahmezeit unbekannt'}</div></figcaption><div class="photo-actions"><button class="photo-action-edit" onclick="editPhotoMeta('${item.id}')" aria-label="Foto bearbeiten" title="Foto bearbeiten">✎ <span>Bearbeiten</span></button><button class="photo-action-featured" onclick="setFeaturedPhoto('${item.id}')" aria-label="${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild verwenden'}" title="${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild verwenden'}">${item.featured === true || item.featured === 'true' ? '★ <span>Lösen</span>' : '☆ <span>Titelbild</span>'}</button></div></figure>`;
+    return `<figure class="photo photo-stream-card ${startsDate ? 'photo-date-start' : ''} ${item.featured === true || item.featured === 'true' ? 'featured' : ''}"><div class="photo-card-date" title="${esc(item.date ? fmtDate(item.date) : 'Datum unbekannt')}"><strong>${esc(photoCardDateLabel(item.date))}</strong><span>${datePosition}/${count}${startsDate ? ' · neuer Tag' : ''}</span></div><div class="photo-badges">${item.featured === true || item.featured === 'true' ? '<span>Titelbild</span>' : ''}<span>${IS_JOURNAL_TEST ? (item.data ? 'Lokal verfügbar' : 'Bild fehlt lokal') : item.storagePath ? '☁ synchronisiert' : item._cloudState === 'error' ? 'Cloud-Fehler' : 'lokal'}</span></div><button class="delete" onclick="removeItem('photos','${item.id}')" aria-label="Foto löschen">×</button><img src="${item.data || defaultHero}" alt="${esc(item.caption || 'Foto der LEEFKE')}" loading="lazy" onclick="openPhotoViewer('${item.id}')" title="Foto vollständig ansehen"><figcaption><strong>${esc(item.caption || place || 'LEEFKE')}</strong><div class="photo-location">📍 ${esc(place)}</div>${context ? `<div class="photo-context">⚓ ${esc(context)}</div>` : ''}<div class="meta photo-capture-meta">${[time, source].filter(Boolean).map(esc).join(' · ') || 'Aufnahmezeit unbekannt'}</div></figcaption><div class="photo-actions"><button class="photo-action-edit" onclick="editPhotoMeta('${item.id}')" aria-label="Foto bearbeiten" title="Foto bearbeiten">✎ <span>Bearbeiten</span></button><button class="photo-action-featured" onclick="setFeaturedPhoto('${item.id}')" aria-label="${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild verwenden'}" title="${item.featured === true || item.featured === 'true' ? 'Titelbild lösen' : 'Als Titelbild verwenden'}">${item.featured === true || item.featured === 'true' ? '★ <span>Lösen</span>' : '☆ <span>Titelbild</span>'}</button></div></figure>`;
   }).join('');
   $('#photoGrid').innerHTML = cards ? `<div class="photo-stream-grid">${cards}</div>` : '<div class="card muted">Noch keine Fotos in der Galerie.</div>';
   const pending = photos.filter(item => !item.storagePath || item._cloudState === 'error').length;
@@ -6191,7 +6318,11 @@ async function setFeaturedPhoto(id) {
   await put('photos', { ...target, featured: !currently }); await refresh();
 }
 window.setFeaturedPhoto = setFeaturedPhoto;
-async function syncPhotosNow() { await syncMedia({ manual: true }); await syncNow(); await refresh(); toast('Fotos abgeglichen'); }
+async function syncPhotosNow() {
+  const result = await syncNow({ reason: 'manual-photos' });
+  if (result?.ok && !result.pending) toast('Fotos abgeglichen');
+  return result;
+}
 window.syncPhotosNow = syncPhotosNow;
 
 function renderAutoBackups() {
@@ -6312,6 +6443,7 @@ function syncStoreCounts(rows) {
 }
 
 async function repairDeviceFromCloud() {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Vorhandene Fassungen werden beim normalen Abgleich geprüft. Eine getrennte Cloud-Reparatur ist im neuen Abgleich nicht vorgesehen.');
   const report = $('#syncRepairReport');
   if (!currentSession?.user?.id) return setMessage('#syncMessage', 'Bitte zuerst mit dem gleichen LEEFKE-Konto anmelden wie auf den anderen Geräten.', 'error');
   if (!navigator.onLine) return setMessage('#syncMessage', 'Für die Reparatur wird Internet benötigt.', 'error');
@@ -6355,7 +6487,12 @@ async function repairDeviceFromCloud() {
     syncInProgress = false;
     syncVisualInProgress = false;
     await refresh();
-    await syncNow({ force: true, silent: true, reason: 'repair-follow-up' });
+    const syncResult = await syncNow({ force: true, silent: true, reason: 'repair-follow-up' });
+    if (!syncResult?.ok) throw syncResult?.error || new Error('Der abschließende Abgleich konnte nicht ausgeführt werden.');
+    if (syncResult.pending) {
+      setMessage('#syncMessage', 'Cloud-Daten wurden eingelesen. Weitere Änderungen sind noch offen; bitte erneut manuell abgleichen.');
+      return;
+    }
     const localCounts = { trips: (await all('trips')).length, days: (await all('days')).length, fuel: (await all('fuel')).length };
     if (report) {
       report.innerHTML = `<strong>Reparatur abgeschlossen</strong><div class="sync-repair-grid"><span>Cloud: ${cloudCounts.trips} Törne</span><span>${cloudCounts.days} Tagestouren</span><span>${cloudCounts.fuel} Tankvorgänge</span><span>Auf diesem Gerät: ${localCounts.trips} / ${localCounts.days} / ${localCounts.fuel}</span></div><p>${imported} fehlende Datensätze übernommen, ${updated} vorhandene Datensätze aktualisiert.${repairedTripAssignments ? ` ${repairedTripAssignments} Eintrag/Einträge wurden einem gültigen Törn zugeordnet.` : ''}${switched ? ' Der Törn mit den aktuellen Einträgen wurde automatisch geöffnet.' : ''}</p>`;
@@ -7256,6 +7393,10 @@ async function setupV6Defaults() {
 }
 
 async function applyServiceWorkerUpdate() {
+  if (IS_JOURNAL_TEST) {
+    $('#updateBanner').hidden = true;
+    toast('Die vorbereitete Testfassung wird nach dem Schließen aller App-Testseiten aktiv.'); return;
+  }
   await createAutoBackup('Vor App-Aktualisierung', true);
   if (pendingServiceWorker) pendingServiceWorker.postMessage({ type: 'SKIP_WAITING' });
   else location.reload();
@@ -7270,7 +7411,7 @@ function setAppUpdateStatus(message = '', kind = 'info') {
 }
 
 function setupServiceWorkerUpdates(registration) {
-  if (!registration) return;
+  if (!registration || IS_JOURNAL_TEST) return;
   serviceWorkerRegistration = registration;
   const show = worker => {
     pendingServiceWorker = worker;
@@ -7309,6 +7450,9 @@ async function checkForAppUpdate({ manual = false } = {}) {
     await registration.update();
     await new Promise(resolve => window.setTimeout(resolve, 900));
     if (registration.waiting) {
+      if (IS_JOURNAL_TEST) {
+        setAppUpdateStatus('Neue Testfassung vorbereitet. Alle App-Testseiten schließen und erneut öffnen.', 'success'); return;
+      }
       pendingServiceWorker = registration.waiting;
       $('#updateBanner').hidden = false;
       setAppUpdateStatus('Neue Version verfügbar. Im Aktualisierungshinweis auf „Jetzt aktualisieren“ tippen.', 'success');
@@ -7512,8 +7656,9 @@ if($('#photoForm'))$('#photoForm').onsubmit=async event=>{
 if($('#boatPhotoInput'))$('#boatPhotoInput').onchange=async event=>{const file=event.target.files[0];if(!file)return;if(file.size>15e6)return alert('Das Startbild ist größer als 15 MB.');const data=await compressImage(file,2000,.86);await put('settings',{...getSettings(),boatPhoto:data,boatPhotoStoragePath:'',_mediaUpdatedAt:new Date().toISOString(),id:'main'});event.target.value='';await refresh();scheduleSync(200);toast('Startbild gespeichert')};
 
 
-(async () => {
+const appReady = (async () => {
   db = await openDB();
+  if (IS_JOURNAL_TEST) { await LeefkeJournalUI.start(db); return; }
   await seedGuestDemoData();
   await migrateLocalTimestamps();
   await initializeSupabase();
@@ -7599,7 +7744,23 @@ let googleDriveTokenExpiresAt = 0;
 let googleDriveWorkspacePromise = null;
 let googleDriveWorkspace = null;
 let googleDriveRemoteRecordsCache = null;
+let googleDriveRecordRevision = null;
+let googleDriveConcurrency = null;
 let googleDriveDataDirty = false;
+
+function getDriveConcurrency() {
+  if (!googleDriveConcurrency) {
+    const userId = currentSession?.user?.id;
+    googleDriveConcurrency = new LeefkeDriveConcurrency.ConditionalDriveStore({
+      api: GOOGLE_DRIVE_API, uploadApi: GOOGLE_DRIVE_UPLOAD_API,
+      request: (url, options) => {
+        if (!userId || currentSession?.user?.id !== userId) throw new Error('Das Google-Konto wurde gewechselt. Bitte erneut abgleichen.');
+        return googleDriveRequest(url, options);
+      }
+    });
+  }
+  return googleDriveConcurrency;
+}
 
 function googleDriveStorageId(storagePath) {
   const value = String(storagePath || '');
@@ -7643,6 +7804,8 @@ function googleDriveClearToken({ revoke = false } = {}) {
   googleDriveWorkspacePromise = null;
   googleDriveWorkspace = null;
   googleDriveRemoteRecordsCache = null;
+  googleDriveRecordRevision = null;
+  googleDriveConcurrency = null;
   googleDriveDataDirty = false;
   if (revoke && token && window.google?.accounts?.oauth2?.revoke) {
     try { window.google.accounts.oauth2.revoke(token, () => {}); } catch {}
@@ -7663,6 +7826,7 @@ async function waitForGoogleIdentity(timeoutMs = 5000) {
 }
 
 async function requestGoogleDriveToken({ interactive = true } = {}) {
+  if (IS_JOURNAL_TEST) throw new Error('Bitte die Google-Verbindung im Journal-Testbereich verwenden.');
   if (!navigator.onLine) throw new Error('Keine Internetverbindung. Die lokalen LEEFKE-Daten bleiben verfügbar.');
   if (!await waitForGoogleIdentity()) throw new Error('Google-Anmeldung konnte nicht geladen werden. Bitte Internetverbindung prüfen und die App neu öffnen.');
   return new Promise((resolve, reject) => {
@@ -7694,6 +7858,7 @@ async function requestGoogleDriveToken({ interactive = true } = {}) {
 }
 
 async function googleDriveRequest(url, options = {}) {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) throw new Error('Der bisherige Cloud-Schreibweg ist im Journal-Testmodus gesperrt.');
   if (!googleDriveHasToken()) {
     const error = new Error('Google Drive ist nicht verbunden. Bitte „Mit Google Drive verbinden“ wählen.');
     error.code = 'GOOGLE_AUTH_REQUIRED';
@@ -7715,7 +7880,9 @@ async function googleDriveRequest(url, options = {}) {
       const payload = await response.clone().json();
       detail = payload?.error?.message || payload?.error_description || '';
     } catch {}
-    throw new Error(detail || `Google Drive antwortet mit Fehler ${response.status}.`);
+    const error = new Error(detail || `Google Drive antwortet mit Fehler ${response.status}.`);
+    error.status = response.status;
+    throw error;
   }
   return response;
 }
@@ -7733,6 +7900,13 @@ async function googleDriveApplyIdentity() {
     email: user.emailAddress || user.displayName || 'Google Drive',
     displayName: user.displayName || ''
   };
+  if (currentSession?.user?.id && currentSession.user.id !== identity.id) {
+    googleDriveWorkspace = null;
+    googleDriveWorkspacePromise = null;
+    googleDriveRemoteRecordsCache = null;
+    googleDriveRecordRevision = null;
+    googleDriveConcurrency = null;
+  }
   currentSession = { user: identity, provider: 'google-drive' };
   localStorage.setItem(GOOGLE_DRIVE_IDENTITY_KEY, JSON.stringify(identity));
   realtimeState = 'Google Drive · Start / manuell';
@@ -7744,9 +7918,19 @@ function googleDriveEscapeQueryValue(value) {
 }
 
 async function googleDriveList(q, fields = 'files(id,name,mimeType,modifiedTime,size,parents,appProperties)') {
-  const params = new URLSearchParams({ q, spaces: 'drive', fields, pageSize: '100' });
-  const response = await googleDriveRequest(`${GOOGLE_DRIVE_API}/files?${params.toString()}`);
-  return (await response.json())?.files || [];
+  const params = new URLSearchParams({ q, spaces: 'drive', fields: `${fields},nextPageToken,incompleteSearch`, pageSize: '100' });
+  const files = [];
+  const seenTokens = new Set();
+  while (true) {
+    const response = await googleDriveRequest(`${GOOGLE_DRIVE_API}/files?${params.toString()}`);
+    const page = await response.json();
+    if (page.incompleteSearch || (page.files !== undefined && !Array.isArray(page.files))) throw new Error('Google Drive hat keine vollständige Dateiliste geliefert. Bitte erneut abgleichen.');
+    files.push(...(page.files || []));
+    if (!page.nextPageToken) return files;
+    if (seenTokens.has(page.nextPageToken)) throw new Error('Die Google-Drive-Dateisuche konnte nicht vollständig abgeschlossen werden.');
+    seenTokens.add(page.nextPageToken);
+    params.set('pageToken', page.nextPageToken);
+  }
 }
 
 async function googleDriveFindByRole(role, parentId = '') {
@@ -7754,6 +7938,9 @@ async function googleDriveFindByRole(role, parentId = '') {
   const clauses = ["trashed = false", `appProperties has { key='leefkeRole' and value='${roleValue}' }`];
   if (parentId) clauses.push(`'${googleDriveEscapeQueryValue(parentId)}' in parents`);
   const files = await googleDriveList(clauses.join(' and '));
+  if ((role === 'root' || role === GOOGLE_DRIVE_DATA_ROLE) && files.length > 1) {
+    throw new Error('Mehrere gemeinsame LEEFKE-Datenbestände gefunden. Der Abgleich wurde gestoppt; die Bestände müssen zuerst geprüft und zusammengeführt werden.');
+  }
   return files.sort((a,b) => String(b.modifiedTime || '').localeCompare(String(a.modifiedTime || '')))[0] || null;
 }
 
@@ -7856,26 +8043,50 @@ async function ensureGoogleDriveWorkspace() {
   finally { googleDriveWorkspacePromise = null; }
 }
 
+function parseGoogleDriveRecordFile(raw) {
+  const invalid = () => new Error('Die Google-Drive-Datendatei ist ungültig oder hat ein nicht unterstütztes Format. Der Abgleich wurde abgebrochen; bitte die Datei und eine Sicherung prüfen.');
+  let payload;
+  try { payload = JSON.parse(raw); } catch { throw invalid(); }
+  if (!payload || payload.format !== GOOGLE_DRIVE_DATA_FORMAT || !Array.isArray(payload.records)) throw invalid();
+  const keys = new Set();
+  for (const row of payload.records) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)
+      || typeof row.record_type !== 'string' || !row.record_type
+      || typeof row.record_id !== 'string' || !row.record_id
+      || typeof row.updated_at !== 'string' || !Number.isFinite(Date.parse(row.updated_at))
+      || !row.payload || typeof row.payload !== 'object' || Array.isArray(row.payload)
+      || (row.deleted_at != null && (typeof row.deleted_at !== 'string' || !Number.isFinite(Date.parse(row.deleted_at))))) throw invalid();
+    const key = JSON.stringify([row.record_type, row.record_id]);
+    if (keys.has(key)) throw invalid();
+    keys.add(key);
+  }
+  return payload.records;
+}
+
 async function googleDriveLoadRecordFile() {
   const workspace = await ensureGoogleDriveWorkspace();
+  await resolveGoogleDriveDataFile(workspace);
   if (!workspace.dataFileId) {
     googleDriveRemoteRecordsCache = [];
+    googleDriveRecordRevision = null;
     return [];
   }
-  try {
-    const raw = await googleDriveDownload(workspace.dataFileId, 'text');
-    const payload = JSON.parse(raw || '{}');
-    const records = Array.isArray(payload.records) ? payload.records : [];
-    googleDriveRemoteRecordsCache = records;
-    return records;
-  } catch (error) {
-    if (/404|not found/i.test(String(error?.message || ''))) {
-      workspace.dataFileId = '';
-      googleDriveRemoteRecordsCache = [];
-      return [];
-    }
-    throw error;
-  }
+  // A known file that cannot be read must never be treated as a new empty cloud.
+  const snapshot = await getDriveConcurrency().read(workspace.dataFileId);
+  const records = parseGoogleDriveRecordFile(snapshot.text);
+  googleDriveRemoteRecordsCache = records;
+  googleDriveRecordRevision = snapshot.revision;
+  return records;
+}
+
+async function resolveGoogleDriveDataFile(workspace) {
+  // Check globally for duplicate roots as well as within the selected root.
+  const root = await googleDriveFindByRole('root');
+  if (!root || root.id !== workspace.rootId) throw new Error('Der gemeinsame LEEFKE-Ordner hat sich geändert. Bitte die Drive-Verbindung prüfen.');
+  const file = await googleDriveFindByRole(GOOGLE_DRIVE_DATA_ROLE, workspace.rootId);
+  if (workspace.dataFileId && file?.id !== workspace.dataFileId) throw new Error('Die bekannte LEEFKE-Datendatei ist nicht eindeutig erreichbar. Es wird kein Ersatzbestand angelegt.');
+  if (file) workspace.dataFileId = file.id;
+  return file;
 }
 
 async function googleDriveWriteRecordFile() {
@@ -7888,14 +8099,28 @@ async function googleDriveWriteRecordFile() {
     records: googleDriveRemoteRecordsCache || []
   };
   const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
-  const metadata = {
-    name: 'LEEFKE_Daten_Produktiv.json',
-    mimeType: 'application/json',
-    appProperties: { leefkeRole: GOOGLE_DRIVE_DATA_ROLE, leefkeSchema: '1', leefkeEnvironment: 'production' }
-  };
-  if (!workspace.dataFileId) metadata.parents = [workspace.rootId];
-  const file = await googleDriveUploadBlob(blob, metadata, workspace.dataFileId || '');
-  workspace.dataFileId = file.id;
+  const guard = getDriveConcurrency();
+  let file;
+  if (workspace.dataFileId) {
+    const written = await guard.write(workspace.dataFileId, blob, googleDriveRecordRevision);
+    file = written.file;
+    googleDriveRecordRevision = written.revision;
+  } else {
+    await guard.verify(blob.size > 4_500_000 ? 'resumable' : 'media');
+    if (await resolveGoogleDriveDataFile(workspace)) throw LeefkeDriveConcurrency.conflictError();
+    const metadata = {
+      name: 'LEEFKE_Daten_Produktiv.json', mimeType: 'application/json', parents: [workspace.rootId],
+      appProperties: { leefkeRole: GOOGLE_DRIVE_DATA_ROLE, leefkeSchema: '1', leefkeEnvironment: 'production' }
+    };
+    // Creation never overwrites a file. If two first devices create at once,
+    // retain both and stop on ambiguity rather than choosing the latest file.
+    file = await googleDriveUploadBlob(blob, metadata, '');
+    workspace.dataFileId = file.id;
+    await resolveGoogleDriveDataFile(workspace);
+    const snapshot = await guard.read(file.id);
+    if (snapshot.text !== await blob.text()) throw LeefkeDriveConcurrency.conflictError();
+    googleDriveRecordRevision = snapshot.revision;
+  }
   googleDriveDataDirty = false;
   return file;
 }
@@ -7936,7 +8161,8 @@ async function googleDriveFindMedia(store, recordId) {
 }
 
 async function mediaUploadRecord(store, item) {
-  if (!currentSession?.user?.id || !googleDriveHasToken() || !item?.data) return item;
+  if (!item?.data) return item;
+  if (!currentSession?.user?.id || !googleDriveHasToken()) throw new Error('Bitte Google Drive erneut verbinden.');
   const workspace = await ensureGoogleDriveWorkspace();
   const folderKey = store === 'photos' ? 'photos' : 'documents';
   const extension = item.mimeType?.includes('pdf') ? 'pdf' : item.mimeType?.includes('png') ? 'png' : item.mimeType?.includes('webp') ? 'webp' : 'jpg';
@@ -7967,7 +8193,8 @@ async function mediaDownloadRecord(store, item) {
 
 async function syncBoatPhoto() {
   const settings = await getOne('settings', 'main');
-  if (!settings || !currentSession?.user?.id || !googleDriveHasToken()) return;
+  if (!settings) return;
+  if (!currentSession?.user?.id || !googleDriveHasToken()) throw new Error('Bitte Google Drive erneut verbinden.');
   const workspace = await ensureGoogleDriveWorkspace();
   let updated = { ...settings };
   let fileId = googleDriveStorageId(settings.boatPhotoStoragePath);
@@ -7990,36 +8217,61 @@ async function syncBoatPhoto() {
   }
 }
 
-async function processMediaDeletes() {
-  const tombstones = await all('syncTombstones');
+async function processMediaDeletes(tombstones = null) {
+  tombstones ||= await all('syncTombstones');
   for (const tombstone of tombstones) {
     const fileId = googleDriveStorageId(tombstone.storagePath);
     if (!fileId) continue;
     try { await googleDriveDelete(fileId); }
-    catch (error) { console.warn('Drive-Medium konnte nicht gelöscht werden.', error); }
+    catch (error) {
+      // Repeating a completed DELETE is safe; permission/network errors are not.
+      if (error.status !== 404) throw error;
+    }
   }
 }
 
+function mediaRecordNeedsSync(item) {
+  const driveId = googleDriveStorageId(item.storagePath);
+  const localTime = Date.parse(item._mediaUpdatedAt || item._updatedAt || '') || 0;
+  const cloudTime = Date.parse(item._mediaCloudAt || '') || 0;
+  return Boolean((item.data && (!driveId || localTime > cloudTime)) || (!item.data && driveId));
+}
+
+async function hasPendingMediaChanges() {
+  for (const store of ['photos', 'documents']) {
+    if ((await all(store)).some(mediaRecordNeedsSync)) return true;
+  }
+  const settings = await getOne('settings', 'main');
+  if (!settings) return false;
+  return mediaRecordNeedsSync({ data: settings.boatPhoto, storagePath: settings.boatPhotoStoragePath,
+    _mediaUpdatedAt: settings._mediaUpdatedAt, _mediaCloudAt: settings._mediaCloudAt });
+}
+
 async function syncMedia(options = {}) {
-  if (mediaSyncInProgress || !navigator.onLine || !currentSession || !googleDriveHasToken()) return;
-  const settings = getSettings();
-  if (options.manual !== true && settings.photoAutoSync === false) return;
+  if (mediaSyncInProgress) throw new Error('Ein Medienabgleich läuft bereits. Bitte anschließend erneut abgleichen.');
+  if (!navigator.onLine || !currentSession || !googleDriveHasToken()) throw new Error('Medienabgleich nicht möglich. Bitte Internet und Google-Anmeldung prüfen.');
   mediaSyncInProgress = true;
   try {
-    await processMediaDeletes();
+    await processMediaDeletes(options.tombstones);
+    if (options.manual !== true && getSettings().photoAutoSync === false) return { pending: await hasPendingMediaChanges() };
+    let failures = 0;
     for (const store of ['photos', 'documents']) {
       for (const item of await all(store)) {
         try {
           const driveId = googleDriveStorageId(item.storagePath);
-          if (item.data && (!driveId || Date.parse(item._mediaUpdatedAt || item._updatedAt || 0) > Date.parse(item._mediaCloudAt || 0))) await mediaUploadRecord(store, item);
+          if (item.data && mediaRecordNeedsSync(item)) await mediaUploadRecord(store, item);
           else if (!item.data && driveId) await mediaDownloadRecord(store, item);
         } catch (error) {
+          failures++;
           console.warn(`Google-Drive-Medienabgleich ${store}/${item.id} fehlgeschlagen`, error);
-          await rawPut(store, { ...item, _cloudState: 'error' });
+          const current = await getOne(store, item.id);
+          if (current) await rawPut(store, { ...current, _cloudState: 'error' });
         }
       }
     }
     await syncBoatPhoto();
+    if (failures) throw new Error(`${failures} Medienübertragung(en) fehlgeschlagen. Lokale Dateien bleiben erhalten; bitte erneut abgleichen.`);
+    return { pending: false };
   } finally { mediaSyncInProgress = false; }
 }
 
@@ -8040,30 +8292,45 @@ async function registerDeviceHeartbeat() {
 }
 
 async function uploadLocalAsSource() {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Bitte den gemeinsamen Abgleich verwenden. Ein vollständiges Ersetzen durch einen alten Cloud-Datenstand ist hier gesperrt.');
   if (!currentSession || !navigator.onLine) return setMessage('#syncMessage', 'Bitte zuerst Google Drive verbinden.', 'error');
+  if (syncInProgress || mediaSyncInProgress) return { ok: false, reason: 'busy' };
   if (!confirm('Soll der lokale Datenstand dieses Geräts als Ausgangspunkt für Google Drive verwendet werden?')) return;
   try {
     syncInProgress = true;
+    const dirtyAtStart = await metaGet('dirty');
+    const tombstones = await all('syncTombstones');
+    await fetchRemoteRecords();
     googleDriveRemoteRecordsCache = [];
     const rows = await localRows();
     googleDriveRemoteRecordsCache = rows;
     await googleDriveWriteRecordFile();
-    await syncMedia({ manual: true });
+    await syncMedia({ manual: true, tombstones });
     const mediaRows = [];
     for (const store of ['photos', 'documents', 'settings']) for (const item of await all(store)) mediaRows.push(cloudRowFromRecord(store, item, currentSession.user.id));
     await upsertRows(mediaRows);
-    await rawClear('syncTombstones');
+    await acknowledgeSyncedTombstones(tombstones);
     await markLinked('google-drive-upload');
-    await setDirty(false);
-    await metaSet('lastSync', { at: new Date().toISOString() });
-    setMessage('#syncMessage', 'Lokaler Datenstand wurde in Google Drive gespeichert.', 'success');
+    const dirtyNow = await metaGet('dirty');
+    const pending = Boolean(dirtyNow?.value && dirtyNow.changedAt !== dirtyAtStart?.changedAt);
+    if (!pending) {
+      await setDirty(false);
+      await metaSet('lastSync', { at: new Date().toISOString() });
+      setMessage('#syncMessage', 'Lokaler Datenstand wurde in Google Drive gespeichert.', 'success');
+    } else setMessage('#syncMessage', 'Datenstand übertragen. Weitere lokale Änderungen sind noch offen; bitte erneut manuell abgleichen.');
+    return { ok: true, pending };
   } catch (error) {
+    await setDirty(true);
     setMessage('#syncMessage', `Übertragung fehlgeschlagen: ${readableAuthError(error)}`, 'error');
+    return { ok: false, error };
   } finally { syncInProgress = false; await updateSyncUI(); }
 }
 
 async function downloadCloudAsSource() {
+  if (typeof IS_JOURNAL_TEST !== 'undefined' && IS_JOURNAL_TEST) return LeefkeJournalUI.open('Bitte den gemeinsamen Abgleich verwenden. Ein vollständiges Ersetzen durch einen alten Cloud-Datenstand ist hier gesperrt.');
   if (!currentSession || !navigator.onLine) return setMessage('#syncMessage', 'Bitte zuerst Google Drive verbinden.', 'error');
+  if (syncInProgress || mediaSyncInProgress) return { ok: false, reason: 'busy' };
+  syncInProgress = true;
   try {
     const remote = await fetchRemoteRecords();
     const active = remote.filter(row => !row.deleted_at && (syncableStores.includes(row.record_type) || row.record_type === SETTINGS_FIELD_RECORD_TYPE));
@@ -8071,15 +8338,18 @@ async function downloadCloudAsSource() {
     if (!confirm('Die synchronisierbaren Daten auf diesem Gerät werden durch den Google-Drive-Datenstand ersetzt. Fortfahren?')) return;
     await createAutoBackup('Vor Google-Drive-Wiederherstellung', true);
     await replaceLocalWithRemote(remote);
+    await syncMedia({ manual: true });
     await markLinked('google-drive-download');
     await setDirty(false);
     await metaSet('lastSync', { at: new Date().toISOString() });
-    await syncMedia({ manual: true });
     await refresh();
     setMessage('#syncMessage', 'Google-Drive-Daten wurden auf dieses Gerät geladen.', 'success');
+    return { ok: true, pending: false };
   } catch (error) {
+    await setDirty(true);
     setMessage('#syncMessage', `Laden fehlgeschlagen: ${readableAuthError(error)}`, 'error');
-  } finally { await updateSyncUI(); }
+    return { ok: false, error };
+  } finally { syncInProgress = false; await updateSyncUI(); }
 }
 
 async function initializeSupabase() {

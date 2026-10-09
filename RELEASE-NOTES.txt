@@ -1,0 +1,5 @@
+LEEFKE 8.25-rc.1 – lokal vorbereiteter Freigabekandidat, nicht veröffentlicht.
+Neue lokale Datenbank: leefke-journal-v1. Neuer Drive-Ordner mit production-Markierung.
+Alte Datenbank und alte Drive-Datei bleiben erhalten. Keine automatische Datenübernahme oder Übertragung.
+Vor produktiver Übernahme aktuellen Bestand aller Altgeräte abschließend zusammenführen; alte App danach nicht parallel bearbeiten.
+Google-Anmeldung bleibt nur im Arbeitsspeicher. Nach Neustart neu verbinden und bewusst abgleichen.
