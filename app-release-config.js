@@ -1,1 +1,1 @@
-globalThis.LEEFKE_RELEASE = Object.freeze({ journal: true, candidate: '8.25-rc.1' });
+globalThis.LEEFKE_RELEASE = Object.freeze({ journal: true, candidate: '8.25-importfix-1' });

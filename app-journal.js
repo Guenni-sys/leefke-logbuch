@@ -48,11 +48,11 @@
       const rows = request.result, binding = config(rows, tx.db);
       if (!binding) { done(); return; }
       const operations = rows.filter(r => r.id.startsWith('journal:op:')).map(r => r.operation);
-      let view = J.materialize(operations, binding.scope);
+      const views = new Map(J.materialize(operations, binding.scope).map(view => [view.record, view]));
       for (const intent of intents) {
         const known = rows.find(r => r.id === viewKey(intent.record));
         if (known && (known.store !== intent.store || known.key !== intent.key || encode(known.applied) !== encode(intent.previous))) throw new Error('Journal und App-Datensatz stimmen nicht überein.');
-        let heads = view.find(r => r.record === intent.record);
+        let heads = views.get(intent.record);
         if (intent.expectedHeads) {
           if (!heads?.conflict || encode(heads.candidates.map(op => op.id).sort()) !== encode([...intent.expectedHeads].sort())) throw new Error('Die Konfliktfassungen haben sich geändert. Bitte erneut prüfen.');
         } else if (heads?.conflict) throw new Error('Für diesen Eintrag liegen mehrere Fassungen vor. Bitte zuerst den Konflikt entscheiden.');
@@ -66,9 +66,13 @@
         }
         // Preserve pre-existing local state as a parent, never silently discard it.
         if (!heads && intent.previous !== null) heads = { candidates: [append(intent.previous, [])] };
-        append(intent.value, heads?.candidates.map(op => op.id) || []);
-        view = J.materialize(operations, binding.scope);
-        store.put({ id: viewKey(intent.record), store: intent.store, key: intent.key, applied: intent.value, view: view.find(r => r.record === intent.record) });
+        const operation = append(intent.value, heads?.candidates.map(op => op.id) || []);
+        // The new operation consumes every current head of this record. Other
+        // records are unchanged; rebuilding their media-heavy histories for
+        // each imported row makes a bulk restore quadratic and freezes the UI.
+        const view = { record: intent.record, conflict: false, candidates: [copy(operation)] };
+        views.set(intent.record, view);
+        store.put({ id: viewKey(intent.record), store: intent.store, key: intent.key, applied: intent.value, view });
       }
       done();
     });
