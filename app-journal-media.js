@@ -85,13 +85,18 @@
         }
         assert(); await drive.create(fileId, op); assert();
       },
-      async list() {
-        const operations = copy(await drive.list(cache?.wire)); assert();
+      async list(onProgress = () => {}) {
+        const progress = value => { try { onProgress(value); } catch { /* Display must not interrupt verified reads. */ } };
+        const operations = copy(await drive.list(cache?.wire, progress)); assert();
+        const total = operations.filter(op => op.kind === 'put' && Object.hasOwn(op.value, 'leefkeMedia')).length;
+        let completed = 0;
+        progress({ phase: 'read', section: 'media', completed, total });
         for (const op of operations) {
           J.validate(op, drive.scope);
           if (op.kind !== 'put' || !Object.hasOwn(op.value, 'leefkeMedia')) continue;
           const ref = validateRef(op), bytes = await read(op, ref);
           op.value.record[ref.field] = ref.prefix + base64(bytes); delete op.value.leefkeMedia;
+          progress({ phase: 'read', section: 'media', completed: ++completed, total });
         }
         assert(); return operations;
       }

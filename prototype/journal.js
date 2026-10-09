@@ -84,7 +84,8 @@
       if (canonical(await this.read(fileId)) !== text) fail('Vorhandene Datei stimmt nicht mit der vorgemerkten Änderung überein.');
       return fileId;
     }
-    async list(cache = null) {
+    async list(cache = null, onProgress = () => {}) {
+      const progress = value => { try { onProgress(value); } catch { /* Display must not interrupt verified reads. */ } };
       const params = new URLSearchParams({ q: `'${this.folderId}' in parents and trashed = false and appProperties has { key='leefkeJournal' and value='${this.scope}' }`, fields: 'files(id,version),nextPageToken,incompleteSearch', pageSize: '100' });
       const seen = new Set(); const ids = new Map();
       while (true) {
@@ -100,6 +101,7 @@
         seen.add(page.nextPageToken); params.set('pageToken', page.nextPageToken);
       }
       const operations = [];
+      progress({ phase: 'read', section: 'changes', completed: 0, total: ids.size });
       for (const [fileId, version] of ids) {
         const saved = cache?.get(fileId);
         if (typeof version === 'string' && /^\d+$/.test(version) && saved?.version === version) {
@@ -110,6 +112,7 @@
           // version invalidates this cache on the next manual/startup exchange.
           if (typeof version === 'string' && /^\d+$/.test(version)) cache?.set(fileId, { version, operation });
         }
+        progress({ phase: 'read', section: 'changes', completed: operations.length, total: ids.size });
       }
       materialize(operations, this.scope); // Reject incomplete or malformed graphs.
       return operations;

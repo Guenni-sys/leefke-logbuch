@@ -178,7 +178,12 @@
       if (!workspace || !bindingNow()) throw new Error('Bitte zuerst den Testbestand mit Google verbinden.');
       tell('Testbestand wird abgeglichen …');
       const result = await LeefkeAppJournal.exchange(database, workspace.binding, workspace.drive, bindingNow, trigger, progress => {
-        tell(progress.phase === 'read' ? 'Vorhandene Änderungen und Medien im Testordner werden geprüft …' : `Übertragung: ${progress.confirmed} von ${progress.total} offenen Änderungen bestätigt.`);
+        if (progress.phase === 'read') {
+          tell(progress.section === 'changes' ? `Änderungen aus Google Drive: ${progress.completed} von ${progress.total} gelesen und geprüft.`
+            : progress.section === 'media' ? `Bilder und Dateien: ${progress.completed} von ${progress.total} geprüft.`
+            : 'Vorhandene Änderungen in Google Drive werden gesucht …');
+        } else if (progress.phase === 'apply') tell(`${progress.total} geprüfte Änderungen werden auf diesem Gerät gespeichert …`);
+        else tell(`Übertragung: ${progress.confirmed} von ${progress.total} offenen Änderungen bestätigt.`);
       });
       await refresh(); await renderStatus(); tell(`Abgleich beendet: ${result.confirmed} bestätigt, ${result.pending} offen, ${result.conflicts} Konflikte. ${result.received} Änderungen aus Google Drive vollständig gelesen und lokal geprüft.`);
       return { ok: true, ...result };

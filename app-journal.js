@@ -212,7 +212,7 @@
         drive = root.LeefkeJournalMedia.wrap(drive, reserve, assert, cache);
       }
       progress({ phase: 'read' });
-      assert(); const incoming = copy(await drive.list()); assert();
+      assert(); const incoming = copy(await drive.list(progress)); assert();
       const mappings = new Map();
       for (const op of incoming) {
         J.validate(op, binding.scope);
@@ -232,6 +232,7 @@
         if (mappings.has(op.record) && encode(mappings.get(op.record)) !== encode(next)) throw new Error('Widersprüchliche Datensatzzuordnungen.');
         mappings.set(op.record, next);
       }
+      progress({ phase: 'apply', total: incoming.length });
       await receive(db, binding, incoming, [...mappings.values()], currentBinding); assert();
       if (cacheUpdates.size) { await metadata((meta, rows, done) => { for (const row of cacheUpdates.values()) meta.put(row); done(); }, []); cacheUpdates.clear(); }
       const pending = await metadata((meta, rows, done) => done(rows.filter(r => r.id.startsWith('journal:op:') && r.pending)));
