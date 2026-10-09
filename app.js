@@ -1718,14 +1718,27 @@ function getSettings() {
   return { ...base, tripTitle: trip.title || 'Aktueller Törn', tripStart: trip.startDate || '', tripEnd: trip.endDate || '' };
 }
 
+function chooseInitialTrip(trips, contents, preferredId) {
+  const preferred = trips.find(trip => trip.id === preferredId);
+  if (preferred) return preferred;
+  const counts = new Map(trips.map(trip => [trip.id, 0]));
+  for (const store of ['days', 'photos', 'fuel', 'route', 'ports', 'gpx']) {
+    for (const row of contents[store] || []) if (counts.has(row.tripId)) counts.set(row.tripId, counts.get(row.tripId) + 1);
+  }
+  return [...trips].sort((a, b) =>
+    Number(counts.get(b.id) > 0) - Number(counts.get(a.id) > 0)
+    || Number(b.status === 'active') - Number(a.status === 'active')
+    || String(b.startDate || '').localeCompare(String(a.startDate || ''))
+    || counts.get(b.id) - counts.get(a.id)
+    || String(a.id).localeCompare(String(b.id)))[0];
+}
+
 async function refresh() {
   allState = {};
   for (const store of stores) allState[store] = await all(store);
   if (!activeTripId || !(allState.trips || []).some(item => item.id === activeTripId)) {
     const activeMeta = await metaGet('activeTrip');
-    const candidate = (allState.trips || []).find(item => item.id === activeMeta?.tripId)
-      || (allState.trips || []).find(item => item.status === 'active')
-      || (allState.trips || [])[0];
+    const candidate = chooseInitialTrip(allState.trips || [], allState, activeMeta?.tripId);
     activeTripId = candidate?.id || '';
     if (activeTripId && activeMeta?.tripId !== activeTripId) await metaSet('activeTrip', { tripId: activeTripId, changedAt: new Date().toISOString() });
   }

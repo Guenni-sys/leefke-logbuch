@@ -12,6 +12,37 @@
   const node = (tag, text) => { const element = document.createElement(tag); if (text) element.textContent = wording(text); return element; };
   const bindingNow = () => workspace && capture?.currentBinding(workspace.binding.scope, workspace.binding.folderId);
   function connected() { try { return Boolean(bindingNow()); } catch { return false; } }
+  function keepScreenAwake(report) {
+    let active = true, lock = null, requesting = false;
+    const show = value => { if (active) report(value); };
+    const releaseLock = value => { try { Promise.resolve(value.release()).catch(() => {}); } catch {} };
+    async function acquire() {
+      if (!active || requesting || lock) return;
+      if (document.visibilityState !== 'visible') { show('hidden'); return; }
+      if (!navigator.wakeLock?.request) { show('unavailable'); return; }
+      requesting = true;
+      try {
+        const value = await navigator.wakeLock.request('screen');
+        if (!active || document.visibilityState !== 'visible') { releaseLock(value); return; }
+        if (value.released) { show('unavailable'); return; }
+        lock = value; show('held');
+        value.addEventListener('release', () => {
+          if (lock === value) { lock = null; show(document.visibilityState === 'visible' ? 'unavailable' : 'hidden'); }
+        });
+      } catch { show('unavailable'); }
+      finally { requesting = false; }
+    }
+    const visibility = () => {
+      if (document.visibilityState === 'visible') { void acquire(); }
+      else { show('hidden'); if (lock) { const value = lock; lock = null; releaseLock(value); } }
+    };
+    document.addEventListener('visibilitychange', visibility);
+    show('requesting'); void acquire();
+    return () => {
+      active = false; document.removeEventListener('visibilitychange', visibility);
+      if (lock) { const value = lock; lock = null; releaseLock(value); }
+    };
+  }
   function open(messageText) {
     if (release) view('sync');
     panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -54,6 +85,9 @@
     const unresolved = data.filter(row => row.id.startsWith('journal:view:') && row.view.conflict);
     const online = connected();
     counter.textContent = `${pending} Änderungen offen · ${unresolved.length} Konflikte · ${online ? 'Google verbunden' : 'lokal verfügbar'}`;
+    const guidance = document.getElementById('journalSyncGuidance');
+    if (guidance) guidance.textContent = pending ? 'Vor dem Gerätewechsel bitte „Jetzt abgleichen“, damit diese Änderungen auch auf dem anderen Gerät verfügbar sind.'
+      : 'Keine lokalen Änderungen zum Hochladen offen. Änderungen anderer Geräte mit „Jetzt abgleichen“ laden.';
     const badge = document.querySelector('#syncStatusButton');
     if (badge) { badge.textContent = unresolved.length ? `${unresolved.length} Konflikte` : pending ? `${pending} Änderungen offen` : online ? 'Google verbunden' : 'Lokal verfügbar'; badge.onclick = () => open(); }
     const photoPending = data.filter(row => row.id.startsWith('journal:op:') && row.pending && (row.operation.value?.legacyStore === 'photos' || row.operation.target?.store === 'photos')).length;
@@ -177,6 +211,15 @@
     return run(async () => {
       if (!workspace || !bindingNow()) throw new Error('Bitte zuerst den Testbestand mit Google verbinden.');
       tell('Testbestand wird abgeglichen …');
+      const wakeHint = document.getElementById('journalWakeHint');
+      const stopAwake = keepScreenAwake(status => {
+        if (!wakeHint) return;
+        wakeHint.hidden = false;
+        wakeHint.textContent = status === 'held' ? 'Der Bildschirm wird während des Abgleichs wach gehalten. Bitte in der App bleiben.'
+          : status === 'hidden' ? 'Im Hintergrund kann der Abgleich pausieren. Bitte zur App zurückkehren.'
+          : 'Bitte die App geöffnet und den Bildschirm eingeschaltet lassen.';
+      });
+      try {
       const result = await LeefkeAppJournal.exchange(database, workspace.binding, workspace.drive, bindingNow, trigger, progress => {
         if (progress.phase === 'read') {
           tell(progress.section === 'changes' ? `Änderungen aus Google Drive: ${progress.completed} von ${progress.total} gelesen und geprüft.`
@@ -187,6 +230,7 @@
       });
       await refresh(); await renderStatus(); tell(`Abgleich beendet: ${result.confirmed} bestätigt, ${result.pending} offen, ${result.conflicts} Konflikte. ${result.received} Änderungen aus Google Drive vollständig gelesen und lokal geprüft.`);
       return { ok: true, ...result };
+      } finally { stopAwake(); if (wakeHint) { wakeHint.hidden = true; wakeHint.textContent = ''; } }
     });
   }
   async function start(db) {
@@ -194,6 +238,8 @@
     panel.append(node('h2', release ? 'Google Drive & Bordbuch' : 'LEEFKE · integrierter App-Test'), node('p', release ? 'Dein Bordbuch bleibt auf diesem Gerät verfügbar. Abgleich mit Google Drive nur beim vollständigen Start mit gültiger Sitzung oder bewusst manuell.' : 'Getrennter lokaler Bestand. Google-Zugriff ausschließlich auf ausdrücklich markierte Testordner. Übertragung nur manuell oder mit gültiger Sitzung beim Start.'));
     if (handoff) panel.append(node('p', 'Browser-Übergabe: eigener lokaler Bestand. Vorhandenen Google-Testordner auswählen und anschließend die Übergabedatei laden. Den ursprünglichen Browserbestand danach nicht parallel bearbeiten.'));
     message = node('p'); message.id = 'journalTestMessage'; message.setAttribute('role', 'status'); counter = node('p'); counter.id = 'journalTestCounter';
+    const wakeHint = node('p'); wakeHint.id = 'journalWakeHint'; wakeHint.hidden = true; wakeHint.setAttribute('role', 'status');
+    const guidance = node('p'); guidance.id = 'journalSyncGuidance';
     connectButton = node('button', 'Mit Google verbinden'); connectButton.id = 'journalConnect'; connectButton.onclick = connect;
     const disconnect = node('button', 'Verbindung trennen'); disconnect.onclick = async () => { session.logout(); capture = null; workspace = null; await renderStatus(); tell('Google getrennt. Lokale Daten bleiben erhalten.'); };
     select = node('select'); select.id = 'journalFolder'; select.setAttribute('aria-label', 'Google-Testbestand'); select.append(node('option', 'Zuerst Google verbinden'));
@@ -203,7 +249,7 @@
     const label = node('label', handoff ? 'Browser-Übergabedatei übernehmen ' : 'Vollständige lokale Sicherung übernehmen '); fileInput = node('input'); fileInput.type = 'file'; fileInput.accept = '.json'; label.append(fileInput);
     fileInput.onchange = async () => { try { if (fileInput.files[0]) await importSnapshot(JSON.parse(await fileInput.files[0].text())); } catch (error) { tell(error.message); } };
     conflicts = node('div'); conflicts.id = 'journalConflicts';
-    panel.append(connectButton, disconnect, select, chooseButton, createButton, syncButton, label, message, counter, conflicts);
+    panel.append(connectButton, disconnect, select, chooseButton, createButton, syncButton, label, message, wakeHint, counter, guidance, conflicts);
     if (release) {
       document.querySelector('#sync').append(panel);
       sourceButton = node('button', 'Bisheriges Bordbuch dieses Browsers übernehmen'); sourceButton.type = 'button';
