@@ -3428,3 +3428,11 @@ body{
   .home-dashboard-actions .home-tile-head{padding:7px!important;gap:5px!important}
   .home-dashboard-actions .home-tile-head strong{font-size:.65rem!important}
 }
+
+.home-sync{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;margin:12px 0}
+.home-sync>div{display:grid;gap:4px;min-width:0}
+.home-sync small{color:var(--muted)}
+.home-sync>p{grid-column:1/-1;margin:0;font-size:.88rem;overflow-wrap:anywhere}
+.home-sync>p:empty{display:none}
+.home-sync button{min-height:44px;white-space:normal}
+@media(max-width:600px){.home-sync{grid-template-columns:1fr;padding:14px}.home-sync button{width:100%}.home-sync>p{font-size:.88rem}}
