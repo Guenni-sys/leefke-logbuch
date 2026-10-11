@@ -1,1 +1,1 @@
-globalThis.LEEFKE_RELEASE = Object.freeze({ journal: true, candidate: '8.25-devicecomfort-1' });
+globalThis.LEEFKE_RELEASE = Object.freeze({ journal: true, candidate: '8.25-mobile-1' });

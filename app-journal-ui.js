@@ -57,6 +57,12 @@
   const tell = text => { message.textContent = wording(text); };
   function controls() {
     connectButton.disabled = busy; chooseButton.disabled = busy || !capture; select.disabled = busy || !capture;
+    if (release) {
+      chooseButton.hidden = Boolean(workspace);
+      select.hidden = Boolean(workspace);
+      const label = document.getElementById('journalConnectedFolder');
+      if (label) { label.hidden = !workspace; label.textContent = workspace ? `Verbundenes Bordbuch: ${select.selectedOptions[0]?.textContent || 'LEEFKE'}` : ''; }
+    }
     syncButton.disabled = busy || !workspace; fileInput.disabled = busy || !workspace || ready;
     createButton.disabled = handoff || busy || !capture || hasBinding;
     if (transferButton) transferButton.disabled = busy || !ready;
@@ -154,18 +160,26 @@
         if (!scope || local && (folder.id !== local.folderId || scope !== local.scope)) continue;
         const option = node('option', folder.name || 'LEEFKE-Testbestand'); option.value = folder.id; option.dataset.scope = scope; select.append(option);
       }
+      // A known binding is filtered above; a single unbound production folder is unambiguous.
+      // Opening validates ownership/scope again and never starts a data exchange.
+      if (release && select.options.length === 2) {
+        select.selectedIndex = 1;
+        await openSelectedFolder();
+        return;
+      }
       tell(select.options.length > 1 ? 'Google bestätigt. Bitte den gewünschten Testbestand auswählen.' : 'Kein passender bestehender Journal-Testordner gefunden. Es wurde kein Ordner angelegt.');
       await renderStatus();
     });
   }
   async function choose() {
-    return run(async () => {
+    return run(openSelectedFolder);
+  }
+  async function openSelectedFolder() {
       const option = select.selectedOptions[0]; if (!option?.value || !capture) throw new Error('Bitte einen Testbestand auswählen.');
       const selected = await capture.workspace(option.dataset.scope, option.value, environment);
       const existing = (await rows()).find(row => row.id === 'journal:binding');
       await LeefkeAppJournal.bindTest(database, { accountId: selected.binding.accountId, folderId: selected.binding.folderId, scope: selected.binding.scope, actor: existing?.actor || crypto.randomUUID() });
-      workspace = selected; await renderStatus(); tell('Testbestand verbunden. Eine lokale Sicherung übernehmen oder den vorhandenen Testbestand manuell laden.');
-    });
+      workspace = selected; await renderStatus(); tell(release ? 'Google verbunden. Dein Bordbuch ist geöffnet. Mit „Jetzt abgleichen“ Änderungen laden und übertragen.' : 'Testbestand verbunden. Eine lokale Sicherung übernehmen oder den vorhandenen Testbestand manuell laden.');
   }
   async function createTestFolder() {
     return run(async () => {
@@ -185,6 +199,8 @@
       catch (error) { if (error.status !== 409) throw error; }
       const selected = await capture.workspace(reservation.scope, reservation.id, environment);
       await LeefkeAppJournal.bindTest(database, { accountId: selected.binding.accountId, scope: selected.binding.scope, folderId: selected.binding.folderId, actor: crypto.randomUUID() });
+      const option = node('option', metadata.name); option.value = reservation.id; option.dataset.scope = reservation.scope;
+      select.replaceChildren(option); select.selectedIndex = 0;
       workspace = selected; await renderStatus(); tell('Eigener Testbestand verbunden. Die vollständige Sicherung kann jetzt lokal übernommen werden.');
     });
   }
@@ -242,7 +258,7 @@
     const guidance = node('p'); guidance.id = 'journalSyncGuidance';
     connectButton = node('button', 'Mit Google verbinden'); connectButton.id = 'journalConnect'; connectButton.onclick = connect;
     const disconnect = node('button', 'Verbindung trennen'); disconnect.onclick = async () => { session.logout(); capture = null; workspace = null; await renderStatus(); tell('Google getrennt. Lokale Daten bleiben erhalten.'); };
-    select = node('select'); select.id = 'journalFolder'; select.setAttribute('aria-label', 'Google-Testbestand'); select.append(node('option', 'Zuerst Google verbinden'));
+    select = node('select'); select.id = 'journalFolder'; select.setAttribute('aria-label', release ? 'Bordbuch auswählen' : 'Google-Testbestand'); select.append(node('option', 'Zuerst Google verbinden'));
     chooseButton = node('button', release ? 'Bordbuch öffnen' : 'Testbestand öffnen'); chooseButton.id = 'journalChoose'; chooseButton.onclick = choose;
     createButton = node('button', release ? 'Neues Bordbuch in Google Drive anlegen' : 'Eigenen Testbestand anlegen'); createButton.id = 'journalCreate'; createButton.onclick = createTestFolder;
     syncButton = node('button', 'Jetzt abgleichen'); syncButton.id = 'journalSync'; syncButton.onclick = () => sync();
@@ -250,6 +266,8 @@
     fileInput.onchange = async () => { try { if (fileInput.files[0]) await importSnapshot(JSON.parse(await fileInput.files[0].text())); } catch (error) { tell(error.message); } };
     conflicts = node('div'); conflicts.id = 'journalConflicts';
     panel.append(connectButton, disconnect, select, chooseButton, createButton, syncButton, label, message, wakeHint, counter, guidance, conflicts);
+    const connectedFolder = node('p'); connectedFolder.id = 'journalConnectedFolder'; connectedFolder.hidden = true;
+    panel.insertBefore(connectedFolder, syncButton);
     if (release) {
       document.querySelector('#sync').append(panel);
       sourceButton = node('button', 'Bisheriges Bordbuch dieses Browsers übernehmen'); sourceButton.type = 'button';

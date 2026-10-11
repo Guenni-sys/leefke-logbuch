@@ -829,8 +829,8 @@ main{padding:21px clamp(13px,2.4vw,32px) 58px;max-width:1440px}
    ========================================================================== */
 button,[role="button"],select{touch-action:manipulation}
 .home-trip-switcher{display:grid;grid-template-columns:auto minmax(130px,1fr);align-items:center;gap:8px;margin:9px 0 2px;padding-top:8px;border-top:1px solid rgba(231,205,145,.28)}
-.home-trip-switcher>span{font-size:.66rem;font-weight:750;letter-spacing:.05em;color:#cbd9df;white-space:nowrap}
-.home-trip-switcher select{min-width:0;width:100%;height:32px;padding:5px 28px 5px 9px;border:1px solid rgba(231,205,145,.26);border-radius:8px;background:rgba(255,255,255,.1);color:#fff;font-size:.78rem;font-weight:700;box-shadow:none}
+.home-trip-switcher>span{font-size:.75rem;font-weight:650;letter-spacing:.02em;color:var(--muted);white-space:nowrap}
+.home-trip-switcher select{min-width:0;width:100%;min-height:44px;padding:8px 28px 8px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--ink);font-size:1rem;font-weight:600;box-shadow:none}
 .home-trip-switcher select option{color:#102a39;background:#fff}
 
 /* Die Törnauswahl belegt nicht mehr eine eigene Zeile in der Kopfzeile. */
@@ -3355,4 +3355,76 @@ body{
   .port-photo-picker{grid-template-columns:1fr;gap:5px;padding:9px 10px}
   .port-photo-picker input[type="file"]{width:100%;padding:4px 0}
   .port-photo-thumb{flex-basis:96px}
+}
+
+/* 8.25: one responsive layer for phones/tablets; desktop sizing is retained. */
+:root{--leefke-safe-top:env(safe-area-inset-top,0px);--leefke-safe-bottom:env(safe-area-inset-bottom,0px)}
+#tankPercent{white-space:nowrap;flex-shrink:0}
+#journalConnectedFolder{font-weight:650}
+@media(max-width:1100px){
+  /* Explicit insets also apply to native dialogs in the top layer. */
+  html body dialog[class]{
+    position:fixed;inset:calc(var(--leefke-safe-top) + 12px) max(12px,env(safe-area-inset-right,0px)) auto max(12px,env(safe-area-inset-left,0px));
+    transform:none;margin:0 auto;
+    width:min(760px,calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px)));
+    max-width:calc(100vw - 24px - env(safe-area-inset-left,0px) - env(safe-area-inset-right,0px));
+    max-height:calc(100dvh - var(--leefke-safe-top) - var(--leefke-safe-bottom) - 24px);
+    overflow:auto;overscroll-behavior:contain;
+  }
+  html body dialog[class]>div[class*="-inner"]{max-height:none;overflow:visible}
+  dialog .dialog-actions{position:static;background:none;gap:8px;flex-wrap:wrap}
+  dialog .dialog-close{min-width:44px;min-height:44px}
+  dialog h3{padding-right:36px}
+  dialog input:not([type=checkbox]):not([type=radio]),dialog select,dialog textarea{font-size:16px!important}
+  .home-status-grid{align-items:start}
+  .home-status-grid>.card{min-height:0}
+  .tank-value{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px;align-items:center}
+  .tank-value strong{font-size:1.65rem;line-height:1.15}
+  .tank-value span{font-size:.88rem;line-height:1.45}
+}
+@media(max-width:850px){
+  /* Keep one page scroll container so the sticky header stays above content. */
+  html,body{overflow-x:clip;overflow-y:visible}
+  html:has(dialog[open]){overflow:hidden}
+  .topbar{padding-top:calc(7px + var(--leefke-safe-top));background:#081f30}
+  .update-banner{top:calc(var(--leefke-safe-top) + 8px)}
+  .card,.item,.route{font-size:.9rem;line-height:1.45}
+  .card h3,.item h3,.route h3{font-size:1.08rem;line-height:1.3}
+  .card p,.item p,.route p{line-height:1.45}
+  .title h2{font-size:1.5rem;line-height:1.15}
+  .title p{font-size:.88rem}
+  .card-kicker{font-size:.65rem;letter-spacing:.12em}
+  .home-status-grid{gap:10px}
+  .home-status-grid>.card{padding:14px}
+  .home-status-grid h3{margin:5px 0 8px}
+  .home-status-grid .meta,.home-status-grid .muted{font-size:.88rem}
+  .home-trip-switcher{grid-template-columns:1fr}
+  .home-trip-switcher select{height:auto;min-height:44px}
+  .due-home-row{flex-wrap:wrap;gap:3px 10px}
+  .due-home-row span{text-align:left}
+  .passage-diary-dialog-inner{padding:16px}
+  .passage-diary-dialog-inner>h3{font-size:18px;line-height:1.3}
+  .passage-diary-dialog .meta{font-size:14px;line-height:1.45}
+  .passage-diary-section{padding:12px;gap:8px}
+  .passage-diary-section h4,.passage-diary-section label{font-size:.92rem;line-height:1.35}
+  .passage-diary-section .meta{margin:3px 0}
+  .passage-diary-section button,.passage-diary-actions button{min-height:44px;font-size:.88rem;white-space:normal}
+  #journalTestPanel{margin:0!important;padding:14px}
+  #journalTestPanel h2{font-size:1.25rem}
+  #journalTestPanel button{min-height:44px;margin:4px 4px 4px 0;max-width:100%;white-space:normal}
+  #journalTestPanel select{width:100%;margin:8px 0}
+}
+@media(max-width:700px){
+  /* The old mobile file already cut off the bow. Use the complete existing banner. */
+  .home-sunset-hero{height:auto!important;aspect-ratio:16/7!important}
+  .home-sunset-hero .home-hero-picture img{object-fit:contain!important}
+  .home-sunset-hero .home-hero-title,.home-sunset-hero .home-sunset-shade{display:none!important}
+  .home-dashboard-actions .home-dashboard-tile>img{aspect-ratio:2/1!important}
+  .home-dashboard-actions .home-tile-head{min-height:44px!important}
+  .home-dashboard-actions .home-tile-head strong{font-size:.7rem!important;letter-spacing:.025em!important;white-space:normal}
+}
+@media(max-width:380px){
+  .tank-value{grid-template-columns:1fr;gap:5px}
+  .home-dashboard-actions .home-tile-head{padding:7px!important;gap:5px!important}
+  .home-dashboard-actions .home-tile-head strong{font-size:.65rem!important}
 }
