@@ -283,19 +283,9 @@ test('lost upload response keeps pending state and repeats exactly the reserved 
   assert.equal(after.fileId,first.fileId); assert.equal(after.pending,false); assert.equal(remote.remote.size,1);
 });
 
-test('home button preserves a failed connection message and still opens folder selection after successful login', async () => {
-  const uiText = fs.readFileSync(path.join(__dirname,'../app-journal-ui.js'),'utf8');
-  const start = uiText.indexOf('homeButton.onclick = async () => {'), end = uiText.indexOf('\n      };',start);
-  const callback = uiText.slice(start + 'homeButton.onclick = '.length,end + '\n      };'.length - 1).trim();
-  let message='Wrong Google account', opened=0, synchronized=0;
-  const make = (connect, connected) => new Function('busy','connected','connect','sync','open','return ('+callback+');')(
-    false,connected,connect,async()=>{synchronized++;},text=>{if(text)message=text;opened++;}
-  );
-  await make(async()=>({ok:false}),()=>false)();
-  assert.equal(message,'Wrong Google account'); assert.equal(opened,1); assert.equal(synchronized,0);
-  await make(async()=>undefined,()=>false)();
-  assert.match(message,/Bordbuch auswählen/);
-  await make(async()=>undefined,()=>true)(); assert.equal(synchronized,1);
+test('manual synchronization lives in account controls, without a home card', () => {
+  const uiText=fs.readFileSync(path.join(__dirname,'../app-journal-ui.js'),'utf8');
+  assert.doesNotMatch(uiText,/homeButton.onclick/);assert.match(uiText,/syncButton.onclick/);
 });
 
 test('old database storage path remains unchanged outside journal mode', async t => {
@@ -304,8 +294,15 @@ test('old database storage path remains unchanged outside journal mode', async t
   assert.deepEqual(await rows(db,'days'),[{id:'legacy1'}]); assert.equal((await pending(db)).length,0);
 });
 
-test('service worker and release configuration use the same build identifier', () => {
-  const worker=fs.readFileSync(path.join(__dirname,'../service-worker.js'),'utf8');
-  const config=fs.readFileSync(path.join(__dirname,'../app-release-config.js'),'utf8');
-  assert.match(worker,/'8\.25-home-sync-2'/); assert.match(config,/'8\.25-home-sync-2'/);
+test('service worker and release configuration use the same build identifier', async () => {
+  let root=path.join(__dirname,'..');
+  const builder=path.join(root,'tools/build-journal-release.cjs');
+  if(fs.existsSync(builder)) {
+    const temp=fs.mkdtempSync(path.join(require('node:os').tmpdir(),'leefke-version-'));
+    root=await require(builder).build(path.join(temp,'release'));
+  }
+  const worker=fs.readFileSync(path.join(root,'service-worker.js'),'utf8');
+  const config=fs.readFileSync(path.join(root,'app-release-config.js'),'utf8');
+  const version=/candidate: '([^']+)'/.exec(config)[1];
+  assert.ok(worker.includes("'"+version+"'"));assert.equal(version,'8.25-inspection-rc1');
 });

@@ -10,3 +10,5 @@ LEEFKE 8.25-home-sync-2 – Korrektur des Google-Bordbuchabgleichs
 Automatische Regressionstests: npm ci, danach npm test (Node 24.15 oder neuer innerhalb Node 24).
 Die Tests verwenden fake-indexeddb, jsdom und simulierte Google-Antworten. Der echte Google-Abgleich auf Windows, iPad und Smartphone muss zusätzlich geprüft werden.
 Vor dem ersten Gerätetest vollständige Sicherung einschließlich Medien erstellen. Alle Geräte mit demselben Google-Konto, Bordbuchordner und Törn abgleichen. Keine Browserdaten löschen oder veraltete Ausgangsbestände parallel importieren.
+
+12.10.2026 – 8.25-inspection-rc1: Freigegebener Umbau mit Inspektionsbuch, getrennten Fristen, A4-Bericht und ruhiger Startseite. Synchronisationskorrektur aus 6b4ad68 erhalten. 238 kombinierte Prüfungen und lokale Browserprüfungen bestanden.

@@ -1375,7 +1375,7 @@ function syncMobileDayEntryUi(options = {}) {
 const MOBILE_ENTRY_CONFIG = {
   ports: { view: 'ports', formId: 'portForm', buttonId: 'newPortEntryButton', closed: 'Neuer Eintrag', open: 'Datenerfassung schließen' },
   fuel: { view: 'fuel', formId: 'fuelForm', buttonId: 'newFuelEntryButton', closed: 'Neuer Tankvorgang', open: 'Erfassung schließen' },
-  maintenance: { view: 'maintenance', formId: 'maintenanceForm', buttonId: 'newMaintenanceEntryButton', closed: 'Neue Wartung', open: 'Erfassung schließen' },
+  maintenance: { view: 'maintenance', formId: 'maintenanceForm', buttonId: 'newMaintenanceEntryButton', closed: 'Einzelne Wartung eintragen', open: 'Erfassung schließen' },
   deadline: { view: 'maintenance', formId: 'deadlineForm', buttonId: 'newDeadlineEntryButton', closed: 'Neue Erinnerung', open: 'Erfassung schließen' },
   photos: { view: 'photos', formId: 'photoForm', buttonId: 'newPhotoEntryButton', closed: 'Fotos hinzufügen', open: 'Erfassung schließen' }
 };
@@ -1959,6 +1959,7 @@ function render() {
   renderTripManager();
   renderTripArchive();
   renderDeadlines();
+  globalThis.LeefkeServiceUI?.renderDeadlines();
   renderV6Extras();
 }
 
@@ -3237,7 +3238,7 @@ function addMaterialRow(item={}){const box=$('#materialRows');if(!box)return;con
 function updateMaterialTotal(){const total=maintenanceMaterialsFromEditor().reduce((s,x)=>s+num(x.cost),0);if($('#materialTotal'))$('#materialTotal').textContent=eur(total);return total;}
 function updateNextServicePreview(){const form=$('#maintenanceForm');if(!form)return;const date=form.elements.date.value;const h=parseFuelDecimal(form.elements.engineHours.value);const days=parseFuelDecimal(form.elements.intervalDays.value);const hours=parseFuelDecimal(form.elements.intervalHours.value);const parts=[];if(date&&days){const d=new Date(`${date}T12:00:00`);d.setDate(d.getDate()+Number(days));parts.push(`spätestens ${fmtDate(dateInputValue(d))}`)}if(h!==''&&hours)parts.push(`bei ${dec2(Number(h)+Number(hours))} Motorstunden`);$('#nextServicePreview').textContent=parts.length?`Nächster Service: ${parts.join(' oder ')}`:'Nächster Termin wird aus Datum und/oder Motorstunden berechnet.';}
 const maintenanceFormV8=$('#maintenanceForm');
-if(maintenanceFormV8) maintenanceFormV8.onsubmit=async event=>{event.preventDefault();const values=formObject(maintenanceFormV8);const existing=values.id?await getOne('maintenance',values.id):null;const engine=parseFuelDecimal(values.engineHours);const intervalDays=parseFuelDecimal(values.intervalDays);const intervalHours=parseFuelDecimal(values.intervalHours);let dueDate='';if(values.date&&intervalDays){const d=new Date(`${values.date}T12:00:00`);d.setDate(d.getDate()+Number(intervalDays));dueDate=dateInputValue(d)}const dueHours=engine!==''&&intervalHours?Number(engine)+Number(intervalHours):'';const materials=maintenanceMaterialsFromEditor();const cost=materials.reduce((s,x)=>s+num(x.cost),0);const saved=await put('maintenance',{...(existing||{}),id:values.id||uid(),date:values.date,category:values.category,title:values.title,engineHours:engine,intervalDays,intervalHours,dueDate,dueHours,cost,materials,note:values.note||'',done:true,created:existing?.created||Date.now()});maintenanceFormV8.reset();renderMaterialEditor();updateNextServicePreview();await refresh();syncMobileEntryUi('maintenance',{open:false});toast('Wartung gespeichert');window.setTimeout(()=>document.querySelector(`[data-store="maintenance"][data-record-id="${saved.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),120);};
+if(maintenanceFormV8) maintenanceFormV8.onsubmit=async event=>{event.preventDefault();const values=formObject(maintenanceFormV8);const existing=values.id?await getOne('maintenance',values.id):null;const engine=parseFuelDecimal(values.engineHours);const intervalDays=parseFuelDecimal(values.intervalDays);const intervalHours=parseFuelDecimal(values.intervalHours);let dueDate='';if(values.date&&intervalDays){const d=new Date(`${values.date}T12:00:00`);d.setDate(d.getDate()+Number(intervalDays));dueDate=dateInputValue(d)}const dueHours=engine!==''&&intervalHours?Number(engine)+Number(intervalHours):'';const materials=maintenanceMaterialsFromEditor();const cost=materials.reduce((s,x)=>s+num(x.cost),0);const saved=await put('maintenance',{...(existing||{}),id:values.id||uid(),date:values.date,category:values.category,title:values.title,serviceTask:values.serviceTask||'',engineHours:engine,intervalDays,intervalHours,dueDate,dueHours,cost,materials,note:values.note||'',done:true,created:existing?.created||Date.now()});maintenanceFormV8.reset();renderMaterialEditor();updateNextServicePreview();await refresh();syncMobileEntryUi('maintenance',{open:false});toast('Wartung gespeichert');window.setTimeout(()=>document.querySelector(`[data-store="maintenance"][data-record-id="${saved.id}"]`)?.scrollIntoView({behavior:'smooth',block:'center'}),120);};
 
 $('#settingsForm').onsubmit = async event => {
   event.preventDefault();
@@ -6524,8 +6525,9 @@ async function repairDeviceFromCloud() {
 }
 
 function renderMaintenance() {
+  globalThis.LeefkeServiceUI?.renderMaintenance();
   const currentHours=num(getSettings().currentEngineHours);
-  $('#maintenanceList').innerHTML = (state.maintenance||[]).map(item => {
+  $('#maintenanceList').innerHTML = (state.maintenance||[]).filter(item => item.kind !== "inspection").map(item => {
     const dateDays=item.dueDate?daysUntil(item.dueDate):null; const hoursLeft=item.dueHours&&currentHours?num(item.dueHours)-currentHours:null;
     const materials=Array.isArray(item.materials)?item.materials:[];
     const materialHtml=materials.length?`<div class="maintenance-material-summary">${materials.map(x=>`<span><b>${esc(x.name||'Material')}</b>${x.quantity?` · ${esc(x.quantity)}`:''}${x.cost?` · ${eur(x.cost)}`:''}</span>`).join('')}</div>`:'';

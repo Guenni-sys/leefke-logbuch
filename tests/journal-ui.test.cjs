@@ -116,12 +116,12 @@ test('real UI and transport keep an empty DB importable then upload and verify c
   const sessionBinding={...binding,sessionId:capturedSession};
   await A.importTest(db,sessionBinding,snapshot,plan,()=>sessionBinding);
   await ui.renderStatus();
-  assert.match(dom.window.document.querySelector('#homeSyncSummary').textContent,/Änderungen offen/);
+  assert.match(dom.window.document.querySelector('#accountSyncSummary').textContent,/Änderungen offen/);
   const result=await ui.sync();assert.equal(result.ok,true);assert.equal(result.pending,0);
   assert.equal(fixture.files.size,2);assert.ok(fixture.contentReads>=2);
-  assert.match(dom.window.document.querySelector('#homeLastSync').textContent,/Zuletzt synchronisiert/);
-  assert.match(dom.window.document.querySelector('#homeSync').textContent,/8.25-home-sync-2/);
-  assert.equal(dom.window.document.querySelector('#homeSyncButton').disabled,false);
+  assert.match(dom.window.document.querySelector('#accountLastSync').textContent,/Zuletzt synchronisiert/);
+  assert.equal(dom.window.document.querySelector('#homeSync'),null);
+  assert.equal(dom.window.document.querySelector('#journalSync').disabled,false);
   assert.deepEqual(await read(db,'photos'),stores.photos);
 });
 // Capture only the test session nonce; Google responses and credentials are fixtures.
@@ -133,15 +133,15 @@ test('home UI preserves account mismatch and restores controls after transport f
   const {db,fixture,ui,dom}=await environment(t);
   await A.bindTest(db,{accountId:'account1',scope:'scope1',folderId:'folder1',actor:'actor1'});
   fixture.account='account2';
-  await dom.window.document.querySelector('#homeSyncButton').onclick();
-  assert.match(dom.window.document.querySelector('#homeSyncStatus').textContent,/Google-Konto gehört nicht/);
-  assert.equal(dom.window.document.querySelector('#homeSyncButton').disabled,false);
+  await dom.window.document.querySelector('#journalConnect').onclick();
+  assert.match(dom.window.document.querySelector('#journalTestMessage').textContent,/Google-Konto gehört nicht/);
+  assert.equal(dom.window.document.querySelector('#journalConnect').disabled,false);
   fixture.account='account1';await ui.connect();
   fixture.failList=true;const failed=await ui.sync();
   assert.equal(failed.ok,false);
-  assert.match(dom.window.document.querySelector('#homeSyncStatus').textContent,/Netzwerkzugriff fehlgeschlagen/);
-  assert.equal(dom.window.document.querySelector('#homeSyncButton').disabled,false);
-  assert.equal(dom.window.document.querySelector('#homeSyncButton').textContent,'Jetzt synchronisieren');
+  assert.match(dom.window.document.querySelector('#journalTestMessage').textContent,/Netzwerkzugriff fehlgeschlagen/);
+  assert.equal(dom.window.document.querySelector('#journalSync').disabled,false);
+  assert.equal(dom.window.document.querySelector('#journalSync').textContent,'Jetzt synchronisieren');
   assert.equal((await read(db,'syncMeta')).some(row=>row.id==='journal:last-success'),false);
 });
 
@@ -154,7 +154,7 @@ test('complete app put path and home UI stage, upload, edit and delete productio
   await app.refresh();
   await app.put('days',{id:'day1',tripId:'trip1',date:'2026-10-12',title:'SYNC-TEST-WIN-01',summary:'Original'});
   await app.refresh();
-  assert.match(dom.window.document.querySelector('#homeSyncSummary').textContent,/Änderungen offen/);
+  assert.match(dom.window.document.querySelector('#accountSyncSummary').textContent,/Änderungen offen/);
   assert.equal((await ui.sync()).ok,true);
   let day=(await read(db,'days'))[0];
   await app.put('days',{...day,summary:'Edited on iPad'});await app.refresh();
@@ -165,5 +165,5 @@ test('complete app put path and home UI stage, upload, edit and delete productio
   assert.deepEqual(await read(db,'days'),[]);
   assert.ok(fixture.files.size>=6);
   assert.equal((await read(db,'syncMeta')).filter(row=>row.id.startsWith('journal:op:')&&row.pending).length,0);
-  assert.match(dom.window.document.querySelector('#homeLastSync').textContent,/Zuletzt synchronisiert/);
+  assert.match(dom.window.document.querySelector('#accountLastSync').textContent,/Zuletzt synchronisiert/);
 });

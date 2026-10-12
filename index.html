@@ -58,7 +58,8 @@
       <details id="navMoreGroup" class="nav-more-group">
         <summary>Mehr</summary>
         <div>
-          <button data-view="maintenance"><span>⚙</span> Wartung & Fristen</button>
+          <button data-view="maintenance"><span>⚙</span> Inspektionsbuch</button>
+          <button data-view="deadlines"><span>◷</span> Fristen</button>
           <button data-view="settings"><span>♜</span> Schiffspass</button>
           <button data-view="sync"><span>☁</span> Konto & Sync</button>
           <button data-view="history"><span>⟲</span> Verlauf <b id="conflictNavBadge" class="nav-badge" hidden>0</b></button>
@@ -128,7 +129,6 @@
         <div class="home-status-grid">
           <article class="card"><div class="card-kicker">LETZTER TAG</div><div id="latest" class="muted">Noch kein Eintrag.</div></article>
           <article class="card tank-card compact-tank"><div class="card-kicker">DIESEL · SCHÄTZSTAND</div><div class="tank-gauge"><div id="tankFill" class="tank-fill"></div></div><div class="tank-value"><strong id="tankPercent">—</strong><span id="tankLiters">Tankstand nicht eingetragen</span></div></article>
-          <article class="card"><div class="card-kicker">FRISTEN & SERVICE</div><h3>Nächste Erinnerung</h3><div id="openMaint" class="muted">Keine fälligen Punkte.</div><button data-open="maintenance" class="text-button">Wartung & Fristen →</button></article>
           <article class="card"><div class="card-kicker">TÖRN</div><h3 id="tripTitle">Aktueller Törn</h3><span id="tripDates" class="meta"></span><label class="home-trip-switcher"><span>Törn wechseln</span><select id="globalTripSelect"></select></label><button data-open="route" class="text-button">Törnarchiv öffnen →</button></article>
         </div>
 
@@ -519,7 +519,8 @@
       </section>
 
       <section id="maintenance" class="view">
-        <div class="title"><small>TECHNIK</small><h2>Wartung & Fristen</h2><p>Einfach festhalten, was gemacht wurde, welches Material verbaut wurde und wann der nächste Termin ansteht.</p></div>
+        <div class="title"><small>TECHNIK</small><h2>Inspektionsbuch</h2><p>Perkins Sabre M135 · PRM 500D2</p></div>
+        <button id="newInspection" class="primary" type="button">Jahresinspektion beginnen / fortsetzen</button><div id="inspectionList" class="stack service-inspections"></div>
         <div class="mobile-entry-bar" data-entry-key="maintenance">
           <button id="newMaintenanceEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="maintenanceForm"><span aria-hidden="true">＋</span> Neue Wartung</button>
         </div>
@@ -530,10 +531,11 @@
           <div class="wide actions"><button class="primary">Wartung speichern</button><button type="reset">Leeren</button></div>
         </form>
         <div id="maintenanceList" class="stack"></div>
-        <article class="card deadline-card"><div class="card-kicker">ERINNERUNGEN</div><h3>Prüfungen & Ablaufdaten</h3><p class="meta">Zum Beispiel Feuerlöscher, Gasprüfung oder Rettungsinsel. Die Startseite erinnert rechtzeitig.</p><div class="mobile-entry-bar nested-entry-bar" data-entry-key="deadline"><button id="newDeadlineEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="deadlineForm"><span aria-hidden="true">＋</span> Neue Erinnerung</button></div><form id="deadlineForm" class="form compact-form mobile-entry-form-collapsed"><input type="hidden" name="id"><label>Erinnerung<input required name="name" placeholder="z. B. Gasprüfung"></label><label>Letzte Prüfung<input type="date" name="lastCheck"></label><label>Intervall (Tage)<input type="number" min="0" step="1" name="intervalDays" placeholder="z. B. 730"></label><label>Fällig am<input type="date" name="dueDate"></label><label>Warnung vorher (Tage)<input type="number" min="0" step="1" name="remindDays" value="60"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Erinnerung speichern</button><button type="reset">Leeren</button></div></form><div id="deadlineList" class="stack compact-stack"></div></article>
+        <article class="card deadline-card" hidden><div class="card-kicker">ERINNERUNGEN</div><h3>Prüfungen & Ablaufdaten</h3><p class="meta">Zum Beispiel Feuerlöscher, Gasprüfung oder Rettungsinsel. Eine Erinnerung erscheint beim vollständigen App-Start.</p><div class="mobile-entry-bar nested-entry-bar" data-entry-key="deadline"><button id="newDeadlineEntryButton" class="primary" type="button" aria-expanded="false" aria-controls="deadlineForm"><span aria-hidden="true">＋</span> Neue Erinnerung</button></div><form id="deadlineForm" class="form compact-form mobile-entry-form-collapsed"><input type="hidden" name="id"><label>Erinnerung<input required name="name" placeholder="z. B. Gasprüfung"></label><label>Letzte Prüfung<input type="date" name="lastCheck"></label><label>Intervall (Tage)<input type="number" min="0" step="1" name="intervalDays" placeholder="z. B. 730"></label><label>Fällig am<input type="date" name="dueDate"></label><label>Warnung vorher (Tage)<input type="number" min="0" step="1" name="remindDays" value="60"></label><label class="wide">Notiz<input name="note"></label><div class="wide actions"><button class="primary">Erinnerung speichern</button><button type="reset">Leeren</button></div></form><div id="deadlineList" class="stack compact-stack"></div></article>
         <button id="createMaintenanceTemplates" type="button" hidden></button>
       </section>
 
+      <section id="deadlines" class="view"><div class="title"><small>TECHNIK & SICHERHEIT</small><h2>Fristen</h2><p>Zeitliche Termine zuerst. Motorstunden ergänzen die Prüfung, wenn sie erfasst sind.</p></div><div class="actions"><button id="serviceNewDeadline" type="button">Frist hinzufügen</button><label>Anzeige <select id="serviceDeadlineFilter"><option value="all">Alle Artikel</option><option value="urgent">Anstehend / überfällig</option></select></label></div><div id="serviceDeadlineList" class="stack"></div></section>
       <section id="operations" class="view legacy-hidden">
         <div class="title"><small>BORDBETRIEB</small><h2>Vorräte, Sicherheit & Dokumente</h2><p>Was an Bord ist, wann Prüfungen fällig werden und wo Rechnungen oder Anleitungen abgelegt sind.</p></div>
         <div class="stats compact operations-stats"><article><span>Vorräte knapp</span><strong id="inventoryLowCount">0</strong></article><article><span>Prüfungen fällig</span><strong id="safetyDueCount">0</strong></article><article><span>Dokumente</span><strong id="documentCount">0</strong></article><article><span>Wartung offen</span><strong id="operationMaintCount">0</strong></article></div>
@@ -901,6 +903,8 @@
   <script src="app-journal.js"></script>
   <script src="prototype/google-journal-session.js"></script>
   <script src="app-journal-ui.js"></script>
+  <script src="service-book.js"></script>
   <script src="app.js?v=8.25"></script>
+  <script src="service-book-ui.js"></script>
 </body>
 </html>

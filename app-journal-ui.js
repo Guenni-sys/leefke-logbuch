@@ -4,7 +4,7 @@
   let database, panel, message, counter, conflicts, select, connectButton, chooseButton, syncButton, fileInput;
   let workspace = null, capture = null, busy = false, ready = false, hasBinding = false, createButton;
   let conflictSignature = '';
-  let homeButton, homeStatus, homeSummary, homeLastSync, syncing = false;
+  let accountSummary, accountLastSync, syncing = false;
   const handoff = root.LEEFKE_RELEASE?.journal !== true && new URLSearchParams(location.search).get('handoff') === '1';
   let transferButton, sourceButton, migrationNotice;
   const release = root.LEEFKE_RELEASE?.journal === true;
@@ -55,7 +55,7 @@
     tx.oncomplete = () => resolve(r.result); tx.onabort = () => reject(tx.error);
   });
   const wording = text => release ? text.replaceAll('Testbestände', 'Bordbücher').replaceAll('Testbestand', 'Bordbuch').replaceAll('Testordner', 'Bordbuchordner').replaceAll('Journal-Testordner', 'Bordbuchordner').replaceAll('Testbereich', 'Abgleichbereich') : text;
-  const tell = text => { message.textContent = wording(text); if (homeStatus) homeStatus.textContent = wording(text); };
+  const tell = text => { message.textContent = wording(text); };
   function controls() {
     connectButton.disabled = busy; chooseButton.disabled = busy || !capture; select.disabled = busy || !capture;
     if (release) {
@@ -66,7 +66,6 @@
     }
     syncButton.disabled = busy || !workspace; fileInput.disabled = busy || !workspace || ready;
     syncButton.textContent = syncing ? 'Synchronisierung läuft …' : 'Jetzt synchronisieren';
-    if (homeButton) { homeButton.disabled = busy; homeButton.textContent = syncing ? 'Synchronisierung läuft …' : 'Jetzt synchronisieren'; }
     createButton.disabled = handoff || busy || !capture || hasBinding;
     if (transferButton) transferButton.disabled = busy || !ready;
     for (const button of conflicts.querySelectorAll('button')) button.disabled = busy;
@@ -94,12 +93,12 @@
     const unresolved = data.filter(row => row.id.startsWith('journal:view:') && row.view.conflict);
     const online = connected();
     counter.textContent = `${pending} Änderungen offen · ${unresolved.length} Konflikte · ${online ? 'Google verbunden' : 'lokal verfügbar'}`;
-    if (homeSummary) {
-      homeSummary.textContent = unresolved.length ? `${pending} Änderungen offen · ${unresolved.length} Konflikte` : pending ? `${pending} Änderungen offen` : 'Keine lokalen Änderungen offen';
+    if (accountSummary) {
+      accountSummary.textContent = unresolved.length ? `${pending} Änderungen offen · ${unresolved.length} Konflikte` : pending ? `${pending} Änderungen offen` : 'Keine lokalen Änderungen offen';
       const last = data.find(row => row.id === 'journal:last-success');
       const binding = data.find(row => row.id === 'journal:binding');
       const valid = last && binding && last.accountId === binding.accountId && last.folderId === binding.folderId && last.scope === binding.scope && Number.isFinite(Date.parse(last.at));
-      homeLastSync.textContent = valid ? `Zuletzt synchronisiert: ${new Date(last.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} Uhr` : 'Noch keine erfolgreiche Synchronisierung auf diesem Gerät bestätigt.';
+      accountLastSync.textContent = valid ? `Zuletzt synchronisiert: ${new Date(last.at).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })} Uhr` : 'Noch keine erfolgreiche Synchronisierung auf diesem Gerät bestätigt.';
     }
     const guidance = document.getElementById('journalSyncGuidance');
     if (guidance) guidance.textContent = pending ? 'Vor dem Gerätewechsel bitte „Jetzt synchronisieren“, damit diese Änderungen auch auf dem anderen Gerät verfügbar sind.'
@@ -285,23 +284,9 @@
     panel.insertBefore(connectedFolder, syncButton);
     if (release) {
       document.querySelector('#sync').append(panel);
-      const homeCard = node('article'); homeCard.id = 'homeSync'; homeCard.className = 'card home-sync no-print';
-      const copy = node('div'); copy.append(node('strong', 'Bordbuch synchronisieren'));
-      homeSummary = node('span'); homeSummary.id = 'homeSyncSummary';
-      homeLastSync = node('small'); homeLastSync.id = 'homeLastSync';
-      homeStatus = node('p'); homeStatus.id = 'homeSyncStatus'; homeStatus.setAttribute('role', 'status');
-      homeButton = node('button', 'Jetzt synchronisieren'); homeButton.id = 'homeSyncButton'; homeButton.className = 'primary'; homeButton.type = 'button';
-      homeButton.onclick = async () => {
-        if (busy) return;
-        if (!connected()) {
-          const connection = await connect();
-          if (connection?.ok === false) { open(); return; }
-        }
-        if (connected()) await sync('manual');
-        else open('Bitte Google verbinden und gegebenenfalls dein Bordbuch auswählen.');
-      };
-      copy.append(homeSummary, homeLastSync, node('small', `App-Stand: ${root.LEEFKE_RELEASE.candidate}`)); homeCard.append(copy, homeButton, homeStatus);
-      document.querySelector('.home-overview-hero').after(homeCard);
+      accountSummary = node('span'); accountSummary.id = 'accountSyncSummary';
+      accountLastSync = node('small'); accountLastSync.id = 'accountLastSync';
+      panel.append(accountSummary, accountLastSync);
       sourceButton = node('button', 'Bisheriges Bordbuch dieses Browsers übernehmen'); sourceButton.type = 'button';
       sourceButton.onclick = async () => {
         let snapshot;

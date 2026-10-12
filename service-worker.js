@@ -2,10 +2,10 @@
 // Cache only the public app shell. No OAuth, Drive, snapshots or user media responses.
 const SCOPE = self.registration.scope;
 const PREFIX = 'leefke-integrated-shell:' + encodeURIComponent(SCOPE) + ':';
-const CACHE = PREFIX + '8.25-home-sync-2';
+const CACHE = PREFIX + '8.25-inspection-rc1';
 const ENTRY = new URL('./', SCOPE).href;
 const ASSETS = [
-  'app-release-config.js', 'app-local-source.js', 'index.html', 'style.css', 'app.js', 'drive-concurrency.js',
+  'app-release-config.js', 'app-local-source.js', 'service-book.js', 'service-book-ui.js', 'index.html', 'style.css', 'app.js', 'drive-concurrency.js',
   'prototype/journal.js', 'prototype/journal-migration.js', 'prototype/google-journal-session.js',
   'app-journal-media.js', 'app-journal.js', 'app-journal-ui.js', 'app-journal.webmanifest',
   'icon.svg', 'icon-192.png', 'icon-512.png',

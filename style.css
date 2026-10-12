@@ -3429,10 +3429,32 @@ body{
   .home-dashboard-actions .home-tile-head strong{font-size:.65rem!important}
 }
 
-.home-sync{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:10px 16px;align-items:center;margin:12px 0}
-.home-sync>div{display:grid;gap:4px;min-width:0}
-.home-sync small{color:var(--muted)}
-.home-sync>p{grid-column:1/-1;margin:0;font-size:.88rem;overflow-wrap:anywhere}
-.home-sync>p:empty{display:none}
-.home-sync button{min-height:44px;white-space:normal}
-@media(max-width:600px){.home-sync{grid-template-columns:1fr;padding:14px}.home-sync button{width:100%}.home-sync>p{font-size:.88rem}}
+/* Inspektionsbuch: compact disclosure groups, usable on phones and tablets. */
+.service-dialog [hidden], .deadline-card[hidden] { display:none!important; }
+.service-inspections { margin: 16px 0 24px; }
+.service-history h3,.service-deadline h3 { font-size:1.08rem; margin:8px 0; }
+.service-history button { margin:4px 8px 4px 0; }
+.service-deadline p { margin:8px 0; }
+.service-badge { display:inline-block; padding:4px 10px; border-radius:20px; font-size:.85rem; font-weight:700; border:1px solid currentColor; }
+.service-badge.green { color:#215337; background:#e5f1e8; }
+.service-badge.yellow { color:#624c00; background:#fff2bf; }
+.service-badge.orange { color:#783b00; background:#ffdfb6; }
+.service-badge.red { color:#8b2020; background:#ffe5e5; }
+.service-badge.unknown { color:#45525d; background:#e9edf0; }
+.service-deadline summary,.service-group summary { cursor:pointer; padding:10px 0; font-weight:700; }
+dialog.service-dialog { box-sizing:border-box; width:min(760px,calc(100% - 24px)); max-width:760px; max-height:calc(100dvh - var(--leefke-safe-top,env(safe-area-inset-top,0px)) - var(--leefke-safe-bottom,env(safe-area-inset-bottom,0px)) - 28px); top:calc(var(--leefke-safe-top,env(safe-area-inset-top,0px)) + 14px); bottom:auto; overflow:auto; margin:0 auto; padding:20px; border:1px solid #c8d0d2; border-radius:16px; color:#173443; background:#faf7ef; }
+.service-dialog::backdrop { background:#0b253aaa; }
+.service-dialog h2 { font-size:1.4rem; }
+.service-dialog label,.service-form>label { display:flex; flex-direction:column; gap:5px; margin:10px 0; font-size:.95rem; }
+.service-dialog input,.service-dialog select,.service-dialog textarea { box-sizing:border-box; width:100%; min-width:0; padding:10px; font:inherit; font-size:16px; background:white; color:#173443; border:1px solid #aabac1; border-radius:7px; }
+.service-dialog input[type=checkbox] { width:22px; height:22px; }
+.service-group { border-top:1px solid #cfd7d9; margin:10px 0; }
+.service-check { padding:12px; margin:8px 0; border:1px solid #d9e0e2; border-radius:9px; background:#fff; }
+.service-check strong { display:block; font-size:1rem; margin-bottom:8px; }
+.service-progress { padding:8px 0; font-weight:700; }
+.service-actions { position:static; display:flex; flex-wrap:wrap; margin-top:16px; gap:8px; }
+.service-message[role=alert] { color:#8b2020; font-weight:700; }
+.service-report-frame { display:block; width:100%; height:55dvh; border:1px solid #cfd7d9; background:white; margin:10px 0; }
+#maintenanceForm.mobile-entry-form-collapsed { display:none; }
+#accountLastSync { display:block; margin-top:8px; }
+@media(max-width:600px){dialog.service-dialog{padding:14px} .service-deadline{padding:14px} .service-dialog button{white-space:normal;min-height:44px} .service-actions>*{flex:1 1 140px} #deadlines .actions{flex-wrap:wrap} }
