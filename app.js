@@ -253,7 +253,7 @@ async function setDirty(value = true) {
 async function commitLocalMutation(store, id, previous, saved, tombstone, changeLog, dirty) {
   // Snapshot caller intent before opening the transaction. No network work here.
   const intent = structuredClone({ previous, saved, tombstone, changeLog });
-  const journalIntents = typeof LeefkeAppJournal !== 'undefined' && db.name.startsWith('leefke-journal-app-test-') ? [await LeefkeAppJournal.prepare(store, id, intent.saved, intent.previous)] : [];
+  const journalIntents = typeof LeefkeAppJournal !== 'undefined' && IS_JOURNAL_TEST ? [await LeefkeAppJournal.prepare(store, id, intent.saved, intent.previous)] : [];
   if (journalIntents.length && intent.changeLog) journalIntents.push(await LeefkeAppJournal.prepare('changeLog', intent.changeLog.id, intent.changeLog));
   return new Promise((resolve, reject) => {
     const tx = db.transaction([...new Set([store, 'syncTombstones', 'syncMeta', 'changeLog'])], 'readwrite');
@@ -2894,7 +2894,7 @@ if (dayForm) {
       prepareDayForm();
       await new Promise(resolve => window.setTimeout(resolve, 0));
       const cloudNote = (IS_JOURNAL_TEST ? LeefkeJournalUI.connected() : currentSession)
-        ? (navigator.onLine ? 'Lokal gespeichert; Cloud-Abgleich beim nächsten App-Start oder manuell.' : 'Offline gespeichert; Cloud-Abgleich beim nächsten App-Start mit Internet oder manuell.')
+        ? (IS_JOURNAL_TEST ? 'Lokal gespeichert; für den Austausch mit anderen Geräten bewusst „Jetzt synchronisieren“ verwenden.' : navigator.onLine ? 'Lokal gespeichert; Cloud-Abgleich beim nächsten App-Start oder manuell.' : 'Offline gespeichert; Cloud-Abgleich beim nächsten App-Start mit Internet oder manuell.')
         : 'Lokal gespeichert; für den Abgleich mit anderen Geräten bitte anmelden.';
       setDayFormStatus(`Tagestour gespeichert. Sie steht bei den gespeicherten Tagestouren. ${cloudNote}`, 'success');
       syncMobileDayEntryUi({ open: false });

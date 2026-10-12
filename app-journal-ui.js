@@ -256,21 +256,17 @@
         } else if (progress.phase === 'apply') tell(`${progress.total} geprüfte Änderungen werden auf diesem Gerät gespeichert …`);
         else tell(`Übertragung: ${progress.confirmed} von ${progress.total} offenen Änderungen bestätigt.`);
       });
-      if (!result.pending && !result.conflicts && bindingNow()) {
-        const stamp = { id: 'journal:last-success', ...workspace.binding, at: new Date().toISOString() };
-        await new Promise((resolve, reject) => {
-          const tx = database.transaction('syncMeta', 'readwrite'); tx.objectStore('syncMeta').put(stamp);
-          tx.oncomplete = resolve; tx.onabort = () => reject(tx.error);
-        });
-      }
-      await refresh(); await renderStatus(); tell(`Abgleich beendet: ${result.confirmed} bestätigt, ${result.pending} offen, ${result.conflicts} Konflikte. ${result.received} Änderungen aus Google Drive vollständig gelesen und lokal geprüft.`);
-      return { ok: true, ...result };
+      const status = await LeefkeAppJournal.recordSuccess(database, workspace.binding, bindingNow);
+      if (status.untracked) throw new Error('Weitere lokale Änderungen wurden während des Abgleichs erkannt. Bitte erneut synchronisieren; der Erfolgszeitpunkt wurde nicht erneuert.');
+      const final = { ...result, pending: status.pending, conflicts: status.conflicts };
+      await refresh(); await renderStatus(); tell(`Abgleich beendet: ${final.confirmed} bestätigt, ${final.pending} offen, ${final.conflicts} Konflikte. ${final.received} Änderungen aus Google Drive vollständig gelesen und lokal geprüft.${status.initialized ? '' : ' Das Bordbuch ist noch leer; der bisherige Bestand kann jetzt übernommen werden.'}`);
+      return { ok: true, ...final };
       } finally { syncing = false; stopAwake(); if (wakeHint) { wakeHint.hidden = true; wakeHint.textContent = ''; } }
     });
   }
   async function start(db) {
     database = db; panel = node('aside'); panel.id = 'journalTestPanel'; panel.className = 'card'; panel.style.margin = '16px';
-    panel.append(node('h2', release ? 'Google Drive & Bordbuch' : 'LEEFKE · integrierter App-Test'), node('p', release ? 'Dein Bordbuch bleibt auf diesem Gerät verfügbar. Abgleich mit Google Drive nur beim vollständigen Start mit gültiger Sitzung oder bewusst manuell.' : 'Getrennter lokaler Bestand. Google-Zugriff ausschließlich auf ausdrücklich markierte Testordner. Übertragung nur manuell oder mit gültiger Sitzung beim Start.'));
+    panel.append(node('h2', release ? 'Google Drive & Bordbuch' : 'LEEFKE · integrierter App-Test'), node('p', release ? 'Dein Bordbuch bleibt auf diesem Gerät verfügbar. Änderungen mit „Jetzt synchronisieren“ bewusst übertragen und laden. Nach einem vollständigen Neustart Google erneut verbinden.' : 'Getrennter lokaler Bestand. Google-Zugriff ausschließlich auf ausdrücklich markierte Testordner. Übertragung nur manuell oder mit gültiger Sitzung beim Start.'));
     if (handoff) panel.append(node('p', 'Browser-Übergabe: eigener lokaler Bestand. Vorhandenen Google-Testordner auswählen und anschließend die Übergabedatei laden. Den ursprünglichen Browserbestand danach nicht parallel bearbeiten.'));
     message = node('p'); message.id = 'journalTestMessage'; message.setAttribute('role', 'status'); counter = node('p'); counter.id = 'journalTestCounter';
     const wakeHint = node('p'); wakeHint.id = 'journalWakeHint'; wakeHint.hidden = true; wakeHint.setAttribute('role', 'status');
@@ -297,11 +293,14 @@
       homeButton = node('button', 'Jetzt synchronisieren'); homeButton.id = 'homeSyncButton'; homeButton.className = 'primary'; homeButton.type = 'button';
       homeButton.onclick = async () => {
         if (busy) return;
-        if (!connected()) await connect();
+        if (!connected()) {
+          const connection = await connect();
+          if (connection?.ok === false) { open(); return; }
+        }
         if (connected()) await sync('manual');
         else open('Bitte Google verbinden und gegebenenfalls dein Bordbuch auswählen.');
       };
-      copy.append(homeSummary, homeLastSync); homeCard.append(copy, homeButton, homeStatus);
+      copy.append(homeSummary, homeLastSync, node('small', `App-Stand: ${root.LEEFKE_RELEASE.candidate}`)); homeCard.append(copy, homeButton, homeStatus);
       document.querySelector('.home-overview-hero').after(homeCard);
       sourceButton = node('button', 'Bisheriges Bordbuch dieses Browsers übernehmen'); sourceButton.type = 'button';
       sourceButton.onclick = async () => {
@@ -329,12 +328,14 @@
     const access = node('button', 'Google-Verbindung und Konflikte öffnen'); access.type = 'button'; access.onclick = () => open(); hint.append(access); if (!release) legacy.append(hint);
     const photoToggle = document.querySelector('#photoAutoSync');
     if (photoToggle) { photoToggle.disabled = true; photoToggle.closest('label').hidden = true; }
-    await renderStatus(); if (ready) await refresh(); tell(ready ? 'Gespeicherter Testbestand lokal geöffnet. Für einen Abgleich Google erneut verbinden.' : 'Zuerst Google verbinden und einen markierten Testbestand auswählen.');
+    const repaired = await run(() => LeefkeAppJournal.reconcileLocal(database));
+    await renderStatus(); if (ready) await refresh();
+    if (repaired?.ok !== false) tell(repaired?.recovered ? `${repaired.recovered} bisher nur lokale Änderungen für den nächsten Abgleich vorgemerkt. Für die Übertragung Google verbinden und synchronisieren.` : ready ? 'Gespeicherter Testbestand lokal geöffnet. Für einen Abgleich Google erneut verbinden.' : 'Zuerst Google verbinden und einen markierten Testbestand auswählen.');
     if (release) {
       const walker = document.createTreeWalker(panel, NodeFilter.SHOW_TEXT);
       while (walker.nextNode()) walker.currentNode.textContent = wording(walker.currentNode.textContent);
       select.setAttribute('aria-label', 'Google-Bordbuch');
-      if (!ready) view('sync');
+      if (!ready || repaired?.ok === false) view('sync');
     }
     if ((release || location.pathname === '/app/') && 'serviceWorker' in navigator) {
       document.querySelector('link[rel="manifest"]').href = 'app-journal.webmanifest';

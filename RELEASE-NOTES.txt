@@ -1,5 +1,12 @@
-LEEFKE 8.25-rc.1 – lokal vorbereiteter Freigabekandidat, nicht veröffentlicht.
-Neue lokale Datenbank: leefke-journal-v1. Neuer Drive-Ordner mit production-Markierung.
-Alte Datenbank und alte Drive-Datei bleiben erhalten. Keine automatische Datenübernahme oder Übertragung.
-Vor produktiver Übernahme aktuellen Bestand aller Altgeräte abschließend zusammenführen; alte App danach nicht parallel bearbeiten.
-Google-Anmeldung bleibt nur im Arbeitsspeicher. Nach Neustart neu verbinden und bewusst abgleichen.
+LEEFKE 8.25-home-sync-2 – Korrektur des Google-Bordbuchabgleichs
+
+- Neue Einträge, Bearbeitungen und Löschungen werden auch in der produktiven Datenbank leefke-journal-v1 für den Abgleich vorgemerkt.
+- Bisher nur lokal gespeicherte Änderungen werden beim Öffnen und vor dem Abgleich nachgeführt. Der lokale Inhalt bleibt erhalten; widersprüchliche Fassungen bleiben als Konflikt sichtbar.
+- Eine fehlende journalgeführte Fassung wird nur mit vorhandener Löschvormerkung als Löschung nachgeführt. Bei unklaren oder inzwischen geänderten Daten wird abgebrochen.
+- Der Erfolgszeitpunkt wird nur für einen initialisierten, lokal konsistenten Bestand ohne offene Änderungen und Konflikte gespeichert. Ein leerer erster Abgleich blockiert die spätere Datenübernahme nicht mehr.
+- Anmeldefehler bleiben auch beim Startseitenbutton sichtbar. Auf der Startseite ist der genaue App-Stand erkennbar.
+- Google-Anmeldung bleibt nur im Arbeitsspeicher. Nach vollständigem Neustart erneut verbinden und bewusst synchronisieren.
+
+Automatische Regressionstests: npm ci, danach npm test (Node 24.15 oder neuer innerhalb Node 24).
+Die Tests verwenden fake-indexeddb, jsdom und simulierte Google-Antworten. Der echte Google-Abgleich auf Windows, iPad und Smartphone muss zusätzlich geprüft werden.
+Vor dem ersten Gerätetest vollständige Sicherung einschließlich Medien erstellen. Alle Geräte mit demselben Google-Konto, Bordbuchordner und Törn abgleichen. Keine Browserdaten löschen oder veraltete Ausgangsbestände parallel importieren.
