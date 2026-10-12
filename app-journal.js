@@ -41,6 +41,150 @@
       });
     });
   }
+  const localStores = [...STORES, 'syncMeta', 'syncTombstones'];
+  function readLocal(db) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(localStores), snapshot = {};
+      for (const name of localStores) {
+        const request = tx.objectStore(name).getAll();
+        request.onsuccess = () => { snapshot[name] = request.result; };
+      }
+      tx.oncomplete = () => resolve(snapshot);
+      tx.onabort = () => reject(tx.error || new Error('Lokaler Journalbestand konnte nicht gelesen werden.'));
+      tx.onerror = () => {};
+    });
+  }
+  // Recover writes made by 8.25-home-sync-1 before any download can overwrite
+  // them. Original operations stay immutable; conflicted records gain a branch,
+  // never an implicit resolution. No Google session is needed for local repair.
+  async function reconcileLocal(db) {
+    allowed(db);
+    const snapshot = await readLocal(db), rows = snapshot.syncMeta;
+    const binding = config(rows, db);
+    if (!binding) return { recovered: 0 };
+    const entries = rows.filter(row => row.id.startsWith('journal:op:'));
+    for (const entry of entries) {
+      J.validate(entry.operation, binding.scope);
+      if (entry.id !== opKey(entry.operation.id) || typeof entry.pending !== 'boolean') throw new Error('Ungültiger lokaler Journalstand. Es wurden keine Daten nachgeführt.');
+    }
+    const operations = entries.map(row => row.operation);
+    const history = new Map();
+    for (const operation of operations) {
+      if (!history.has(operation.record)) history.set(operation.record, []);
+      history.get(operation.record).push(operation);
+    }
+    const views = new Map(J.materialize(operations, binding.scope).map(view => [view.record, view]));
+    const known = rows.filter(row => row.id.startsWith('journal:view:')), mappings = new Map();
+    for (const row of known) {
+      const identity = await prepare(row.store, row.key, row.applied);
+      const view = views.get(identity.record), logical = encode([row.store, row.key]);
+      if (row.id !== viewKey(identity.record) || !view || encode(row.view) !== encode(view) || mappings.has(logical)) throw new Error('Lokale Journalzuordnung ist unvollständig oder verändert. Es wurden keine Daten nachgeführt.');
+      if (!view.conflict && encode(row.applied) !== encode(view.candidates[0].kind === 'delete' ? null : view.candidates[0].value.record)) throw new Error('Gespeicherte Journalfassung und angewendeter Stand widersprechen sich.');
+      for (const op of history.get(identity.record) || []) {
+        if (op.kind === 'put' && (op.value.legacyStore !== row.store || op.value.legacyRecordId !== String(row.key) || op.value.record?.id !== row.key) || op.target && (op.target.store !== row.store || op.target.key !== row.key)) throw new Error('Journalinhalt widerspricht seiner Datensatzzuordnung.');
+      }
+      mappings.set(logical, row);
+    }
+    if (known.length !== views.size) throw new Error('Zu einer lokalen Journaländerung fehlt die Datensatzzuordnung.');
+    const tombstones = new Map();
+    for (const tomb of snapshot.syncTombstones) {
+      if (!STORES.includes(tomb.recordType) || tomb.id !== tomb.recordType + ':' + tomb.recordId) throw new Error('Ungültige lokale Löschvormerkung.');
+      await prepare(tomb.recordType, tomb.recordId, null);
+      tombstones.set(encode([tomb.recordType, tomb.recordId]), tomb);
+    }
+    const changes = [], seenRecords = new Set([...mappings.values()].map(row => row.view.record));
+    const actual = new Map();
+    async function recover(store, key, value, previous) {
+      const identity = await prepare(store, key, value);
+      if (!previous && seenRecords.has(identity.record)) throw new Error('Mehrdeutige lokale Datensatzkennung. Es wurden keine Daten nachgeführt.');
+      seenRecords.add(identity.record);
+      let parents = [];
+      if (previous) {
+        if (!previous.view.conflict) parents = previous.view.candidates.map(op => op.id);
+        else {
+          // Branch from one equivalent baseline if it exists. Consuming every
+          // conflict head here would silently choose the old untracked edit.
+          const baseline = (history.get(identity.record) || []).find(op => encode(op.kind === 'delete' ? null : op.value.record) === encode(previous.applied));
+          if (baseline) parents = [baseline.id];
+        }
+      }
+      const operation = { schema: 1, scope: binding.scope, actor: binding.actor, id: crypto.randomUUID(), record: identity.record, parents,
+        kind: value === null ? 'delete' : 'put', value: value === null ? null : { legacyStore: store, legacyRecordId: String(key), record: value } };
+      if (value === null) operation.target = { store, key };
+      J.validate(operation, binding.scope);
+      operations.push(operation); changes.push({ operation, store, key, applied: value });
+    }
+    for (const store of STORES) for (const row of snapshot[store]) {
+      const logical = encode([store, row.id]), previous = mappings.get(logical);
+      actual.set(logical, row);
+      if (!previous || encode(previous.applied) !== encode(row)) await recover(store, row.id, row, previous);
+    }
+    for (const [logical, previous] of mappings) {
+      if (actual.has(logical) || previous.applied === null) continue;
+      if (!tombstones.has(logical)) throw new Error('Ein journalgeführter Eintrag fehlt ohne Löschvormerkung. Es wurden keine Daten nachgeführt.');
+      await recover(previous.store, previous.key, null, previous);
+    }
+    for (const [logical, tomb] of tombstones) {
+      if (!actual.has(logical) && !mappings.has(logical)) await recover(tomb.recordType, tomb.recordId, null, null);
+    }
+    if (!changes.length) return { recovered: 0 };
+    const nextViews = new Map(J.materialize(operations, binding.scope).map(view => [view.record, view]));
+    return transaction(db, localStores, (tx, done, checked) => {
+      let remaining = localStores.length;
+      for (const name of localStores) {
+        const request = tx.objectStore(name).getAll();
+        request.onsuccess = checked(() => {
+          if (encode(request.result) !== encode(snapshot[name])) throw new Error('Lokale Daten wurden inzwischen geändert. Bitte die Nachführung erneut versuchen.');
+          if (--remaining) return;
+          const meta = tx.objectStore('syncMeta');
+          for (const change of changes) {
+            meta.add({ id: opKey(change.operation.id), operation: change.operation, pending: true, fileId: null });
+            meta.put({ id: viewKey(change.operation.record), store: change.store, key: change.key, applied: change.applied, view: nextViews.get(change.operation.record) });
+          }
+          meta.delete('journal:last-success');
+          meta.put({ id: 'journal:local-recovery-v1', at: new Date().toISOString(), recovered: changes.length });
+          done({ recovered: changes.length });
+        });
+      }
+    });
+  }
+  // Check the current durable state in the same transaction as the receipt.
+  // An empty, merely connected DB must remain eligible for its first import.
+  async function recordSuccess(db, binding, currentBinding) {
+    allowed(db); binding = copy(binding);
+    return transaction(db, localStores, (tx, done, checked) => {
+      const snapshot = {}; let remaining = localStores.length;
+      for (const name of localStores) {
+        const request = tx.objectStore(name).getAll();
+        request.onsuccess = checked(() => {
+          snapshot[name] = request.result;
+          if (--remaining) return;
+          if (encode(currentBinding()) !== encode(binding)) throw new Error('Anmeldesitzung oder Bestand wurde gewechselt.');
+          const rows = snapshot.syncMeta, saved = config(rows, db);
+          if (!saved || ['accountId','scope','folderId'].some(key => saved[key] !== binding[key])) throw new Error('Erfolgsbestätigung gehört zu anderem Konto oder Bordbuch.');
+          const views = rows.filter(row => row.id.startsWith('journal:view:'));
+          const status = {
+            saved: false, initialized: rows.some(row => row.id === 'journal:migration') || views.length > 0,
+            pending: rows.filter(row => row.id.startsWith('journal:op:') && row.pending).length,
+            conflicts: views.filter(row => row.view.conflict).length, untracked: false
+          };
+          const mappings = new Map(views.map(row => [encode([row.store, row.key]), row]));
+          const seen = new Set();
+          for (const store of STORES) for (const row of snapshot[store]) {
+            const logical = encode([store, row.id]), known = mappings.get(logical); seen.add(logical);
+            if (!known || encode(known.applied) !== encode(row)) status.untracked = true;
+          }
+          for (const [logical, row] of mappings) if (row.applied !== null && !seen.has(logical)) status.untracked = true;
+          for (const tomb of snapshot.syncTombstones) if (!seen.has(encode([tomb.recordType, tomb.recordId])) && !mappings.has(encode([tomb.recordType, tomb.recordId]))) status.untracked = true;
+          if (status.initialized && !status.pending && !status.conflicts && !status.untracked) {
+            tx.objectStore('syncMeta').put({ id: 'journal:last-success', ...binding, at: new Date().toISOString() });
+            status.saved = true;
+          }
+          done(status);
+        });
+      }
+    });
+  }
   // Called INSIDE the app's transaction; done performs the associated app writes.
   function stage(tx, intents, done, failed) {
     const store = tx.objectStore('syncMeta'), request = store.getAll();
@@ -182,6 +326,7 @@
       }
     });
     try {
+      await reconcileLocal(db); assert();
       await metadata((meta, rows, done) => done(), []); // Reject wrong local binding before network access.
       const cacheUpdates = new Map();
       if (typeof drive.request === 'function') {
@@ -311,10 +456,12 @@
             }
             done({ resumed: true, records: plan.operations.length, activationAllowed: false }); return;
           }
-          if (migration.ALL.some(name => contents[name].some(row => name !== 'syncMeta' || row.id !== BINDING))) throw new Error('Die Ziel-Testdatenbank ist nicht leer. Bestehende Daten werden nicht ersetzt.');
+          const initialStatus = row => row.id === BINDING || row.id === 'journal:last-success' && ['accountId','scope','folderId'].every(key => row[key] === binding[key]);
+          if (migration.ALL.some(name => contents[name].some(row => name !== 'syncMeta' || !initialStatus(row)))) throw new Error('Die Ziel-Testdatenbank ist nicht leer. Bestehende Daten werden nicht ersetzt.');
           for (const store of STORES) for (const row of snapshot.stores[store]) tx.objectStore(store).add(row);
           for (const name of ['autoBackups', 'syncTombstones']) for (const row of snapshot.stores[name]) tx.objectStore(name).add(row);
           const meta = tx.objectStore('syncMeta');
+          meta.delete('journal:last-success');
           for (const operation of plan.operations) meta.add({ id: opKey(operation.id), operation, pending: true, fileId: null });
           for (const view of views) meta.add({ id: viewKey(view.record), ...mappings.get(view.record), view });
           // Preserve the complete source plan, including old metadata, as an archive;
@@ -441,5 +588,5 @@
       }
     });
   }
-  root.LeefkeAppJournal = Object.freeze({ prepare, stage, bindTest, receive, resolve, exchange, importTest, exportTransfer, importTransfer, restoreTest });
+  root.LeefkeAppJournal = Object.freeze({ prepare, stage, bindTest, reconcileLocal, recordSuccess, receive, resolve, exchange, importTest, exportTransfer, importTransfer, restoreTest });
 })(globalThis);
